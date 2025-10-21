@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASADA – Login (Demo)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ["Inter","system-ui","-apple-system","Segoe UI","Roboto","Ubuntu","Cantarell","Noto Sans","sans-serif"] } } } } 
+  </script>
+  <style>body{min-height:100vh}</style>
+</head>
+<body class="bg-gradient-to-br from-sky-50 to-indigo-50 text-slate-800 font-sans">
+  <div class="min-h-screen grid place-items-center p-6">
+    <div class="w-full max-w-md bg-white/80 backdrop-blur rounded-2xl shadow-xl border p-6">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="h-10 w-10 rounded-2xl bg-sky-600 flex items-center justify-center text-white font-bold">A</div>
+        <div>
+          <h1 class="text-xl font-semibold">ASADA – Acceso</h1>
+          <p class="text-sm text-slate-500">Demo local (sin backend)</p>
+        </div>
+      </div>
+
+      <form id="formLogin" class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Correo</label>
+          <input id="email" type="email" required class="w-full px-3 py-2 rounded-xl border" placeholder="admin@asada.cr" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Contraseña</label>
+          <div class="relative">
+            <input id="password" type="password" required minlength="4" class="w-full px-3 py-2 rounded-xl border pr-10" placeholder="••••••••" />
+            <button type="button" id="togglePwd" class="absolute inset-y-0 right-0 px-3 text-slate-500">👁️</button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <label class="flex items-center gap-2">
+            <input id="remember" type="checkbox" /> Recuérdame
+          </label>
+          <a class="text-sky-700 hover:underline" href="#" id="fakeReset">¿Olvidaste tu contraseña?</a>
+        </div>
+        <button class="w-full px-3 py-2 rounded-xl bg-sky-600 text-white hover:bg-sky-700">Ingresar</button>
+      </form>
+
+      <p id="msg" class="text-sm mt-4 text-rose-600 hidden"></p>
+
+      <div class="mt-6 text-xs text-slate-500">
+        <p><strong>Credenciales demo:</strong> admin@asada.cr / 1234</p>
+        <p>Al iniciar sesión se guarda un “token” ficticio en <em>localStorage</em> y se redirige al portal.</p>
+      </div>
+
+      <hr class="my-6"/>
+      <div class="text-xs text-slate-500 space-y-1">
+        <p>⚠️ Demo: no hay backend. En producción usarías:</p>
+        <ul class="list-disc ml-5">
+          <li>JWT de Cognito/Keycloak/OCI IAM</li>
+          <li>PKCE + OIDC</li>
+          <li>Control de roles (admin, operador, caja)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FORM = document.getElementById('formLogin');
+    const MSG = document.getElementById('msg');
+    const TOGGLE = document.getElementById('togglePwd');
+    const PWD = document.getElementById('password');
+    const EMAIL = document.getElementById('email');
+    const REMEMBER = document.getElementById('remember');
+
+    TOGGLE.addEventListener('click', ()=>{
+      PWD.type = PWD.type === 'password' ? 'text' : 'password';
+    });
+
+    document.getElementById('fakeReset').addEventListener('click', (e)=>{
+      e.preventDefault();
+      alert('Demo: se enviaría un correo con enlace temporal de restablecimiento.');
+    });
+
+    FORM.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      MSG.classList.add('hidden');
+      const email = EMAIL.value.trim().toLowerCase();
+      const pass = PWD.value;
+      // Credenciales demo
+      if(email === 'admin@asada.cr' && pass === '1234'){
+        const token = 'demo.' + btoa(email) + '.' + Date.now();
+        localStorage.setItem('asada_demo_token', token);
+        if(REMEMBER.checked){ localStorage.setItem('asada_demo_remember', '1'); }
+        // Redirige al portal. Cambia el nombre si tu archivo del portal tiene otro nombre.
+        window.location.href = 'asada_portal_demo.html';
+      }else{
+        MSG.textContent = 'Credenciales inválidas.';
+        MSG.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>

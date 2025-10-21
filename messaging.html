@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASADA – Mensajería (WhatsApp/SMS) – Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ["Inter","system-ui","-apple-system","Segoe UI","Roboto","Ubuntu","Cantarell","Noto Sans","sans-serif"] } } } } 
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-5xl mx-auto p-6">
+    <header class="mb-6 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-emerald-600 text-white grid place-items-center font-bold">M</div>
+        <div>
+          <h1 class="text-2xl font-semibold">Mensajería – WhatsApp / SMS (Demo)</h1>
+          <p class="text-sm text-slate-500">En producción: Twilio / WhatsApp Business API / SINPE notificaciones</p>
+        </div>
+      </div>
+      <a href="login.html" class="text-sm text-slate-600 hover:underline">Cerrar sesión</a>
+    </header>
+
+    <section class="grid md:grid-cols-3 gap-6">
+      <div class="md:col-span-2 bg-white rounded-2xl shadow-sm border p-4">
+        <h2 class="text-lg font-semibold mb-3">Redactar mensaje</h2>
+        <form id="formMsg" class="space-y-3">
+          <div class="grid grid-cols-2 gap-2">
+            <select id="canal" class="px-3 py-2 rounded-xl border">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+            </select>
+            <select id="plantilla" class="px-3 py-2 rounded-xl border">
+              <option value="corte">Corte programado</option>
+              <option value="mora">Recordatorio de pago</option>
+              <option value="general">Anuncio general</option>
+            </select>
+          </div>
+          <input id="asunto" class="w-full px-3 py-2 rounded-xl border" placeholder="Asunto (solo email)"/>
+          <textarea id="mensaje" class="w-full px-3 py-2 rounded-xl border" rows="5" placeholder="Mensaje a enviar..."></textarea>
+          <div class="flex items-center gap-3">
+            <label class="px-3 py-2 rounded-xl bg-white border cursor-pointer">Importar destinatarios CSV
+              <input id="csvInput" type="file" accept=".csv" class="hidden"/>
+            </label>
+            <button class="px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Enviar</button>
+          </div>
+        </form>
+
+        <p class="text-xs text-slate-500 mt-3">CSV esperado: <code>telefono,email,nombre,sector</code></p>
+      </div>
+
+      <aside class="bg-white rounded-2xl shadow-sm border p-4">
+        <h3 class="font-medium mb-2">Resumen</h3>
+        <ul class="text-sm space-y-1" id="resume">
+          <li>Canal: <span id="rCanal">WhatsApp</span></li>
+          <li>Plantilla: <span id="rPlantilla">Corte programado</span></li>
+          <li>Destinatarios: <span id="rCount">0</span></li>
+        </ul>
+        <hr class="my-3" />
+        <h3 class="font-medium mb-2">Bitácora</h3>
+        <div id="log" class="text-xs h-48 overflow-auto bg-slate-50 border rounded-xl p-2"></div>
+      </aside>
+    </section>
+
+    <section class="mt-6 bg-white rounded-2xl shadow-sm border p-4">
+      <h2 class="text-lg font-semibold mb-3">Destinatarios cargados</h2>
+      <div class="overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-slate-600">
+              <th class="p-2 text-left">Teléfono</th>
+              <th class="p-2 text-left">Email</th>
+              <th class="p-2 text-left">Nombre</th>
+              <th class="p-2 text-left">Sector</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="divide-y"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const rCanal = document.getElementById('rCanal');
+    const rPlantilla = document.getElementById('rPlantilla');
+    const rCount = document.getElementById('rCount');
+    const log = document.getElementById('log');
+    const tbody = document.getElementById('tbody');
+
+    const form = document.getElementById('formMsg');
+    const canal = document.getElementById('canal');
+    const plantilla = document.getElementById('plantilla');
+    const asunto = document.getElementById('asunto');
+    const msj = document.getElementById('mensaje');
+    const csvInput = document.getElementById('csvInput');
+
+    let destinatarios = [];
+
+    function writeLog(text){ const p=document.createElement('p'); p.textContent = new Date().toLocaleTimeString()+': '+text; log.appendChild(p); log.scrollTop = log.scrollHeight; }
+
+    canal.addEventListener('change', ()=>{ rCanal.textContent = canal.value.toUpperCase(); });
+    plantilla.addEventListener('change', ()=>{ rPlantilla.textContent = plantilla.options[plantilla.selectedIndex].text; });
+
+    csvInput.addEventListener('change', (e)=>{
+      const file = e.target.files?.[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const lines = String(reader.result).split(/\r?\n/).filter(Boolean);
+        const [h, ...rows] = lines;
+        const heads = h.split(',').map(s=>s.trim().toLowerCase());
+        const iTel = heads.indexOf('telefono');
+        const iEm = heads.indexOf('email');
+        const iNo = heads.indexOf('nombre');
+        const iSe = heads.indexOf('sector');
+        destinatarios = rows.map(l=>{
+          const c = l.split(',');
+          return { telefono: c[iTel]||'', email: c[iEm]||'', nombre: c[iNo]||'', sector: c[iSe]||'' };
+        }).filter(d=>d.telefono || d.email);
+        rCount.textContent = destinatarios.length;
+        tbody.innerHTML = destinatarios.map(d=>`<tr><td class="p-2">${d.telefono}</td><td class="p-2">${d.email}</td><td class="p-2">${d.nombre}</td><td class="p-2">${d.sector}</td></tr>`).join('');
+        writeLog('CSV importado con '+destinatarios.length+' destinatarios');
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      if(destinatarios.length===0){ alert('Importa un CSV de destinatarios.'); return; }
+      const payload = {
+        canal: canal.value,
+        plantilla: plantilla.value,
+        asunto: asunto.value,
+        mensaje: msj.value,
+        count: destinatarios.length,
+        destinatarios
+      };
+      // DEMO: simulación de envío. En producción harías fetch() al backend que llama Twilio/WhatsApp Business API.
+      writeLog(`Enviando ${payload.count} mensajes por ${payload.canal} con plantilla ${payload.plantilla}...`);
+      setTimeout(()=> writeLog('✅ Simulación completada (demo).'), 1200);
+      console.log('DEMO_PAYLOAD', payload);
+      alert('Demostración: se simula el envío. Revisa la consola (F12) para ver el payload.');
+    });
+  </script>
+</body>
+</html>

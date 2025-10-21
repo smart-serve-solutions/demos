@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASADA – Comprobantes por WhatsApp (Demo)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ["Inter","system-ui","-apple-system","Segoe UI","Roboto","Ubuntu","Cantarell","Noto Sans","sans-serif"] } } } }
+  </script>
+  <style>
+    ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}
+    .btn{ padding:0.5rem 0.75rem; border-radius:0.75rem; border:1px solid rgb(226,232,240); background:#fff; }
+    .btn:hover{ background:#f8fafc }
+    .btn-primary{ padding:0.5rem 0.75rem; border-radius:0.75rem; background:#0ea5e9; color:#fff; border:0 }
+    .btn-primary:hover{ background:#0284c7 }
+    .badge{ display:inline-flex; align-items:center; padding:0.125rem 0.5rem; border-radius:999px; font-size:0.75rem }
+    .thumb{ width:80px; height:80px; object-fit:cover; border-radius:0.75rem; border:1px solid #e2e8f0 }
+    dialog{ border:0 }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-7xl mx-auto p-6">
+    <header class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-emerald-600 text-white grid place-items-center font-bold">W</div>
+        <div>
+          <h1 class="text-2xl font-semibold">Comprobantes por WhatsApp (Demo)</h1>
+          <p class="text-sm text-slate-500">Recepción, validación y exportación – solo canal WhatsApp</p>
+        </div>
+      </div>
+      <nav class="flex gap-2 text-sm">
+        <a class="btn" href="login.html">Login</a>
+        <a class="btn" href="asada_portal_demo.html">Portal</a>
+        <a class="btn" href="messaging.html">Mensajería</a>
+        <a class="btn" href="billing_integration.html">Facturación</a>
+      </nav>
+    </header>
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Pendientes</p>
+        <p id="kpiPend" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Validados</p>
+        <p id="kpiOk" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Rechazados</p>
+        <p id="kpiNo" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Monto validado (CRC)</p>
+        <p id="kpiMonto" class="text-2xl font-semibold">₡0</p>
+      </div>
+    </section>
+
+    <div class="grid lg:grid-cols-3 gap-6">
+      <!-- Bandeja -->
+      <section class="lg:col-span-2 bg-white rounded-2xl p-4 shadow-sm border">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <h2 class="text-lg font-semibold">Bandeja de comprobantes (WhatsApp)</h2>
+          <div class="flex gap-2">
+            <input id="q" class="px-3 py-2 rounded-xl border" placeholder="Buscar por ID pago / teléfono / estado" />
+            <button id="btnExport" class="btn">Exportar CSV</button>
+          </div>
+        </div>
+        <div class="overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="bg-slate-100 text-slate-600">
+                <th class="p-2 text-left">#</th>
+                <th class="p-2 text-left">ID pago</th>
+                <th class="p-2 text-left">Teléfono</th>
+                <th class="p-2 text-left">Monto</th>
+                <th class="p-2 text-left">Fecha</th>
+                <th class="p-2 text-left">Comprobante</th>
+                <th class="p-2 text-left">Estado</th>
+                <th class="p-2 text-left"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody" class="divide-y"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Simulador de Webhook (para demo local) -->
+      <aside class="bg-white rounded-2xl p-4 shadow-sm border">
+        <h3 class="text-lg font-semibold mb-2">Simular recepción WhatsApp (webhook)</h3>
+        <form id="formIn" class="space-y-2">
+          <input id="idPago" class="w-full px-3 py-2 rounded-xl border" placeholder="ID de pago (ej: PAGO-2025-000123)" />
+          <div class="grid grid-cols-2 gap-2">
+            <input id="telefono" class="px-3 py-2 rounded-xl border" placeholder="Teléfono (ej: 8888-0000)" />
+            <input id="monto" type="number" step="0.01" class="px-3 py-2 rounded-xl border" placeholder="Monto (CRC)" />
+          </div>
+          <label class="flex items-center gap-2 text-sm text-slate-600">
+            <input id="ocr" type="checkbox" checked /> Intentar lectura automática (OCR) del pantallazo
+          </label>
+          <label class="btn cursor-pointer w-full text-center">Adjuntar pantallazo
+            <input id="archivo" type="file" accept="image/*,application/pdf" class="hidden" />
+          </label>
+          <button class="w-full btn-primary">Simular recepción</button>
+        </form>
+
+        <hr class="my-4" />
+        <h4 class="font-medium mb-2">Plantillas WhatsApp (sugeridas)</h4>
+        <div class="text-xs space-y-2 bg-slate-50 p-3 rounded-xl border">
+          <p><strong>Botón de cobro:</strong> “Pagar / Enviar comprobante (ID: <code>{ID}</code>)”</p>
+          <p><strong>Flujo:</strong> 1) Solicitar ID ó cédula+período → 2) Solicitar monto → 3) Solicitar pantallazo.</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Modal detalle -->
+  <dialog id="modal" class="rounded-2xl p-0 w-11/12 md:w-3/4">
+    <div class="bg-white rounded-2xl p-6 border shadow-xl">
+      <div class="flex items-start gap-4">
+        <img id="mImg" class="thumb" src="" alt="comprobante"/>
+        <div class="grow">
+          <h3 class="text-lg font-semibold">Detalle del comprobante</h3>
+          <p id="mMeta" class="text-sm text-slate-600"></p>
+          <div id="mOcr" class="mt-2 text-sm bg-slate-50 border rounded-xl p-2"></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="btnRechazar" class="btn">Rechazar</button>
+        <button id="btnValidar" class="btn-primary">Validar</button>
+        <button id="btnCerrar" class="btn">Cerrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <template id="rowTpl">
+    <tr>
+      <td class="p-2">{id}</td>
+      <td class="p-2 font-medium">{idpago}</td>
+      <td class="p-2">{tel}</td>
+      <td class="p-2">₡{monto}</td>
+      <td class="p-2">{fecha}</td>
+      <td class="p-2"><img src="{img}" class="thumb" alt="comprobante"/></td>
+      <td class="p-2">{estadoBadge}</td>
+      <td class="p-2 text-right">
+        <button class="btn btnAbrir" data-id="{id}">Revisar</button>
+      </td>
+    </tr>
+  </template>
+
+  <script>
+    // Estado (solo WhatsApp)
+    const LS = { P: 'asada_wp_payments', SEQ: 'asada_wp_seq' };
+    function load(){ return JSON.parse(localStorage.getItem(LS.P) || '[]'); }
+    function save(list){ localStorage.setItem(LS.P, JSON.stringify(list)); }
+    function loadSeq(){ return Number(localStorage.getItem(LS.SEQ) || '1000'); }
+    function saveSeq(v){ localStorage.setItem(LS.SEQ, String(v)); }
+
+    let pagos = load();
+    let seq = loadSeq();
+
+    const tbody = document.getElementById('tbody');
+    const q = document.getElementById('q');
+    const modal = document.getElementById('modal');
+    const mImg = document.getElementById('mImg');
+    const mMeta = document.getElementById('mMeta');
+    const mOcr = document.getElementById('mOcr');
+    let openId = null;
+
+    function fmtCR(n){ return Number(n||0).toLocaleString('es-CR'); }
+    function now(){ const d=new Date(); return d.toISOString().slice(0,19).replace('T',' '); }
+
+    function render(){
+      const pend = pagos.filter(p=>p.estado==='PENDIENTE').length;
+      const ok = pagos.filter(p=>p.estado==='VALIDADO').length;
+      const no = pagos.filter(p=>p.estado==='RECHAZADO').length;
+      const monto = pagos.filter(p=>p.estado==='VALIDADO').reduce((s,p)=> s+Number(p.monto||0),0);
+      document.getElementById('kpiPend').textContent = pend;
+      document.getElementById('kpiOk').textContent = ok;
+      document.getElementById('kpiNo').textContent = no;
+      document.getElementById('kpiMonto').textContent = '₡'+fmtCR(monto);
+
+      const term = (q.value||'').toLowerCase();
+      const tpl = document.getElementById('rowTpl').innerHTML;
+      tbody.innerHTML = pagos
+        .filter(p => (p.idPago+p.telefono+p.estado).toLowerCase().includes(term))
+        .map(p => {
+          const badge = p.estado==='VALIDADO' ? '<span class="badge bg-emerald-50 text-emerald-700">Validado</span>' :
+                        p.estado==='RECHAZADO' ? '<span class="badge bg-rose-50 text-rose-700">Rechazado</span>' :
+                        '<span class="badge bg-amber-50 text-amber-700">Pendiente</span>';
+          return tpl
+            .replace('{id}', p.id)
+            .replace('{idpago}', esc(p.idPago))
+            .replace('{tel}', esc(p.telefono))
+            .replace('{monto}', fmtCR(p.monto||0))
+            .replace('{fecha}', esc(p.fecha))
+            .replace('{img}', esc(p.img || ''))
+            .replace('{estadoBadge}', badge);
+        }).join('');
+    }
+
+    function esc(s){ return String(s||'').replace(/[&<>"]/g, c=>({\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",\"\\\"\":\"&quot;\"}[c])) }
+
+    // Simulador de webhook (WhatsApp -> nuestro sistema)
+    document.getElementById('formIn').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const idPago = document.getElementById('idPago').value.trim() || ('PAGO-'+Date.now());
+      const telefono = document.getElementById('telefono').value.trim() || '8888-0000';
+      const monto = Number(document.getElementById('monto').value || 0);
+      const ocrOn = document.getElementById('ocr').checked;
+      const file = document.getElementById('archivo').files[0];
+
+      let imgData = '';
+      if(file){
+        imgData = await fileToDataURL(file);
+      }
+
+      const id = ++seq; saveSeq(seq);
+      const rec = { id, idPago, telefono, monto, fecha: now(), img: imgData, estado: 'PENDIENTE', ocr: {} };
+
+      if(ocrOn && imgData){
+        // DEMO OCR: simulamos extracción con regex simple desde nombre de archivo si lo tiene
+        const fake = (file && file.name) ? file.name : '';
+        const mMonto = fake.match(/(\d{3,6})/); // números en el nombre como monto tentativo
+        if(monto===0 && mMonto){ rec.monto = Number(mMonto[1]); }
+        rec.ocr = { confianza: 0.6, origen: 'demo' };
+      }
+
+      pagos.unshift(rec); save(pagos); render();
+      e.target.reset();
+    });
+
+    function fileToDataURL(file){
+      return new Promise((resolve)=>{
+        const r=new FileReader();
+        r.onload = ()=> resolve(r.result);
+        r.readAsDataURL(file);
+      });
+    }
+
+    // Abrir modal para validar
+    document.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('btnAbrir')){
+        const id = Number(e.target.getAttribute('data-id'));
+        const p = pagos.find(x=>x.id===id); if(!p) return;
+        openId = id;
+        mImg.src = p.img || '';
+        mMeta.textContent = `ID: ${p.idPago} | Tel: ${p.telefono} | Monto: ₡${fmtCR(p.monto||0)} | Fecha: ${p.fecha}`;
+        mOcr.textContent = p.ocr && Object.keys(p.ocr).length ? JSON.stringify(p.ocr) : 'Sin datos OCR (demo)';
+        modal.showModal();
+      }
+    });
+
+    document.getElementById('btnCerrar').addEventListener('click', ()=> modal.close());
+
+    document.getElementById('btnValidar').addEventListener('click', ()=>{
+      if(openId==null) return;
+      const p = pagos.find(x=>x.id===openId); if(!p) return;
+      p.estado = 'VALIDADO';
+      save(pagos); render(); modal.close();
+    });
+    document.getElementById('btnRechazar').addEventListener('click', ()=>{
+      if(openId==null) return;
+      const p = pagos.find(x=>x.id===openId); if(!p) return;
+      p.estado = 'RECHAZADO';
+      save(pagos); render(); modal.close();
+    });
+
+    // Export CSV
+    document.getElementById('btnExport').addEventListener('click', ()=>{
+      const header = 'id,id_pago,telefono,monto,fecha,estado\\n';
+      const rows = pagos.map(p=> [p.id,p.idPago,p.telefono,p.monto,p.fecha,p.estado].map(csvCell).join(',')).join('\\n');
+      downloadCSV('comprobantes_whatsapp.csv', header+rows);
+    });
+
+    q.addEventListener('input', render);
+
+    function csvCell(v){ return '\"'+String(v??'').replaceAll('\"','\"\"')+'\"' }
+    function downloadCSV(filename, content){
+      const blob=new Blob([content],{type:'text/csv;charset=utf-8;'});
+      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+    }
+
+    // Init
+    render();
+  </script>
+</body>
+</html>

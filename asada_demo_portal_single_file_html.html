@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASADA – Demo Portal</title>
+  <!-- Tailwind Play CDN (para demo local, sin build) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Gate de autenticación demo (token ficticio)
+    (function(){
+      const token = localStorage.getItem('asada_demo_token');
+      if(!token){ window.location.href = 'login.html'; return; }
+    })();
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Ubuntu", "Cantarell", "Noto Sans", "sans-serif"] },
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Scrollbar sutil */
+    ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-7xl mx-auto p-6">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-sky-600 flex items-center justify-center text-white font-bold">A</div>
+        <div>
+          <h1 class="text-2xl font-semibold">ASADA – Portal Administrativo (Demo)</h1>
+          <p class="text-sm text-slate-500">Muestra: averías / abonados / anuncios</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <a href="messaging.html" class="px-3 py-2 rounded-xl bg-white border text-slate-700 hover:bg-slate-50">Mensajería</a>
+        <a href="billing_integration.html" class="px-3 py-2 rounded-xl bg-white border text-slate-700 hover:bg-slate-50">Facturación</a>
+        <button id="btnExportCSV" class="px-3 py-2 rounded-xl bg-white border text-slate-700 hover:bg-slate-50">Exportar CSV</button>
+        <label class="px-3 py-2 rounded-xl bg-white border text-slate-700 hover:bg-slate-50 cursor-pointer">Importar CSV
+          <input id="csvInput" type="file" accept=".csv" class="hidden" />
+        </label>
+        <button id="btnResetDemo" class="px-3 py-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100">Reiniciar demo</button>
+        <button id="btnLogout" class="px-3 py-2 rounded-xl bg-slate-800 text-white hover:bg-slate-900">Salir</button>
+      </div>
+    </header>
+
+    <!-- KPI Cards -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Total abonados</p>
+        <p id="kpiTotal" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Notificados</p>
+        <p id="kpiNotificados" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Pendientes</p>
+        <p id="kpiPendientes" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border">
+        <p class="text-sm text-slate-500">Anuncios activos</p>
+        <p id="kpiAnuncios" class="text-2xl font-semibold">0</p>
+      </div>
+    </section>
+
+    <div class="grid lg:grid-cols-3 gap-6">
+      <!-- Abonados / Tabla -->
+      <section class="lg:col-span-2 bg-white rounded-2xl p-4 shadow-sm border">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <h2 class="text-lg font-semibold">Abonados</h2>
+          <div class="flex gap-2 items-center">
+            <input id="search" type="text" placeholder="Buscar por nombre, email o teléfono" class="px-3 py-2 rounded-xl border w-64" />
+            <select id="filterEstado" class="px-3 py-2 rounded-xl border">
+              <option value="todos">Todos</option>
+              <option value="notificado">Notificado</option>
+              <option value="pendiente">Pendiente</option>
+            </select>
+            <button id="btnMarcarTodos" class="px-3 py-2 rounded-xl bg-sky-600 text-white hover:bg-sky-700">Marcar notificado (seleccionados)</button>
+          </div>
+        </div>
+
+        <div class="overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="bg-slate-100 text-slate-600">
+                <th class="p-2 text-left"><input id="chkAll" type="checkbox" /></th>
+                <th class="p-2 text-left">#</th>
+                <th class="p-2 text-left">Nombre</th>
+                <th class="p-2 text-left">Teléfono</th>
+                <th class="p-2 text-left">Email</th>
+                <th class="p-2 text-left">Notificado</th>
+                <th class="p-2 text-left"></th>
+              </tr>
+            </thead>
+            <tbody id="tbodyAbonados"></tbody>
+          </table>
+        </div>
+
+        <div class="flex justify-between items-center mt-3 text-sm">
+          <div id="tableInfo" class="text-slate-500"></div>
+          <div class="flex gap-2">
+            <button id="prevPage" class="px-3 py-1 rounded-xl border bg-white">Anterior</button>
+            <button id="nextPage" class="px-3 py-1 rounded-xl border bg-white">Siguiente</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Anuncios / Crear -->
+      <aside class="bg-white rounded-2xl p-4 shadow-sm border">
+        <h2 class="text-lg font-semibold mb-3">Anuncios / Notificaciones</h2>
+        <form id="formAnuncio" class="space-y-2">
+          <input id="anuncioTitulo" required class="w-full px-3 py-2 rounded-xl border" placeholder="Título (p. ej. Corte programado)" />
+          <textarea id="anuncioMsg" required class="w-full px-3 py-2 rounded-xl border" placeholder="Mensaje (máx 240 caracteres)" maxlength="240"></textarea>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="anuncioInicio" type="date" class="px-3 py-2 rounded-xl border" />
+            <input id="anuncioFin" type="date" class="px-3 py-2 rounded-xl border" />
+          </div>
+          <label class="flex items-center gap-2 text-sm text-slate-600">
+            <input id="anuncioDestacar" type="checkbox" /> Destacar en portal del abonado
+          </label>
+          <button class="w-full px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Publicar anuncio</button>
+        </form>
+
+        <hr class="my-4" />
+        <h3 class="font-medium mb-2">Anuncios activos</h3>
+        <ul id="listaAnuncios" class="space-y-2 text-sm"></ul>
+      </aside>
+    </div>
+  </div>
+
+  <template id="rowTpl">
+    <tr class="border-b hover:bg-slate-50">
+      <td class="p-2"><input type="checkbox" class="chkRow" /></td>
+      <td class="p-2 font-medium text-slate-600">{id}</td>
+      <td class="p-2">{nombre}</td>
+      <td class="p-2">{telefono}</td>
+      <td class="p-2">{email}</td>
+      <td class="p-2">
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs {badgeClass}">{estado}</span>
+      </td>
+      <td class="p-2 text-right">
+        <button data-id="{id}" class="btnToggle px-2 py-1 rounded-lg border">Cambiar</button>
+      </td>
+    </tr>
+  </template>
+
+  <script>
+    // ----------------------------
+    // Datos / Estado (localStorage)
+    // ----------------------------
+    const LS_KEYS = { ABONADOS: 'asada_demo_abonados', ANUNCIOS: 'asada_demo_anuncios' };
+
+    const DEMO_ABONADOS = [
+      { id: 1001, nombre: 'María Brenes', telefono: '8888-1111', email: 'maria@demo.cr', notificado: true },
+      { id: 1002, nombre: 'José Vargas', telefono: '8888-2222', email: 'jose@demo.cr', notificado: false },
+      { id: 1003, nombre: 'Ana Castillo', telefono: '8888-3333', email: 'ana@demo.cr', notificado: false },
+      { id: 1004, nombre: 'Daniela Mora', telefono: '8888-4444', email: 'daniela@demo.cr', notificado: true },
+      { id: 1005, nombre: 'Raúl Jiménez', telefono: '8888-5555', email: 'raul@demo.cr', notificado: false },
+      { id: 1006, nombre: 'Carlos Núñez', telefono: '8888-6666', email: 'carlos@demo.cr', notificado: true },
+      { id: 1007, nombre: 'Patricia Solís', telefono: '8888-7777', email: 'patricia@demo.cr', notificado: false },
+      { id: 1008, nombre: 'Felipe Chaves', telefono: '8888-9999', email: 'felipe@demo.cr', notificado: false },
+      { id: 1009, nombre: 'Rocío Rojas', telefono: '8888-1234', email: 'rocio@demo.cr', notificado: true },
+      { id: 1010, nombre: 'Luis Murillo', telefono: '8888-5678', email: 'luis@demo.cr', notificado: false },
+      { id: 1011, nombre: 'Gabriela León', telefono: '8888-4321', email: 'gabriela@demo.cr', notificado: false },
+      { id: 1012, nombre: 'Esteban Monge', telefono: '8888-8765', email: 'esteban@demo.cr', notificado: true },
+    ];
+
+    const DEMO_ANUNCIOS = [
+      { id: cryptoRandomId(), titulo: 'Corte programado – Sector Norte', msg: 'Mantenimiento preventivo hoy 2–4pm.', inicio: todayIso(), fin: todayIso(1), destacar: true },
+    ];
+
+    function cryptoRandomId(){ return Math.random().toString(36).slice(2,10) }
+    function todayIso(offsetDays=0){ const d=new Date(); d.setDate(d.getDate()+offsetDays); return d.toISOString().slice(0,10) }
+
+    function loadState(){
+      const a = JSON.parse(localStorage.getItem(LS_KEYS.ABONADOS) || 'null') || DEMO_ABONADOS;
+      const n = JSON.parse(localStorage.getItem(LS_KEYS.ANUNCIOS) || 'null') || DEMO_ANUNCIOS;
+      return { abonados: a, anuncios: n };
+    }
+    function saveState(state){
+      localStorage.setItem(LS_KEYS.ABONADOS, JSON.stringify(state.abonados));
+      localStorage.setItem(LS_KEYS.ANUNCIOS, JSON.stringify(state.anuncios));
+    }
+
+    let state = loadState();
+
+    // ----------------------------
+    // UI helpers
+    // ----------------------------
+    let currentPage = 1; const pageSize = 6; let currentFilter = 'todos'; let currentQuery = '';
+
+    function render(){
+      // KPIs
+      const total = state.abonados.length;
+      const notificados = state.abonados.filter(a=>a.notificado).length;
+      const pendientes = total - notificados;
+      document.getElementById('kpiTotal').textContent = total;
+      document.getElementById('kpiNotificados').textContent = notificados;
+      document.getElementById('kpiPendientes').textContent = pendientes;
+      document.getElementById('kpiAnuncios').textContent = state.anuncios.length;
+
+      // Tabla
+      const filtered = state.abonados.filter(a=>{
+        const matchesQuery = (a.nombre+" "+a.email+" "+a.telefono).toLowerCase().includes(currentQuery.toLowerCase());
+        const matchesEstado = currentFilter==='todos' ? true : currentFilter==='notificado' ? a.notificado : !a.notificado;
+        return matchesQuery && matchesEstado;
+      });
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if(currentPage>totalPages) currentPage=totalPages;
+      const start = (currentPage-1)*pageSize;
+      const rows = filtered.slice(start, start+pageSize);
+
+      const tpl = document.getElementById('rowTpl').innerHTML;
+      const tbody = document.getElementById('tbodyAbonados');
+      tbody.innerHTML = rows.map(r=>{
+        const badgeClass = r.notificado ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
+        const estado = r.notificado ? 'Notificado' : 'Pendiente';
+        return tpl
+          .replaceAll('{id}', r.id)
+          .replace('{nombre}', escapeHtml(r.nombre))
+          .replace('{telefono}', escapeHtml(r.telefono))
+          .replace('{email}', escapeHtml(r.email))
+          .replace('{badgeClass}', badgeClass)
+          .replace('{estado}', estado)
+      }).join('');
+
+      document.getElementById('tableInfo').textContent = `Mostrando ${rows.length} de ${filtered.length} abonados`;
+      document.getElementById('chkAll').checked = false;
+
+      // Anuncios
+      const ul = document.getElementById('listaAnuncios');
+      ul.innerHTML = state.anuncios.map(a=>{
+        const rango = [a.inicio, a.fin].filter(Boolean).join(' → ');
+        return `<li class="p-3 border rounded-xl flex items-start justify-between">
+          <div>
+            <p class="font-medium">${escapeHtml(a.titulo)} ${a.destacar?'<span class=\"ml-2 px-2 py-0.5 rounded-full text-xs bg-indigo-50 text-indigo-700\">Destacado</span>':''}</p>
+            <p class="text-slate-600">${escapeHtml(a.msg)}</p>
+            ${rango?`<p class=\"text-xs text-slate-500\">${rango}</p>`:''}
+          </div>
+          <button data-id="${a.id}" class="btnDelAnuncio text-rose-600 hover:underline">Eliminar</button>
+        </li>`
+      }).join('');
+    }
+
+    function escapeHtml(str){ return String(str).replace(/[&<>"]+/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s])) }
+
+    // ----------------------------
+    // Eventos
+    // Logout demo
+    document.getElementById('btnLogout').addEventListener('click', ()=>{
+      localStorage.removeItem('asada_demo_token');
+      localStorage.removeItem('asada_demo_remember');
+      window.location.href = 'login.html';
+    });
+    // ----------------------------
+    document.addEventListener('click', (e)=>{
+      // Toggle fila
+      if(e.target.classList.contains('btnToggle')){
+        const id = Number(e.target.getAttribute('data-id'));
+        const a = state.abonados.find(x=>x.id===id); if(!a) return;
+        a.notificado = !a.notificado; saveState(state); render();
+      }
+      // Seleccionar todos
+      if(e.target.id === 'chkAll'){
+        document.querySelectorAll('.chkRow').forEach(ch=> ch.checked = e.target.checked);
+      }
+      // Paginación
+      if(e.target.id==='prevPage'){ currentPage = Math.max(1, currentPage-1); render(); }
+      if(e.target.id==='nextPage'){ currentPage = currentPage+1; render(); }
+      // Eliminar anuncio
+      if(e.target.classList.contains('btnDelAnuncio')){
+        const id = e.target.getAttribute('data-id');
+        state.anuncios = state.anuncios.filter(a=>a.id!==id);
+        saveState(state); render();
+      }
+    });
+
+    document.getElementById('btnMarcarTodos').addEventListener('click', ()=>{
+      const ids = Array.from(document.querySelectorAll('.chkRow'))
+        .map((ch,i)=> ch.checked ? Number(ch.closest('tr').children[1].textContent) : null)
+        .filter(Boolean);
+      state.abonados.forEach(a=>{ if(ids.includes(a.id)) a.notificado = true; });
+      saveState(state); render();
+    });
+
+    document.getElementById('search').addEventListener('input', (e)=>{ currentQuery = e.target.value; currentPage=1; render(); });
+    document.getElementById('filterEstado').addEventListener('change', (e)=>{ currentFilter = e.target.value; currentPage=1; render(); });
+
+    document.getElementById('formAnuncio').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const titulo = document.getElementById('anuncioTitulo').value.trim();
+      const msg = document.getElementById('anuncioMsg').value.trim();
+      const inicio = document.getElementById('anuncioInicio').value || '';
+      const fin = document.getElementById('anuncioFin').value || '';
+      const destacar = document.getElementById('anuncioDestacar').checked;
+      if(!titulo || !msg) return;
+      state.anuncios.unshift({ id: cryptoRandomId(), titulo, msg, inicio, fin, destacar });
+      saveState(state); e.target.reset(); render();
+    });
+
+    document.getElementById('btnResetDemo').addEventListener('click', ()=>{
+      if(confirm('¿Reiniciar datos de demo?')){
+        state = { abonados: DEMO_ABONADOS.slice(), anuncios: DEMO_ANUNCIOS.slice() };
+        saveState(state); currentPage=1; currentFilter='todos'; currentQuery='';
+        render();
+      }
+    });
+
+    // ----------------------------
+    // CSV import/export (simple)
+    // ----------------------------
+    document.getElementById('btnExportCSV').addEventListener('click', ()=>{
+      const header = 'id,nombre,telefono,email,notificado\n';
+      const rows = state.abonados.map(a=>[a.id, a.nombre, a.telefono, a.email, a.notificado].map(v=>`"${String(v).replaceAll('"','""')}"`).join(',')).join('\n');
+      const blob = new Blob([header+rows], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = url; a.download = 'abonados.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('csvInput').addEventListener('change', (e)=>{
+      const file = e.target.files?.[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const text = reader.result; const lines = String(text).split(/\r?\n/).filter(Boolean);
+        const [h,...rows] = lines; // espera: id,nombre,telefono,email,notificado
+        const idx = (name)=> h.split(',').map(s=>s.trim()).indexOf(name);
+        const iId=idx('id'), iNo=idx('nombre'), iTe=idx('telefono'), iEm=idx('email'), iNoTi=idx('notificado');
+        const abonados = rows.map(l=>{
+          const c = l.split(',');
+          return { id:Number(stripQuotes(c[iId])), nombre:stripQuotes(c[iNo]), telefono:stripQuotes(c[iTe]), email:stripQuotes(c[iEm]), notificado: /true|1|si|sí/i.test(stripQuotes(c[iNoTi]||'')) };
+        }).filter(x=>x.id && x.nombre);
+        if(abonados.length){ state.abonados = abonados; saveState(state); currentPage=1; render(); }
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+
+    function stripQuotes(s){ return String(s||'').replace(/^\s*"|"\s*$/g,'') }
+
+    // Init
+    render();
+  </script>
+</body>
+</html>
