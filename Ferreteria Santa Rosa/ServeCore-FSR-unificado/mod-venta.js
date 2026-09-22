@@ -7,6 +7,8 @@
 (function (w) {
   "use strict";
   const fmtCant = (n, a) => (a && a.decimales && !Number.isInteger(+n) ? String(Math.round(n * 100) / 100).replace(".", ",") : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " "));
+  /* la cantidad dentro del campo de la fila: sin separador de miles y con coma decimal */
+  const cantEdit = (n, a) => (a && a.decimales ? String(+(+n).toFixed(2)).replace(".", ",") : String(Math.round(n)));
   const D = w.DB, A = w.APP, S = w.S, U = w.UI;
   const { $, $$, esc, norm, grp, c, dec, kg, fecha, fh, hora, p2, icon, tag, card, stat, table, seg, onSeg,
     openSheet, closeSheet, toast, locNom, cliNom, artOf, ini } = U;
@@ -87,14 +89,7 @@
           <div class="dim" style="font-size:11.5px;margin-top:2px">${esc(locNom(S.locId))} · disponible ${a.tipo === "Producto" ? fmtCant(D.disp(a.id, S.locId), a) : "—"}</div>
           ${a.tipo === "Producto" && w.INVX ? `<div style="font-size:12px;margin-top:3px;display:flex;align-items:center;gap:5px;color:var(--accent);font-weight:600">${icon("pin", 'style="width:14px;height:14px"')}${esc(w.INVX.ubicTexto(w.INVX.ubic(a.id, S.locId)))}</div>` : ""}
         </div></div>
-      <div class="pf2 desigual">
-        ${posField("Cantidad", `<div style="display:flex;align-items:center;gap:7px">
-          <button class="iconbtn" data-pcant="-1" style="width:32px;height:32px;border:1px solid var(--hair)">−</button>
-          <input id="pCant" type="number" min="${a.decimales ? "0.1" : "1"}" step="${a.decimales ? "any" : "1"}" value="${l.cant}" class="num" style="flex:1;min-width:0;text-align:center;padding:7px 4px;border-radius:9px;border:1px solid var(--hair);background:var(--surface)">
-          <button class="iconbtn" data-pcant="1" style="width:32px;height:32px;border:1px solid var(--hair)">+</button></div>`)}
-        ${posField("Precio unitario", `<div class="tb-search" style="width:100%;padding:7px 10px"><span class="mut">₡</span><input id="pPrecio" type="number" min="0" step="1" value="${l.precio}" class="num" style="font-size:14px;min-width:0"><span class="dim" style="font-size:11px;flex:none">sin IVA</span></div>`)}
-      </div>
-      ${(a.pres || []).filter(p => !p.base && p.venta).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px">${(a.pres || []).filter(p => !p.base && p.venta).map(p => `<button class="btn sm" data-ppres="${p.f}">${icon("plus")}${esc(p.u)}</button>`).join("")}<span class="dim" style="font-size:11.5px;align-self:center">suma en ${esc(a.unidad)}</span></div>` : ""}
+      ${(a.pres || []).filter(p => !p.base && p.venta).length ? posField("Sumar por presentación", `<div style="display:flex;flex-wrap:wrap;gap:6px">${(a.pres || []).filter(p => !p.base && p.venta).map(p => `<button class="btn sm" data-ppres="${p.f}">${icon("plus")}${esc(p.u)}</button>`).join("")}<span class="dim" style="font-size:11.5px;align-self:center">suma en ${esc(a.unidad)}</span></div>`) : ""}
       <div class="pf2">
         ${posField("Tipo desc.", `<select id="pDescTipo" style="width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--hair);background:var(--surface)">
           <option value="pct"${l.descTipo === "monto" ? "" : " selected"}>% Porcentaje</option>
@@ -157,6 +152,8 @@
       const nLin = S.cart.lineas.length;
       const nUnid = S.cart.lineas.reduce((s, l) => s + l.cant, 0);
       const selIdx = S.posSel != null && S.cart.lineas[S.posSel] ? S.posSel : null;
+      /* cambiar el precio es un permiso: el perfil de mostrador lo ve pero no lo edita */
+      const puedePrecio = S.role !== "cajero";
       const masPedidos = D.articulos.filter(a => a.tipo === "Producto").slice(0, 8);
       const servicios = D.articulos.filter(a => a.tipo === "Servicio");
 
@@ -173,16 +170,21 @@
           <td class="mono dim">${i + 1}</td>
           <td style="min-width:180px"><div class="b" style="font-size:13.5px">${esc(a.desc)}</div>
             <div class="mut" style="font-size:11.5px">${esc(a.cod)} · ${esc(a.marca)} · ${esc(a.unidad)}${desdeCedi ? ' · <span style="color:var(--warn)">se despacha desde CEDI Isabel</span>' : ""}${bajo ? ` · <span style="color:${l.auth ? "var(--ok)" : "var(--crit)"};font-weight:650">margen ${dec(x.m)} %${l.auth ? " autorizado" : ""}</span>` : ""}</div></td>
-          <td class="r num">${fmtCant(l.cant, a)}</td>
-          <td class="r num">${grp(l.precio)}</td>
+          <td class="c"><div class="qstep">
+            <button type="button" class="qb" data-qd="${i}" data-q="-1" tabindex="-1" aria-label="Restar uno a la línea ${i + 1}">−</button>
+            <input class="qi num" data-qi="${i}" value="${cantEdit(l.cant, a)}" inputmode="decimal" autocomplete="off" aria-label="Cantidad de la línea ${i + 1}">
+            <button type="button" class="qb" data-qd="${i}" data-q="1" tabindex="-1" aria-label="Sumar uno a la línea ${i + 1}">+</button></div></td>
+          <td class="r">${puedePrecio
+            ? `<input class="celed num" data-pi="${i}" value="${grp(l.precio)}" inputmode="numeric" autocomplete="off" aria-label="Precio unitario sin IVA de la línea ${i + 1}" data-tip="Precio sin IVA · clic para cambiarlo">`
+            : `<span class="num" data-tip="Cambiar el precio requiere permiso de gerencia">${grp(l.precio)}</span>`}</td>
           <td class="r">${descCell}</td>
           <td class="r num b">${grp(lineTotal(l))}</td>
           <td class="r"><button class="iconbtn" data-del="${i}" style="width:26px;height:26px;color:var(--ink-4)" title="Quitar línea">${icon("x")}</button></td></tr>`;
       }).join("");
 
       const tabla = `<div class="scrollx"><table class="dt"><thead><tr>
-          <th style="width:30px">#</th><th>Artículo</th><th class="r" style="width:60px">Cant.</th>
-          <th class="r" style="width:96px">P. unit.</th><th class="r" style="width:70px">Desc.</th>
+          <th style="width:30px">#</th><th>Artículo</th><th class="c" style="width:140px">Cant.</th>
+          <th class="r" style="width:104px" data-tip="Precio unitario sin IVA">P. unit.</th><th class="r" style="width:70px">Desc.</th>
           <th class="r" style="width:104px">Total</th><th style="width:34px"></th></tr></thead>
         <tbody>${nLin ? filas : `<tr><td colspan="7" style="padding:38px 10px;text-align:center;color:var(--ink-4);font-size:13.5px">Escanee o busque un artículo para comenzar la factura.</td></tr>`}</tbody></table></div>`;
 
@@ -309,7 +311,8 @@
         items.forEach((x, i) => x.classList.toggle("sel", i === sel));
       });
       $$("[data-add]", v).forEach(b => { if (!b.closest("#posMatches")) b.addEventListener("click", () => agregar(b.dataset.add)); });
-      $$("[data-selline]", v).forEach(tr => tr.addEventListener("click", () => {
+      $$("[data-selline]", v).forEach(tr => tr.addEventListener("click", e => {
+        if (e.target.closest("input, button")) return;
         const i = +tr.dataset.selline;
         S.posSel = S.posSel === i ? null : i;
         A.refresh();
@@ -323,18 +326,68 @@
         A.refresh();
       }));
 
+      /* ── cantidad y precio se editan en la misma fila ──────────────
+         − / + suman o restan uno. En el campo: ⏎ confirma y vuelve al escáner,
+         Tab / Mayús+Tab pasan al campo siguiente o anterior de la factura,
+         ↑ ↓ ajustan la cantidad, Esc descarta. La fila editada queda
+         seleccionada, así el panel muestra su detalle. */
+      const leeNum = s => parseFloat(String(s).replace(/\s/g, "").replace(",", "."));
+      const minCant = L => (artOf(L.artId).decimales ? 0.5 : 1);
+      const enfoca = sel => setTimeout(() => {
+        const el = $(sel === "scan" ? "#posScan" : sel);
+        if (el) { el.focus(); if (el.select) el.select(); }
+      }, 0);
+      const selDe = x => (x.dataset.qi != null ? `[data-qi="${x.dataset.qi}"]` : `[data-pi="${x.dataset.pi}"]`);
+      function aplicar(inp) {
+        const i = +(inp.dataset.qi != null ? inp.dataset.qi : inp.dataset.pi), L = S.cart.lineas[i];
+        if (!L || inp.dataset.hecho) return;
+        inp.dataset.hecho = "1";
+        let n = leeNum(inp.value);
+        if (inp.dataset.qi != null) {
+          n = artOf(L.artId).decimales ? Math.round(n * 100) / 100 : Math.round(n);
+          if (isFinite(n) && n > 0 && n !== L.cant) { L.cant = n; tocaBorrador(); }
+        } else {
+          n = Math.round(n);
+          if (isFinite(n) && n >= 0 && n !== L.precio) { L.precio = n; L.auth = false; tocaBorrador(); }
+        }
+        S.posSel = i;
+        A.refresh();
+      }
+      $$("[data-qd]", v).forEach(b => {
+        b.addEventListener("mousedown", e => e.preventDefault());
+        b.addEventListener("click", () => {
+          const i = +b.dataset.qd, L = S.cart.lineas[i];
+          L.cant = +b.dataset.q > 0 ? +(L.cant + 1).toFixed(2) : Math.max(minCant(L), +(L.cant - 1).toFixed(2));
+          S.posSel = i;
+          tocaBorrador();
+          A.refresh();
+          enfoca("scan");
+        });
+      });
+      $$("[data-qi],[data-pi]", v).forEach(inp => {
+        const orig = inp.value;
+        inp.addEventListener("focus", () => inp.select());
+        inp.addEventListener("change", () => aplicar(inp));
+        inp.addEventListener("keydown", e => {
+          if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); aplicar(inp); enfoca("scan"); }
+          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); inp.value = orig; inp.dataset.hecho = "1"; enfoca("scan"); }
+          else if (e.key === "Tab") {
+            const lista = $$("[data-qi],[data-pi]", v).map(selDe);
+            const dest = lista[lista.indexOf(selDe(inp)) + (e.shiftKey ? -1 : 1)];
+            if (dest) { e.preventDefault(); aplicar(inp); enfoca(dest); }
+          } else if (inp.dataset.qi != null && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+            e.preventDefault();
+            const L = S.cart.lineas[+inp.dataset.qi], n = leeNum(inp.value) || 0;
+            inp.value = cantEdit(Math.max(minCant(L), +(n + (e.key === "ArrowUp" ? 1 : -1)).toFixed(2)), artOf(L.artId));
+          }
+        });
+      });
+
       const enter = e => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } };
       const selIdx = S.posSel != null && S.cart.lineas[S.posSel] ? S.posSel : null;
       if (selIdx != null) {
         const L = S.cart.lineas[selIdx];
-        const menos = $('[data-pcant="-1"]', v), mas = $('[data-pcant="1"]', v);
-        if (menos) menos.addEventListener("click", () => { L.cant = Math.max(artOf(L.artId).decimales ? 0.5 : 1, +(L.cant - 1).toFixed(2)); tocaBorrador(); A.refresh(); });
-        if (mas) mas.addEventListener("click", () => { L.cant++; tocaBorrador(); A.refresh(); });
-        const pc = $("#pCant", v);
-        if (pc) { pc.addEventListener("keydown", enter); pc.addEventListener("change", () => { const dec2 = artOf(L.artId).decimales; const n = dec2 ? Math.round(parseFloat(String(pc.value).replace(",", ".")) * 100) / 100 : parseInt(pc.value, 10); L.cant = isFinite(n) && n > 0 ? n : 1; tocaBorrador(); A.refresh(); }); }
         $$("[data-ppres]", v).forEach(b => b.addEventListener("click", () => { L.cant = +(L.cant + +b.dataset.ppres).toFixed(2); tocaBorrador(); A.refresh(); }));
-        const pp = $("#pPrecio", v);
-        if (pp) { pp.addEventListener("keydown", enter); pp.addEventListener("change", () => { const n = parseFloat(pp.value); L.precio = isFinite(n) && n >= 0 ? n : L.precio; L.auth = false; tocaBorrador(); A.refresh(); }); }
         const pt = $("#pDescTipo", v);
         if (pt) pt.addEventListener("change", () => { L.descTipo = pt.value; L.auth = false; tocaBorrador(); A.refresh(); });
         const pd = $("#pDescVal", v);

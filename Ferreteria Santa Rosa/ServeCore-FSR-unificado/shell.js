@@ -402,8 +402,8 @@
       if (!b || !b.dataset.tip) return;
       tip.textContent = b.dataset.tip;
       tip.classList.add("on");
-      const r = b.getBoundingClientRect();
-      tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
+      const r = U.rectZ(b);
+      tip.style.left = Math.max(8, Math.min(r.left, U.anchoZ() - tip.offsetWidth - 8)) + "px";
       tip.style.top = Math.max(8, r.bottom + 6) + "px";
     });
     document.addEventListener("mouseout", e => { if (e.target.closest("[data-tip]")) tip.classList.remove("on"); });

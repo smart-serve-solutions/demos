@@ -7,6 +7,34 @@
     try { t = localStorage.getItem("sc-tema") === "dark" ? "dark" : "light"; } catch (e) {}
     document.documentElement.setAttribute("data-theme", t);
   })();
+
+  /* escala de lectura: en monitores grandes todo sube un poco, igual que el
+     zoom del navegador pero automático. El navegador no sabe de pulgadas,
+     así que se decide por el ancho del monitor y su densidad:
+       laptop retina (13", 14", 15", 16")              → sin cambio
+       monitor normal desde 18" (1366–1680 px) o 1920  → +10 %
+       monitor de 2560 px o más (27" QHD, 4K)          → +15 %
+     Si la ventana es angosta (< 1200 px) no se escala, para no apretar el diseño. */
+  (function () {
+    var mq = null;
+    function escala() {
+      var sw = screen.width || 0, dpr = window.devicePixelRatio || 1, z = 1;
+      if (sw >= 2400) z = 1.15;
+      else if (sw >= 1800 || (sw >= 1340 && dpr < 1.5)) z = 1.1;
+      if (window.innerWidth < 1200) z = 1;
+      document.documentElement.style.setProperty("--z", z);
+    }
+    function vigila() {
+      /* al pasar la ventana del laptop al monitor cambia la densidad */
+      if (mq) mq.removeEventListener("change", cambio);
+      mq = window.matchMedia("(resolution: " + (window.devicePixelRatio || 1) + "dppx)");
+      mq.addEventListener("change", cambio);
+    }
+    function cambio() { escala(); vigila(); }
+    escala();
+    vigila();
+    window.addEventListener("resize", escala);
+  })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -147,6 +175,11 @@
       body {
         height: 100%;
       }
+      /* --z lo fija el script de escala del encabezado; las alturas en vh se
+         dividen entre --z para que lo que ocupaba la pantalla la siga ocupando */
+      html {
+        zoom: var(--z, 1);
+      }
       body {
         margin: 0;
         background: var(--paper);
@@ -232,8 +265,8 @@
       .app {
         display: flex;
         flex-direction: column;
-        height: 100dvh;
-        min-height: 600px;
+        height: calc(100dvh / var(--z, 1));
+        min-height: calc(600px / var(--z, 1));
         overflow: hidden;
       }
       .topbar {
@@ -585,7 +618,7 @@
         background: var(--surface);
         border-bottom: 1px solid var(--hair);
         box-shadow: var(--shadow-lg);
-        max-height: min(600px, 80vh);
+        max-height: min(600px, calc(80vh / var(--z, 1)));
         display: flex;
         flex-direction: column;
         animation: menudown 0.15s ease-out;
@@ -1590,7 +1623,7 @@
       }
       .mitems {
         overflow: auto;
-        max-height: 60vh;
+        max-height: calc(60vh / var(--z, 1));
       }
       .mitem {
         display: flex;
@@ -1991,6 +2024,61 @@
         outline: 2px solid var(--accent);
         outline-offset: 3px;
       }
+      /* cantidad (− campo +) y precio editables dentro de la fila de la factura */
+      .qstep {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .qstep .qb {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        border: 1px solid var(--hair);
+        background: var(--surface);
+        color: var(--ink-2);
+        font-size: 15px;
+        line-height: 1;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: none;
+      }
+      .qstep .qb:hover {
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .qstep .qi {
+        width: 60px;
+        padding: 4px 6px;
+        border-radius: 7px;
+        border: 1px solid var(--hair);
+        background: var(--surface);
+        text-align: center;
+      }
+      .celed {
+        width: 100%;
+        min-width: 72px;
+        padding: 4px 6px;
+        margin-right: -7px;
+        border-radius: 7px;
+        border: 1px solid transparent;
+        background: transparent;
+        text-align: right;
+        cursor: text;
+      }
+      .celed:hover {
+        border-color: var(--hair);
+        background: var(--surface);
+      }
+      .qstep .qi:focus,
+      .celed:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 0;
+        border-color: var(--accent);
+        background: var(--surface);
+      }
       .poslado {
         width: 440px;
         flex: none;
@@ -2058,7 +2146,7 @@
         gap: 10px;
         padding: 16px;
         overflow: auto;
-        max-height: 56vh;
+        max-height: calc(56vh / var(--z, 1));
         background: var(--surface-2);
       }
       .bub {

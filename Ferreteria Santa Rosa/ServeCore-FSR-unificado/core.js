@@ -247,6 +247,40 @@
       <text x="50%" y="53%" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="600" font-size="${(size * 0.22).toFixed(0)}" fill="var(--ink)">${Math.round(p)}%</text></svg>`;
   }
 
+  /* ── escala de lectura (zoom en <html>, ver index.html) ──────────
+     getBoundingClientRect devuelve píxeles de pantalla y, según el navegador,
+     ya multiplicados por el zoom; un elemento fijo se posiciona en píxeles CSS.
+     rectZ y anchoZ traducen al espacio CSS para que capas y consejos caigan
+     justo debajo de su ancla. */
+  const zoomZ = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--z")) || 1;
+  function zoomK() {
+    const p = document.createElement("div");
+    p.style.cssText = "position:absolute;visibility:hidden;width:100px;height:0;pointer-events:none";
+    document.body.appendChild(p);
+    const k = p.getBoundingClientRect().width / 100 || 1;
+    p.remove();
+    return k;
+  }
+  function rectZ(el) {
+    const r = el.getBoundingClientRect(), k = zoomK();
+    return { left: r.left / k, right: r.right / k, top: r.top / k, bottom: r.bottom / k, width: r.width / k, height: r.height / k };
+  }
+  const anchoZ = () => innerWidth / zoomZ();
+  /* las alturas en vh escritas en línea por las pantallas («calc(100dvh - 470px)»)
+     se dividen entre --z al insertarse, igual que las del CSS */
+  const VH = /(\d*\.?\d+)(d|s|l)?vh\b/g;
+  function vhZ(root) {
+    const els = root.matches && root.matches('[style*="vh"]') ? [root] : [];
+    root.querySelectorAll('[style*="vh"]').forEach(e => els.push(e));
+    els.forEach(e => {
+      const s = e.getAttribute("style");
+      if (!s || s.includes("var(--z")) return;
+      e.setAttribute("style", s.replace(VH, (m, n, u) => `calc(${n}${u || ""}vh / var(--z, 1))`));
+    });
+  }
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) vhZ(n); })))
+    .observe(document.body, { childList: true, subtree: true });
+
   /* ── capas: cajón lateral, popover, avisos, consejos ────────── */
   const overlay = () => $("#overlayRoot");
   function openSheet(o) {
@@ -267,8 +301,8 @@
   function closeSheet() { overlay().innerHTML = ""; }
 
   function popover(anchor, html, after) {
-    const r = anchor.getBoundingClientRect();
-    overlay().innerHTML = `<div class="pop-scrim" id="popScrim"></div><div class="pop" style="top:${r.bottom + 6}px;left:${Math.min(r.left, innerWidth - 300)}px">${html}</div>`;
+    const r = rectZ(anchor);
+    overlay().innerHTML = `<div class="pop-scrim" id="popScrim"></div><div class="pop" style="top:${r.bottom + 6}px;left:${Math.min(r.left, anchoZ() - 300)}px">${html}</div>`;
     $("#popScrim").addEventListener("click", closeSheet);
     if (after) after(overlay());
   }
@@ -297,6 +331,7 @@
     fecha, fechaL, hora, fh, fechaLarga, ini, locNom, locEtiqueta, cliNom, provNom, artOf, famNom,
     card, panel, stat, kpi, tag, chip, pageHead, empty, fichaCell, field, selectField, prog,
     table, dt, seg, onSeg, barRow, bars, lineChart, line, donut,
-    openSheet, sheet, closeSheet, popover, toast
+    openSheet, sheet, closeSheet, popover, toast,
+    rectZ, anchoZ
   };
 })(window);
