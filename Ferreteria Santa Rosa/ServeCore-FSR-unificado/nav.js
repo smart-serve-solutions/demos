@@ -67,18 +67,30 @@
         ],
       },
     ],
+    /* Sistema: una pantalla por opción; lo que antes eran pestañas de una
+       sola «Configuración» ahora tiene su lugar en el menú. */
     sistema: [
       {
         t: "Organización y locales",
         ic: "pin",
         items: [
           {
-            t: "Administración de locales, bodegas y áreas",
-            reqs: ["SIS-002", "SIS-003"],
-            screen: "config",
+            t: "Empresa, locales y áreas",
+            d: "Locales y bodegas sin límite, áreas con su propio resultado y razón social",
+            reqs: ["SIS-001", "SIS-002", "SIS-003"],
+            screen: "sis-locales",
+            tabs: [
+              { t: "Locales y bodegas", id: "locales", kw: "local bodega cedi sucursal cajas nodo agregar local" },
+              { t: "Áreas", id: "areas", kw: "tienda virtual sala de acabados taller planta area" },
+              { t: "Razón social", id: "empresa", kw: "razon social cedula juridica multiempresa sociedad" },
+            ],
           },
-          { t: "Territorios de clientes", reqs: ["SIS-004"] },
-          { t: "Multiempresa", reqs: ["SIS-001"] },
+          {
+            t: "Territorios de clientes",
+            d: "Dónde vive el cliente y en qué local compra",
+            reqs: ["SIS-004"],
+            screen: "sis-territorios",
+          },
         ],
       },
       {
@@ -86,11 +98,26 @@
         ic: "layers",
         items: [
           {
-            t: "Categorías, familias, marcas y departamentos",
-            reqs: ["SIS-007", "SIS-006"],
-            screen: "config",
+            t: "Categorías, marcas y departamentos",
+            d: "Categorías padre e hija, marcas y departamentos ligados a la planilla",
+            reqs: ["SIS-006", "SIS-007"],
+            screen: "sis-categorias",
+            tabs: [
+              { t: "Categorías", id: "categorias", kw: "categoria familia subcategoria padre hija jerarquia" },
+              { t: "Marcas", id: "marcas", kw: "marca" },
+              { t: "Departamentos", id: "departamentos", kw: "departamento area planilla" },
+            ],
           },
-          { t: "Ubicación física de artículos", reqs: ["SIS-009"] },
+          {
+            t: "Ubicación física de artículos",
+            d: "Pasillo, anaquel, cara y estante; segunda ubicación en trastienda",
+            reqs: ["SIS-009"],
+            screen: "sis-ubicaciones",
+            tabs: [
+              { t: "Por local", id: "estructura", kw: "pasillo anaquel cara estante trastienda" },
+              { t: "Sin ubicación", id: "sin", kw: "sin ubicacion ubicar articulo" },
+            ],
+          },
         ],
       },
       {
@@ -98,16 +125,44 @@
         ic: "gear",
         items: [
           {
-            t: "Términos de pago parametrizables",
+            t: "Términos de pago",
+            d: "Contado, conta ruta, crédito a 15–90 días, plazos negociados y pronto pago",
             reqs: ["SIS-005"],
+            screen: "sis-terminos",
           },
           {
-            t: "Transiciones de estado por documento",
-            reqs: ["SIS-008"],
+            t: "Estados de los documentos",
+            d: "Registrado, aplicado, anulado; renombrar sin alterar lo ya emitido",
+            reqs: ["SIS-008", "SIS-011"],
+            screen: "sis-estados",
+            tabs: [
+              { t: "Flujos", id: "flujos", kw: "estado registrado aplicado anulado irreversible" },
+              { t: "Cambios de nombre", id: "nombres", kw: "renombrar historial integridad catalogo" },
+            ],
           },
           {
-            t: "Ambiente de pruebas y notificación de cambios",
+            t: "Versiones y ambiente de pruebas",
+            d: "Notas de versión, aceptación escrita, pruebas anonimizadas y respaldos",
             reqs: ["SIS-010"],
+            screen: "sis-versiones",
+            tabs: [
+              { t: "Próxima versión", id: "proxima", kw: "release notes version aceptacion publicar" },
+              { t: "Ambiente de pruebas", id: "pruebas", kw: "pruebas anonimizado enmascarar datos" },
+              { t: "Historial", id: "historial", kw: "versiones publicadas" },
+              { t: "Respaldos y copia de la base", id: "respaldos", kw: "respaldo backup copia base de datos" },
+            ],
+          },
+        ],
+      },
+      {
+        t: "Preferencias",
+        ic: "sun",
+        items: [
+          {
+            t: "Este equipo",
+            d: "Modo oscuro, terminal y simulación de caída del enlace",
+            reqs: [],
+            screen: "config",
           },
         ],
       },
@@ -234,76 +289,129 @@
         ],
       },
     ],
+    /* Ventas: una opción por tarea de quien vende, no una por requerimiento.
+       Lo que antes era una opción ahora es una pestaña. Pendientes de ventas
+       reúne lo que necesita a una persona hoy; lo que la venta deduce lo hace
+       sola (ven-auto.js). La caja no cambió de lugar. */
     ventas: [
       {
-        t: "Punto de venta",
+        t: "Mostrador",
         ic: "cart",
         items: [
           {
             t: "Facturación en el punto de venta",
-            reqs: ["VEN-001", "VEN-002", "VEN-013"],
+            d: "Caja por teclado y escáner, borrador continuo, medios de pago y existencias de otros locales",
+            reqs: ["VEN-001", "VEN-002", "VEN-013", "VEN-018", "VEN-020", "VEN-021", "VEN-022", "VEN-024"],
             screen: "pos",
+          },
+          {
+            t: "Pendientes de ventas",
+            d: "Lo que necesita a una persona hoy; lo demás corre solo",
+            reqs: [],
+            screen: "ven-pendientes",
+            tabs: [{ t: "Pendientes de ventas", id: "", kw: "bandeja pendientes hoy autorizar entregar seguimiento caja" }],
+          },
+          {
+            t: "Caja y turnos",
+            d: "Apertura con fondo, retiros, arqueo y cierre; terminales y cajeros",
+            reqs: ["VEN-025", "VEN-027"],
+            screen: "caja",
+            tabs: [
+              { t: "Mi caja", id: "mia", kw: "apertura fondo arqueo cierre retiro efectivo turno medios de pago" },
+              { t: "Cajas del local", id: "local", kw: "administrador cajas abiertas diferencias justificar cierre" },
+              { t: "Terminales y cajeros", id: "terminales", kw: "terminal consecutivo sucursal habilitar cajero turnos" },
+            ],
           },
           {
             t: "Sugerencia de productos relacionados",
+            d: "Complementos al agregar un artículo en la caja; reglas del experto y pares aprendidos de las ventas",
             reqs: ["VEN-016"],
+            screen: "ven-relacionados",
+            tabs: [
+              { t: "En la caja", id: "caja", kw: "complementos sugeridos aceptados venta adicional vendedor nuevo" },
+              { t: "Reglas", id: "reglas", kw: "regla complemento cantidad por unidad experto" },
+              { t: "Aprendidas de las ventas", id: "aprendidas", kw: "ia inteligencia artificial se compran juntos facturas aprobar" },
+            ],
           },
-          { t: "Terminal en tablet", reqs: ["VEN-018"] },
-          { t: "Link de pago y SINPE/QR", reqs: ["VEN-019"] },
-          { t: "Autogestión del cliente", reqs: ["VEN-017"] },
+          { t: "Autogestión del cliente", d: "Catálogo con fotos y quiosco, empezando por un área piloto", reqs: ["VEN-017"] },
         ],
       },
       {
-        t: "Precios y descuentos",
-        ic: "wallet",
-        items: [
-          {
-            t: "Descuentos por categoría de cliente, volumen y convenio",
-            reqs: ["VEN-007", "VEN-008"],
-            screen: "pos",
-          },
-          {
-            t: "Control de utilidad mínima y autorización de excepciones",
-            reqs: ["VEN-009", "VEN-010", "VEN-015"],
-            screen: "pos",
-          },
-          {
-            t: "Visibilidad del costo restringida",
-            reqs: ["VEN-014"],
-            screen: "pos",
-          },
-        ],
-      },
-      {
-        t: "Cotizaciones y proformas",
+        t: "Antes y después de la venta",
         ic: "file",
         items: [
           {
-            t: "Proforma y conversión a factura",
-            reqs: ["VEN-003"],
+            t: "Cotizaciones y pedidos",
+            d: "Proformas con peso y flete, pedidos de WhatsApp y web, link de pago y ventas perdidas",
+            reqs: ["VEN-003", "VEN-019"],
             screen: "cotizaciones",
+            tabs: [
+              { t: "Proformas", id: "proformas", kw: "proforma cotizacion convertir factura peso flete vence" },
+              { t: "Pedidos", id: "pedidos", kw: "pedido whatsapp pagina web tienda virtual link de pago sinpe qr" },
+              { t: "Ventas perdidas", id: "perdidas", kw: "venta perdida motivo proforma vencida precio existencia" },
+            ],
           },
-        ],
-      },
-      {
-        t: "Documentos y devoluciones",
-        ic: "file",
-        items: [
           {
-            t: "Notas de crédito y devoluciones de cliente",
-            reqs: ["VEN-011", "VEN-012"],
-            screen: "documentos",
-          },
-        ],
-      },
-      {
-        t: "Despachos y mercadería comprometida",
-        ic: "box",
-        items: [
-          {
-            t: "Despachos y mercadería comprometida",
+            t: "Entregas y retiros",
+            d: "Mercadería no despachada, despachos con estado y retiro en otro local",
             reqs: ["VEN-004", "VEN-005", "VEN-006"],
             screen: "despachos",
+            tabs: [
+              { t: "Por despachar", id: "pordespachar", kw: "no despachada pendiente alistar voluminoso despacho" },
+              { t: "Retiros en otro local", id: "retiros", kw: "retiro otro local reserva mercaderia comprometida" },
+              { t: "En ruta y entregados", id: "ruta", kw: "entregado firma autorizado retirar constancia ruta vehiculo sobrepeso" },
+            ],
+          },
+          {
+            t: "Documentos y devoluciones",
+            d: "Comprobantes emitidos, devolución con firma del cliente y notas de crédito",
+            reqs: ["VEN-011", "VEN-012"],
+            screen: "documentos",
+            tabs: [
+              { t: "Documentos emitidos", id: "emitidos", kw: "factura tiquete reimprimir reenviar xml comprobante" },
+              { t: "Devolver mercadería", id: "devolver", kw: "devolucion boleta firma digital reintegro" },
+              { t: "Notas de crédito", id: "notas", kw: "nota de credito concepto garantia exoneracion financiera intereses promocional rebajo planilla" },
+            ],
+          },
+        ],
+      },
+      {
+        t: "Clientes y precios",
+        ic: "users",
+        items: [
+          {
+            t: "Clientes",
+            d: "Ficha completa, crédito y compras",
+            reqs: ["VEN-023"],
+            screen: "clientes",
+            tabs: [
+              { t: "Ficha", id: "ficha", kw: "autorizados a retirar exoneracion actividad economica contactos direcciones categoria" },
+              { t: "Crédito", id: "credito", kw: "limite plazo bloqueo sobregiro vencidas" },
+              { t: "Compras", id: "compras", kw: "historial compras documentos familia" },
+            ],
+          },
+          {
+            t: "Precios, descuentos y márgenes",
+            d: "Categorías de cliente, volumen, convenios, márgenes mínimos y autorizaciones",
+            reqs: ["VEN-007", "VEN-008", "VEN-009", "VEN-010", "VEN-014", "VEN-015"],
+            screen: "ven-precios",
+            tabs: [
+              { t: "Por categoría de cliente", id: "categorias", kw: "maestro de obra ingeniero fontanero electricista ebanista descuento categoria" },
+              { t: "Volumen y convenios", id: "volumen", kw: "descuento por volumen cantidad convenio proveedor reconoce" },
+              { t: "Márgenes mínimos", id: "margenes", kw: "utilidad minima familia ver costo sadic local contable" },
+              { t: "Autorizaciones", id: "autorizaciones", kw: "autorizacion venta bajo costo un solo uso barrido reversion" },
+            ],
+          },
+          {
+            t: "Vendedores y comisiones",
+            d: "Desempeño, metas, comisiones y clave en mostrador compartido",
+            reqs: ["VEN-026"],
+            screen: "ven-vendedores",
+            tabs: [
+              { t: "Desempeño", id: "desempeno", kw: "vendedor venta margen tiquete descuento" },
+              { t: "Metas y comisiones", id: "comisiones", kw: "meta comision familia bono" },
+              { t: "Clave en mostrador", id: "mostrador", kw: "clave vendedor mostrador compartido identificacion" },
+            ],
           },
         ],
       },
@@ -371,7 +479,10 @@
             t: "Límite y bloqueo de crédito de clientes",
             d: "Ficha del cliente, límite de crédito y bloqueo",
             reqs: ["CXC-001", "CXC-002"],
+            /* la misma pantalla de Ventas › Clientes, abierta en Crédito */
             screen: "clientes",
+            arg: "credito",
+            alias: true,
           },
           { t: "Conta ruta (crédito de un día)", d: "Cuentas por cobrar de un día a clientes de ruta", reqs: ["CXC-004"] },
         ],
@@ -891,22 +1002,22 @@
       d: "Facturación ágil, con escaneo y catálogo táctil",
     },
     documentos: {
-      t: "Documentos de venta",
+      t: "Documentos y devoluciones",
       ic: "file",
       g: "Ventas",
-      d: "Facturas, tiquetes y notas emitidas",
+      d: "Comprobantes, devoluciones con firma y notas de crédito",
     },
     cotizaciones: {
       t: "Cotizaciones y pedidos",
       ic: "file",
       g: "Ventas",
-      d: "Documentos previos convertibles en factura",
+      d: "Proformas, pedidos, link de pago y ventas perdidas",
     },
     despachos: {
-      t: "Despachos y entregas",
+      t: "Entregas y retiros",
       ic: "box",
       g: "Ventas",
-      d: "Mercadería comprometida y su entrega",
+      d: "Por despachar, retiros en otro local y entregados",
     },
     rutas: {
       t: "Rutas y transporte",
@@ -918,14 +1029,26 @@
       t: "Clientes",
       ic: "users",
       g: "Clientes",
-      d: "Ficha, crédito y estado de cuenta",
+      d: "Ficha, crédito y compras",
     },
+    "ven-pendientes": { t: "Pendientes de ventas", ic: "check", g: "Ventas", d: "Lo que hay que atender hoy en ventas" },
+    caja: { t: "Caja y turnos", ic: "cash", g: "Ventas", d: "Apertura, retiros, arqueo, cierre y terminales" },
+    "ven-precios": { t: "Precios, descuentos y márgenes", ic: "wallet", g: "Ventas", d: "Categorías, volumen, convenios, márgenes y autorizaciones" },
+    "ven-relacionados": { t: "Sugerencia de productos relacionados", ic: "sparkle", g: "Ventas", d: "Complementos sugeridos en la caja, reglas y pares aprendidos" },
+    "ven-vendedores": { t: "Vendedores y comisiones", ic: "users", g: "Ventas", d: "Desempeño, metas, comisiones y clave en mostrador" },
     cxc: {
       t: "Cuentas por cobrar",
       ic: "wallet",
       g: "Clientes",
       d: "Antigüedad de saldos y gestión de cobro",
     },
+    "sis-locales": { t: "Empresa, locales y áreas", ic: "pin", g: "Sistema", d: "Locales, bodegas, áreas y razón social" },
+    "sis-territorios": { t: "Territorios de clientes", ic: "pin", g: "Sistema", d: "Dónde vive el cliente y dónde compra" },
+    "sis-categorias": { t: "Categorías, marcas y departamentos", ic: "layers", g: "Sistema", d: "Clasificación del catálogo y de la empresa" },
+    "sis-ubicaciones": { t: "Ubicación física de artículos", ic: "pin", g: "Sistema", d: "Pasillo, anaquel, cara y estante" },
+    "sis-terminos": { t: "Términos de pago", ic: "calc", g: "Sistema", d: "Plazos de clientes y proveedores" },
+    "sis-estados": { t: "Estados de los documentos", ic: "gear", g: "Sistema", d: "Flujos y nombres de estados" },
+    "sis-versiones": { t: "Versiones y ambiente de pruebas", ic: "upload", g: "Sistema", d: "Notas, aceptación, pruebas y respaldos" },
     bodega: { t: "Pendientes de bodega", ic: "check", g: "Catálogo", d: "Lo que hay que atender hoy en la bodega" },
     catalogo: { t: "Catálogo", ic: "box", g: "Catálogo", d: "Artículos, precios, códigos y etiquetas, carga masiva" },
     existencias: { t: "Existencias", ic: "layers", g: "Catálogo", d: "Por local, kardex, apartados, contra pedido y segunda" },
@@ -1065,10 +1188,10 @@
       d: "Quién, cuándo y qué valor cambió",
     },
     config: {
-      t: "Configuración",
-      ic: "gear",
+      t: "Este equipo",
+      ic: "sun",
       g: "Sistema",
-      d: "Locales, familias, márgenes y estados",
+      d: "Modo oscuro, terminal y simulación de caída del enlace",
     },
   };
 

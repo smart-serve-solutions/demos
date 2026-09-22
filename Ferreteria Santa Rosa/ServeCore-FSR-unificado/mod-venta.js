@@ -17,12 +17,25 @@
   /* draft: el borrador que el nodo local guarda solo; apartado: lo que esta
      factura dejó comprometido en existencias y hay que devolver si se cancela */
   S.cart = { cliId: "C1", condicion: "Crédito", lineas: [], draft: new Date(), apartado: [] };
-  const tocaBorrador = () => { S.cart.draft = S.cart.lineas.length ? new Date() : null; };
+  const tocaBorrador = () => { reDesc(); S.cart.draft = S.cart.lineas.length ? new Date() : null; };
+  /* descuento de la categoría del cliente o por volumen, aplicado solo y con
+     tope por margen (VEN-007, VEN-008; reglas en Precios, descuentos y márgenes).
+     Un descuento digitado a mano en la línea no se toca. */
+  function reDesc() {
+    if (!w.VENX) return;
+    S.cart.lineas.forEach(l => {
+      if (l.auto === false) return;
+      const r = w.VENX.descAuto(S.cart.cliId, l.artId, l.cant);
+      l.descTipo = "pct"; l.desc = r ? r.desc : 0; l.fuente = r ? r.fuente : ""; l.auto = true;
+    });
+  }
+  w.POSX = { aplicarCliente: () => tocaBorrador() };
   [["FER-01042", 40, 0], ["FER-02218", 120, 3], ["FER-03771", 28, 31], ["FER-00915", 36, 0], ["FER-01880", 450, 0]]
     .forEach(s => {
       const a = D.articulos.find(x => x.cod === s[0]);
-      if (a) S.cart.lineas.push({ artId: a.id, cant: s[1], precio: a.precio, descTipo: "pct", desc: s[2], nota: "", auth: false });
+      if (a) S.cart.lineas.push({ artId: a.id, cant: s[1], precio: a.precio, descTipo: "pct", desc: s[2], nota: "", auth: false, auto: !s[2] });
     });
+  reDesc();
 
   const lineBruto = l => l.cant * l.precio;
   const lineDescMonto = l => {
@@ -38,7 +51,7 @@
   }
   /* para el motor fiscal el descuento viaja en porcentaje: se convierte aquí */
   const lineasFiscales = () => S.cart.lineas.map(l => ({
-    artId: l.artId, cant: l.cant, precio: l.precio,
+    artId: l.artId, cant: l.cant, precio: l.precio, nota: l.nota || "",
     desc: lineBruto(l) ? +((lineDescMonto(l) / lineBruto(l)) * 100).toFixed(4) : 0
   }));
   const cartTot = () => D.totalizar(lineasFiscales());
@@ -116,6 +129,41 @@
       <span class="md" style="display:flex;gap:7px;align-items:center"><b class="num" style="color:var(--accent);font-size:13.5px">${a.precio ? c(a.precio) : "Cotizar"}</b>
       ${a.peso ? `<span class="dim num" style="font-size:11.5px">${kg(a.peso)}</span>` : ""}</span></span></button>`;
 
+  /* ══ PRODUCTOS RELACIONADOS (VEN-016) ═════════════════════════
+     Lo que el vendedor experto sugiere de memoria, para todos: al agregar o
+     elegir una línea aparecen sus complementos con la cantidad ya calculada.
+     Un clic o ⌥1–6 (Alt 1–6) los agrega; nunca interrumpe la venta.
+     Reglas y resultados: Ventas › Sugerencia de productos relacionados. */
+  const esMac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+  const teclaSug = esMac ? "⌥" : "Alt ";
+  function sugeridos() {
+    if (!w.VENX || !w.VENX.relacionados || !S.cart.lineas.length) return { titulo: "", items: [] };
+    const sel = S.posSel != null && S.cart.lineas[S.posSel] ? S.cart.lineas[S.posSel] : null;
+    return w.VENX.relacionados(S.cart.lineas, sel);
+  }
+  function sugCard() {
+    const s = sugeridos();
+    if (!s.items.length) return "";
+    return card({
+      title: s.titulo, hint: "un clic o " + teclaSug + (s.items.length > 1 ? "1–" + s.items.length : "1") + " para agregar", cls: "sugcard", flush: false,
+      body: `<div class="sugs">${s.items.map((x, i) => `<button type="button" class="sug" data-sug="${i}" title="${esc(x.motivo)}">
+          <kbd>${teclaSug}${i + 1}</kbd>
+          <span class="sugt"><b>${esc(x.a.desc)}</b><span>${esc(x.motivo)}</span></span>
+          <span class="sugq"><b class="num">${fmtCant(x.cant, x.a)} ${esc(x.a.unidad)}</b><span class="num">${c(Math.round(x.a.precio * x.cant))}</span></span>
+          ${icon("plus", 'style="width:16px;height:16px;flex:none;color:var(--accent)"')}</button>`).join("")}</div>`
+    });
+  }
+  function agregarSug(i) {
+    const x = sugeridos().items[i];
+    if (!x) return;
+    S.cart.lineas.push({ artId: x.a.id, cant: x.cant, precio: x.a.precio, descTipo: "pct", desc: 0, nota: "", auth: false, sug: true });
+    if (w.VENX) w.VENX.aceptar(x);
+    tocaBorrador();
+    toast("Agregado · " + x.a.desc, fmtCant(x.cant, x.a) + " " + x.a.unidad + " · " + x.motivo, "ok");
+    A.refresh();
+    setTimeout(() => { const e = $("#posScan"); if (e) e.focus(); }, 0);
+  }
+
   /* ══ TECLAS DE LA CAJA ═══════════════════════════════════════
      una sola definición: rotula la barra inferior, responde al teclado
      y responde al clic sobre el botón correspondiente */
@@ -165,7 +213,7 @@
         const stock = D.disp(l.artId, S.locId);
         const desdeCedi = stock < l.cant;
         const descCell = !l.desc ? '<span class="dim">—</span>'
-          : `<span style="color:var(--warn);font-weight:650">${l.descTipo === "monto" ? c(l.desc) : dec(l.desc, 0) + " %"}</span>`;
+          : `<span style="color:var(--warn);font-weight:650"${l.auto && l.fuente ? ` data-tip="Descuento automático · ${esc(l.fuente)}"` : ""}>${l.descTipo === "monto" ? c(l.desc) : dec(l.desc, 0) + " %"}</span>`;
         return `<tr data-selline="${i}" class="${sel ? "sel" : bajo && !l.auth ? "cr" : ""}" style="cursor:pointer">
           <td class="mono dim">${i + 1}</td>
           <td style="min-width:180px"><div class="b" style="font-size:13.5px">${esc(a.desc)}</div>
@@ -216,6 +264,7 @@
         actions: nLin ? mgPill : "",
         body: tabla, flush: false
       })}
+            ${sugCard()}
             <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-4);margin-bottom:8px">Más pedidos</div>
               <div class="grid" style="grid-template-columns:repeat(2,1fr);gap:8px">${masPedidos.map(quickCard).join("")}</div></div>
             <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-4);margin-bottom:8px">Servicios</div>
@@ -311,6 +360,10 @@
         items.forEach((x, i) => x.classList.toggle("sel", i === sel));
       });
       $$("[data-add]", v).forEach(b => { if (!b.closest("#posMatches")) b.addEventListener("click", () => agregar(b.dataset.add)); });
+      $$("[data-sug]", v).forEach(b => {
+        b.addEventListener("mousedown", e => e.preventDefault());
+        b.addEventListener("click", () => agregarSug(+b.dataset.sug));
+      });
       $$("[data-selline]", v).forEach(tr => tr.addEventListener("click", e => {
         if (e.target.closest("input, button")) return;
         const i = +tr.dataset.selline;
@@ -389,7 +442,7 @@
         const L = S.cart.lineas[selIdx];
         $$("[data-ppres]", v).forEach(b => b.addEventListener("click", () => { L.cant = +(L.cant + +b.dataset.ppres).toFixed(2); tocaBorrador(); A.refresh(); }));
         const pt = $("#pDescTipo", v);
-        if (pt) pt.addEventListener("change", () => { L.descTipo = pt.value; L.auth = false; tocaBorrador(); A.refresh(); });
+        if (pt) pt.addEventListener("change", () => { L.descTipo = pt.value; L.auth = false; L.auto = false; tocaBorrador(); A.refresh(); });
         const pd = $("#pDescVal", v);
         if (pd) {
           pd.addEventListener("keydown", enter);
@@ -397,6 +450,7 @@
             let n = parseFloat(pd.value);
             n = isFinite(n) && n >= 0 ? n : 0;
             L.desc = L.descTipo === "monto" ? Math.min(n, lineBruto(L)) : Math.min(100, n);
+            L.auto = false;
             L.auth = false;
             tocaBorrador();
             A.refresh();
@@ -417,8 +471,10 @@
       });
 
       /* atajos propios de la caja */
+      if (v._keys) document.removeEventListener("keydown", v._keys);
       v._keys = e => {
         if (S.screen !== "pos" || $("#ovScrim")) return;
+        if (e.altKey && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); agregarSug(+e.code.slice(5) - 1); return; }
         const f = ACCIONES[e.key];
         if (f) { e.preventDefault(); f(); }
       };
@@ -491,7 +547,7 @@
         const usar = id => {
           S.cart.cliId = id;
           S.cart.condicion = id && D.cliById[id].limite ? "Crédito" : "Contado";
-          closeSheet(); A.refresh();
+          tocaBorrador(); closeSheet(); A.refresh();
         };
         const enlazar = () => $$("#cliBox tr.clickable").forEach(tr =>
           tr.addEventListener("click", () => { const x = visibles[+tr.dataset.i]; if (x) usar(x.id); }));
@@ -584,6 +640,7 @@
         $("#noCancel", el).addEventListener("click", closeSheet);
         $("#siCancel", el).addEventListener("click", () => {
           soltarApartado();
+          if (w.VENX) w.VENX.revertir();
           D.bitacora.unshift({
             id: "BTC" + Date.now(), fecha: new Date(), usuario: S.vendedor, rol: "Caja", locId: S.locId,
             accion: "Canceló la factura en curso",
@@ -612,7 +669,7 @@
     D.proformas.unshift({
       id: "PF-" + D.seq.PROF, cons, tipo: "Proforma", fecha: new Date(), clienteId: S.cart.cliId,
       locId: S.locId, lineas, ...t, vence: new Date(D.HOY.getTime() + 15 * 86400000),
-      estado: "Vigente", origen: "Mostrador"
+      estado: "Vigente", origen: "Mostrador", vendedor: S.vendedor
     });
     toast("Proforma " + cons + " guardada", "Queda en Cotizaciones y pedidos, lista para convertirse en factura sin redigitar.", "ok");
     A.refresh();
@@ -665,6 +722,7 @@
             condicion: S.cart.condicion, medio: S.cart.condicion === "Crédito" ? "Crédito" : medio,
             hacienda: S.offline ? "En cola" : "Aceptado", fecha: new Date()
           });
+          if (w.VENX) w.VENX.consumir(doc.cons);
           closeSheet();
           S.cart = { cliId: S.cart.cliId, condicion: S.cart.condicion, lineas: [], draft: null, apartado: [] };
           S.posSel = null;
@@ -675,190 +733,6 @@
       }
     });
   }
-
-  /* ══ DOCUMENTOS DE VENTA ═════════════════════════════════════ */
-  const docF = { tipo: "Todos", loc: "Todos", q: "" };
-  const filtrarDocs = () => {
-    let rows = D.documentos.filter(d => docF.tipo === "Todos" || d.tipo === docF.tipo);
-    if (docF.loc !== "Todos") rows = rows.filter(d => d.locId === docF.loc);
-    if (docF.q) rows = rows.filter(d => norm(d.cons + " " + cliNom(d.clienteId)).includes(norm(docF.q)));
-    return rows.slice(0, 160);
-  };
-
-  A.screen("documentos", {
-    title: "Documentos de venta",
-    sub: () => D.documentos.length + " comprobantes electrónicos emitidos",
-    extra: () => seg("dtipo", ["Todos", "FE", "TE", "NC"], docF.tipo),
-    render(v, arg) {
-      const rows = filtrarDocs();
-      const tot = rows.reduce((s, d) => s + (d.tipo === "NC" ? -d.total : d.total), 0);
-      v.innerHTML = card({
-        title: "Comprobantes electrónicos", hint: rows.length + " en pantalla",
-        actions: `<input class="inp" id="dq" placeholder="Consecutivo o cliente" value="${esc(docF.q)}" style="width:210px">
-          <select class="inp" id="dloc" style="width:auto"><option>Todos</option>${D.tiendas.map(l => `<option value="${l.id}" ${docF.loc === l.id ? "selected" : ""}>${esc(l.nom)}</option>`).join("")}</select>
-          <button class="btn">${icon("print")}Exportar</button>`,
-        body: table({
-          h: "calc(100dvh - 300px)", onRow: true,
-          cols: [
-            { t: "Consecutivo", cls: "mono", fmt: r => `${esc(r.cons)}<span class="sub">${esc(r.clave.slice(0, 24))}…</span>` },
-            { t: "Tipo", fmt: r => tag(r.tipo, r.tipo === "NC" ? "wa" : r.tipo === "TE" ? "mu" : "ac") },
-            { t: "Fecha", cls: "mono", fmt: r => fh(r.fecha) },
-            { t: "Local", fmt: r => esc(locNom(r.locId)) },
-            { t: "Cliente", fmt: r => esc(cliNom(r.clienteId)) },
-            { t: "Vendedor", fmt: r => `<span class="mut">${esc(r.vendedor)}</span>` },
-            { t: "Cond.", fmt: r => esc(r.condicion) },
-            { t: "Margen", r: true, cls: "mono", fmt: r => r.tipo === "NC" ? "—" : `<span style="color:${r.margen < 18 ? "var(--crit)" : "var(--ink)"}">${dec(r.margen)} %</span>` },
-            { t: "Total", r: true, cls: "mono", fmt: r => `<b>${r.tipo === "NC" ? "−" : ""}${grp(r.total)}</b>` },
-            { t: "Hacienda", fmt: r => r.hacienda === "Aceptado" ? tag("Aceptado", "ok", "check") : tag("En cola", "wa", "alert") }
-          ],
-          rows,
-          rowCls: r => (r.margen && r.margen < 18 && r.tipo !== "NC" ? "cr" : ""),
-          foot: [{ v: rows.length + " documentos", span: 8 }, { v: grp(tot), r: true, cls: "mono" }, { v: "" }]
-        })
-      });
-      if (arg) setTimeout(() => detalleDoc(D.documentos.find(d => d.id === arg)), 30);
-    },
-    wire(v) {
-      onSeg(document, "dtipo", val => { docF.tipo = val; A.refresh(); });
-      const q = $("#dq", v);
-      q.addEventListener("change", () => { docF.q = q.value; A.refresh(); });
-      $("#dloc", v).addEventListener("change", e => { docF.loc = e.target.value; A.refresh(); });
-      $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => detalleDoc(filtrarDocs()[+tr.dataset.i])));
-    }
-  });
-
-  function detalleDoc(d) {
-    if (!d) return;
-    openSheet({
-      wide: true, title: d.tipo + " " + d.cons,
-      sub: `${cliNom(d.clienteId)} · ${fh(d.fecha)} · ${locNom(d.locId)} terminal ${d.term}`,
-      body: `<div class="card" style="margin-bottom:14px"><div class="card-b flush"><div class="strip">
-          <div class="cell"><div class="cl">Clave numérica</div><div class="cv num" style="font-size:11px;word-break:break-all">${esc(d.clave)}</div></div>
-          <div class="cell"><div class="cl">Condición</div><div class="cv">${esc(d.condicion)} · ${esc(d.medio)}</div></div>
-          <div class="cell"><div class="cl">Estado en Hacienda</div><div class="cv">${d.hacienda === "Aceptado" ? tag("Aceptado", "ok", "check") : tag("En cola", "wa", "alert")}</div></div>
-          <div class="cell"><div class="cl">Vendedor</div><div class="cv">${esc(d.vendedor)}</div></div>
-        </div></div></div>
-        ${table({
-        cols: [
-          { t: "Código", cls: "mono", fmt: r => esc(artOf(r.artId).cod) },
-          { t: "Descripción", fmt: r => esc(artOf(r.artId).desc) },
-          { t: "CABYS", cls: "mono", fmt: r => esc(artOf(r.artId).cabys) },
-          { t: "Cant.", r: true, cls: "mono", fmt: r => grp(r.cant) },
-          { t: "Precio", r: true, cls: "mono", fmt: r => grp(r.precio) },
-          { t: "Desc.", r: true, cls: "mono", fmt: r => (r.desc ? dec(r.desc) + " %" : "—") },
-          { t: "Total", r: true, cls: "mono", fmt: r => `<b>${grp(Math.round(r.cant * r.precio * (1 - (r.desc || 0) / 100)))}</b>` }
-        ], rows: d.lineas
-      })}
-        <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;margin-top:16px">
-          <div class="mut" style="font-size:12.5px;line-height:1.6">El XML firmado y la respuesta de Hacienda quedan guardados cinco años en el archivo del cliente, no en el proveedor del sistema.</div>
-          <div>
-            <div class="totline s"><span class="tl">Gravado</span><span class="tv">${grp(d.grav)}</span></div>
-            <div class="totline s"><span class="tl">Descuentos</span><span class="tv">−${grp(d.desc)}</span></div>
-            <div class="totline"><span class="tl">IVA 13 %</span><span class="tv">${grp(d.iva)}</span></div>
-            <div class="totrule"></div>
-            <div class="totline"><span class="tl b">Total</span><span class="tv" style="font-size:17px">${c(d.total)}</span></div>
-          </div>
-        </div>`,
-      footer: `<button class="btn" id="cerrarDoc">Cerrar</button><div class="gap"></div>
-        <button class="btn">${icon("download")}Descargar XML</button><button class="btn">${icon("print")}Imprimir PDF</button>
-        ${d.tipo !== "NC" ? `<button class="btn" style="color:var(--crit);border-color:var(--crit-line)">${icon("swap")}Nota de crédito</button>` : ""}`,
-      after(el) { $("#cerrarDoc", el).addEventListener("click", closeSheet); }
-    });
-  }
-
-  /* ══ COTIZACIONES Y PEDIDOS ══════════════════════════════════ */
-  A.screen("cotizaciones", {
-    title: "Cotizaciones y pedidos",
-    sub: () => "El pedido y la proforma comparten el mismo cuerpo de la factura",
-    render(v) {
-      const perdidas = D.proformas.filter(p => p.estado === "Vencida");
-      v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Proformas vigentes", D.proformas.filter(p => p.estado === "Vigente").length, { txt: "convertibles sin volver a digitar", dir: "" })}
-          ${stat("Vencidas sin convertir", perdidas.length, { txt: c(perdidas.reduce((s, p) => s + p.total, 0)) + " de venta perdida", dir: "down" }, "var(--crit)")}
-          ${stat("Desde la tienda virtual", D.proformas.filter(p => p.origen === "Tienda virtual").length, { txt: "entran por la página y siguen el flujo normal", dir: "" })}
-          ${stat("Tasa de conversión", "63,4 %", { txt: "proformas que terminan en factura", dir: "up" }, "var(--ok)")}
-        </div>
-        ${card({
-        title: "Documentos previos", hint: "la cotización se convierte en factura sin redigitar",
-        body: table({
-          cols: [
-            { t: "Documento", cls: "mono", fmt: r => esc(r.cons) },
-            { t: "Tipo", fmt: r => tag(r.tipo, r.tipo === "Pedido" ? "ac" : "mu") },
-            { t: "Origen", fmt: r => (r.origen === "Tienda virtual" ? tag("Tienda virtual", "ac", "chat") : esc(r.origen)) },
-            { t: "Cliente", fmt: r => esc(cliNom(r.clienteId)) },
-            { t: "Local", fmt: r => esc(locNom(r.locId)) },
-            { t: "Emitida", cls: "mono", fmt: r => fecha(r.fecha) },
-            { t: "Líneas", r: true, cls: "mono", fmt: r => r.lineas.length },
-            { t: "Total", r: true, cls: "mono", fmt: r => `<b>${grp(r.total)}</b>` },
-            { t: "Estado", fmt: r => (r.estado === "Vencida" ? tag("Vencida", "cr", "alert") : tag("Vigente", "ok", "check")) },
-            { t: "", r: true, fmt: (r, i) => `<button class="btn sm pri" data-conv="${i}">Convertir en factura</button>` }
-          ], rows: D.proformas, rowCls: r => (r.estado === "Vencida" ? "wa" : "")
-        })
-      })}</div>`;
-    },
-    wire(v) {
-      $$("[data-conv]", v).forEach(b => b.addEventListener("click", () => {
-        const p = D.proformas[+b.dataset.conv];
-        S.cart = {
-          cliId: p.clienteId, condicion: D.cliById[p.clienteId] && D.cliById[p.clienteId].limite ? "Crédito" : "Contado",
-          lineas: p.lineas.map(l => ({ artId: l.artId, cant: l.cant, precio: l.precio, descTipo: "pct", desc: l.desc || 0, nota: "", auth: false }))
-        };
-        S.posSel = null;
-        toast("Cargada en la caja", p.cons + " pasó a la factura en curso sin volver a digitar.", "ok");
-        A.go("pos");
-      }));
-    }
-  });
-
-  /* ══ DESPACHOS Y ENTREGAS ════════════════════════════════════ */
-  A.screen("despachos", {
-    title: "Despachos y entregas",
-    sub: () => "La mercadería vendida y no entregada sigue comprometida",
-    render(v) {
-      const comp = [];
-      D.articulos.forEach(a => Object.keys(D.existencias[a.id] || {}).forEach(l => {
-        const e = D.existencias[a.id][l];
-        if (e.comp > 0) comp.push({ a, l, e });
-      }));
-      v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Pendientes de alistar", D.despachos.filter(d => d.estado === "Pendiente de alistar").length, { txt: "mercadería vendida que no ha salido", dir: "" }, "var(--warn)")}
-          ${stat("En ruta", D.despachos.filter(d => d.estado === "En ruta").length, { txt: "con chofer y vehículo asignado", dir: "" })}
-          ${stat("Retiro en otro local", D.despachos.filter(d => d.retiroEn !== d.locId).length, { txt: "se factura en un local y se entrega en otro", dir: "" })}
-          ${stat("Líneas comprometidas", comp.length, { txt: "existencia apartada que no se puede vender", dir: "" })}
-        </div>
-        <div class="grid" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:start">
-          ${card({
-        title: "Despachos", hint: "peso y vehículo salen del catálogo",
-        body: table({
-          cols: [
-            { t: "Despacho", cls: "mono", fmt: r => `${esc(r.id)}<span class="sub">${esc(r.doc)}</span>` },
-            { t: "Cliente", fmt: r => esc(cliNom(r.clienteId)) },
-            { t: "Sale de", fmt: r => esc(locNom(r.locId)) },
-            { t: "Entrega", fmt: r => (r.retiroEn !== r.locId ? tag("Retira en " + locNom(r.retiroEn), "ac", "pin") : esc(r.ruta)) },
-            { t: "Peso", r: true, cls: "mono", fmt: r => kg(w.pesoLineas(r.lineas)) },
-            { t: "Líneas", r: true, cls: "mono", fmt: r => r.lineas.length },
-            { t: "Estado", fmt: r => tag(r.estado, r.estado === "Entregado" ? "ok" : r.estado === "Pendiente de alistar" ? "wa" : "ac") }
-          ], rows: D.despachos, rowCls: r => (r.estado === "Pendiente de alistar" ? "wa" : "")
-        })
-      })}
-          ${card({
-        title: "Mercadería comprometida", hint: "vendida y no entregada",
-        body: table({
-          h: "420px",
-          cols: [
-            { t: "Artículo", fmt: r => `${esc(r.a.desc)}<span class="sub">${esc(r.a.cod)}</span>` },
-            { t: "Local", fmt: r => esc(locNom(r.l)) },
-            { t: "Existe", r: true, cls: "mono", fmt: r => grp(r.e.cant) },
-            { t: "Comprom.", r: true, cls: "mono", fmt: r => `<b style="color:var(--warn)">${grp(r.e.comp)}</b>` },
-            { t: "Libre", r: true, cls: "mono", fmt: r => grp(r.e.cant - r.e.comp) }
-          ], rows: comp.slice(0, 60), rowCls: r => (r.e.cant - r.e.comp <= 0 ? "cr" : "")
-        })
-      })}
-        </div></div>`;
-    }
-  });
 
   /* ══ RUTAS Y TRANSPORTE ══════════════════════════════════════ */
   A.screen("rutas", {
@@ -899,95 +773,6 @@
           <span>El cálculo del flete deja de depender del criterio de una persona. Si el vehículo va sobrecargado, el sistema avisa antes de cargar.</span></div>`
       })}
         </div></div>`;
-    }
-  });
-
-  /* ══ CLIENTES ════════════════════════════════════════════════ */
-  let cliQ = "";
-  A.screen("clientes", {
-    title: "Clientes",
-    sub: () => D.clientes.length + " clientes activos de 78 412 en la base",
-    render(v, arg) {
-      if (arg) S.cliSel = arg;
-      const lista = cliQ ? D.clientes.filter(x => norm(x.nom + " " + x.ced).includes(norm(cliQ))) : D.clientes;
-      const cli = D.cliById[S.cliSel] || D.clientes[0];
-      S.cliSel = cli.id;
-      const docs = D.documentos.filter(d => d.clienteId === cli.id).slice(0, 30);
-      const comprado = docs.reduce((s, d) => s + (d.tipo === "NC" ? -d.total : d.total), 0);
-      v.innerHTML = `<div class="split">
-        ${card({
-        cls: "mlist",
-        body: `<div class="tb-search" style="width:100%;margin-bottom:8px">${icon("search")}<input id="cq" type="search" value="${esc(cliQ)}" placeholder="Nombre o cédula"></div>
-          <div class="mut" style="font-size:12px;margin-bottom:6px">Tolera acentos y errores de tecleo. No hay que escribir comodines.</div>
-          <div class="mitems">${lista.map(x => `<button class="mitem" data-cli="${x.id}" aria-selected="${x.id === cli.id}">
-            <span style="flex:1;min-width:0"><span class="itd">${esc(x.nom)}</span><span class="itc">${esc(x.ced)}</span></span>
-            ${x.saldo > 0 ? tag(c(Math.round(x.saldo)), x.saldo > x.limite ? "cr" : "mu") : ""}</button>`).join("")}</div>`
-      })}
-        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
-          ${card({
-        body: `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-            <span class="avatar" style="width:46px;height:46px;font-size:15px">${esc(ini(cli.nom))}</span>
-            <div style="flex:1;min-width:190px">
-              <h3 style="font-size:19px">${esc(cli.nom)}</h3>
-              <div class="mut num" style="font-size:12px;margin-top:2px">${esc(cli.ced)} · ${esc(cli.tipoCed)}</div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
-                ${tag(cli.categoria, "acc")}${tag(cli.dir, "mu", "pin")}${tag(cli.tel, "mu", "phone")}
-                ${cli.exonerado ? tag("Exoneración vigente", "ok", "shield") : ""}${tag("Cliente desde " + cli.desde, "mu")}</div>
-            </div>
-            <button class="btn pri" id="facturar">${icon("cash")}Facturar a este cliente</button>
-          </div>
-          <div class="ficha" style="margin:14px -17px -16px;border-top:1px solid var(--hair-2)">
-            ${U.fichaCell("Límite de crédito", cli.limite ? c(cli.limite) : "Contado")}
-            ${U.fichaCell("Saldo actual", c(Math.round(cli.saldo)))}
-            ${U.fichaCell("Disponible", cli.limite ? c(Math.round(cli.limite - cli.saldo)) : "—", cli.limite - cli.saldo > 0 ? "var(--ok)" : "var(--crit)")}
-            ${U.fichaCell("Plazo", cli.plazo ? cli.plazo + " días" : "Contado")}
-            ${U.fichaCell("Comprado", c(comprado))}
-          </div>`
-      })}
-          <div class="grid" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
-            ${card({
-        title: "Estado de cuenta", hint: "últimos movimientos",
-        body: table({
-          h: "340px",
-          cols: [
-            { t: "Documento", cls: "mono", fmt: r => esc(r.cons) },
-            { t: "Tipo", fmt: r => tag(r.tipo, r.tipo === "NC" ? "wa" : "mu") },
-            { t: "Fecha", cls: "mono", fmt: r => fecha(r.fecha) },
-            { t: "Cond.", fmt: r => esc(r.condicion) },
-            { t: "Total", r: true, cls: "mono", fmt: r => `${r.tipo === "NC" ? "−" : ""}${grp(r.total)}` },
-            { t: "Saldo", r: true, cls: "mono", fmt: r => (r.saldo ? `<b style="color:var(--warn)">${grp(r.saldo)}</b>` : '<span class="dim">0</span>') }
-          ], rows: docs
-        })
-      })}
-            ${card({
-        title: "Ficha comercial",
-        body: `<dl class="kv">
-            <dt>Categoría de precio</dt><dd>${esc(cli.categoria)}</dd>
-            <dt>Descuento por categoría</dt><dd>${cli.categoria === "Maestro de obra" ? "hasta 8 %" : cli.categoria === "Constructora" ? "hasta 12 %" : "—"}</dd>
-            <dt>Actividad económica</dt><dd>${esc(cli.tipoCed === "Jurídica" ? "Construcción de edificios" : "Consumidor final")}</dd>
-            <dt>Correo de comprobantes</dt><dd style="font-size:12px">${esc(cli.nom.split(" ")[0].toLowerCase())}@correo.cr</dd>
-            <dt>Autorizados a retirar</dt><dd>${cli.autorizados.length || "—"}</dd>
-            <dt>Territorio</dt><dd>${esc(cli.dir)}</dd></dl>
-          ${cli.autorizados.length ? `<div style="margin-top:14px;padding:11px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);font-size:12.5px;color:var(--ink-2);line-height:1.55;display:flex;gap:9px">${icon("shield")}
-            <span>Solo estas personas pueden retirar mercadería a nombre del cliente: ${esc(cli.autorizados.join(", "))}.</span></div>` : ""}`
-      })}
-          </div>
-        </div></div>`;
-    },
-    wire(v) {
-      const q = $("#cq", v);
-      q.addEventListener("input", () => {
-        cliQ = q.value;
-        A.refresh();
-        setTimeout(() => { const e = $("#cq"); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }, 0);
-      });
-      $$("[data-cli]", v).forEach(b => b.addEventListener("click", () => { S.cliSel = b.dataset.cli; A.refresh(); }));
-      const f = $("#facturar", v);
-      if (f) f.addEventListener("click", () => {
-        S.cart.cliId = S.cliSel;
-        S.cart.condicion = D.cliById[S.cliSel].limite ? "Crédito" : "Contado";
-        A.go("pos");
-      });
     }
   });
 

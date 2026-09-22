@@ -18,9 +18,10 @@ actualizan artefactos de ServeCore; trabajan sobre estos archivos.
 | `shell.js` | Estado, barra superior, menú, migas, contingencia, ruteo y tema |
 | `data.js` | Base simulada: artículos, documentos, kardex, clientes, bitácora… |
 | `nom-data.js` · `fis-data.js` · `con-data.js` | Datos y reglas de nómina (CR 2026), factura electrónica 4.4 y contabilidad |
-| `con-auto.js` · `inv-auto.js` | Automatizaciones simuladas de contabilidad e inventario |
+| `con-auto.js` · `inv-auto.js` · `ven-auto.js` | Automatizaciones simuladas de contabilidad, inventario y ventas |
 | `mod-inicio.js` | Inicio |
-| `mod-venta.js` | Ventas / POS, cotizaciones, clientes, cobros |
+| `mod-venta.js` | La caja (facturación en el punto de venta), rutas y cuentas por cobrar |
+| `mod-venta-gestion.js` | Ventas alrededor de la caja: pendientes, caja y turnos, cotizaciones, entregas, devoluciones, clientes, precios y vendedores |
 | `mod-inv.js` | Inventarios (bodega, existencias, traslados, conteos, catálogo, reposición) |
 | `mod-compra.js` | Compras y proveedores |
 | `mod-nomina.js` · `mod-planilla.js` | Nómina y RRHH |

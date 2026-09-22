@@ -2079,6 +2079,72 @@
         border-color: var(--accent);
         background: var(--surface);
       }
+      /* productos relacionados en la caja (VEN-016) */
+      .sugs {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+        gap: 8px;
+      }
+      .sug {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 11px;
+        border: 1px solid var(--hair);
+        border-radius: 11px;
+        background: var(--surface);
+        text-align: left;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .sug:hover {
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+      }
+      .sug:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .sug kbd {
+        flex: none;
+      }
+      .sug .sugt {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .sug .sugt b {
+        font-size: 13px;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .sug .sugt span {
+        font-size: 11.5px;
+        line-height: 1.35;
+        color: var(--ink-3);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .sug .sugq {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        font-size: 12.5px;
+      }
+      .sug .sugq span {
+        font-size: 11.5px;
+        color: var(--ink-3);
+      }
+      @media (max-width: 980px) {
+        .sug kbd { display: none }
+      }
       .poslado {
         width: 440px;
         flex: none;
@@ -2976,11 +3042,13 @@
 <script src="con-data.js"></script>
 <script src="con-auto.js"></script>
 <script src="inv-auto.js"></script>
+<script src="ven-auto.js"></script>
 <script src="nav.js"></script>
 <script src="core.js"></script>
 <script src="shell.js"></script>
 <script src="mod-inicio.js"></script>
 <script src="mod-venta.js"></script>
+<script src="mod-venta-gestion.js"></script>
 <script src="mod-inv.js"></script>
 <script src="mod-compra.js"></script>
 <script src="mod-nomina.js"></script>
