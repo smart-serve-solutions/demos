@@ -1,5 +1,69 @@
 # Cambios
 
+## 2026-09-22 · Sistema · Seguridad y Auditoría pasa a Sistema / Configuración
+
+Usuarios, roles y permisos ya estaban en Sistema como accesos directos y repetidos en Seguridad y Auditoría.
+Ahora el módulo Seguridad y Auditoría sale del menú y todo vive en Sistema / Configuración, que pasa a
+contar sus 23 requerimientos (11 SIS + 12 SEG). El menú queda con 14 módulos.
+
+| Sección | Opciones |
+|---|---|
+| Organización y locales | Empresa y estructura (locales, terminales, áreas, **departamentos**, razón social) · Territorios de clientes |
+| Usuarios y seguridad | Usuarios y accesos · Roles y permisos · Políticas de acceso y sesión |
+| Control y auditoría | Autorización de excepciones · Bitácora de auditoría |
+| Catálogo y clasificación | Categorías, marcas y unidades · Ubicación física de artículos |
+| Reglas de negocio y documentos | Parámetros generales · Términos de pago · Medios de pago y monedas · Estados, numeración y motivos |
+| Impresión, avisos y conexiones | Plantillas y mensajes · Notificaciones y alertas · Conexiones con otros sistemas |
+| Mantenimiento y preferencias | Versiones y ambiente de pruebas · Este equipo |
+
+- Departamentos pasa de Categorías a «Empresa y estructura»: es estructura de la empresa (ligada a la planilla),
+  no clasificación del catálogo. Así «Categorías, marcas y unidades» cabe completo en las migas de pan.
+- Migas de pan revisadas en las 18 opciones y sus pestañas: todas dicen Sistema / Configuración › sección ›
+  opción › pestaña, el título de la pantalla coincide con la opción y ninguna se recorta en 1280, 1366 ni 1920.
+- Las pantallas no cambiaron de identificador (`usuarios`, `seg-roles`, `seg-politicas`, `seg-autorizaciones`,
+  `historial`), así que los enlaces internos siguen funcionando.
+
+Archivos: `nav.js` (módulo quitado, árbol de Sistema reorganizado, catálogo de pantallas) y `mod-sys.js`
+(pestaña Departamentos movida, títulos y comentarios).
+
+## 2026-09-22 · Sistema y Seguridad · Usuarios, roles, permisos y configuración completa
+
+Pedido: «le faltan aspectos, por ejemplo usuarios, roles, permisos… en categorías no hay opción para
+agregar ni editar». Se revisó la matriz (SIS, SEG, INF, INT, hallazgos HAL-01 a HAL-08) y las dos
+sesiones con el cliente. Es demostración: todo se ve como quedará y las acciones principales responden.
+
+**Seguridad y Auditoría** (antes 2 pantallas simples; ahora 5, y los 12 requerimientos SEG en el menú)
+
+| Opción | Pestañas | Requerimientos |
+|---|---|---|
+| Usuarios y accesos | Usuarios · Solicitudes de acceso · Sesiones abiertas · Revisión de accesos | SEG-008 |
+| Roles y permisos | Roles (pantallas y acciones, acciones especiales, campos sensibles, usuarios) · Segregación de funciones · Vista de conjunto | SEG-001, 002, 003, 006 |
+| Políticas de acceso y sesión | Sesión, contraseñas, doble factor, mostrador compartido, documentos, protección de datos | SEG-010, 011, 012 |
+| Autorización de excepciones | Pendientes · Quién autoriza qué · Historial | SEG-005, 009 |
+| Bitácora de auditoría | Bitácora · Registros inactivados · Qué se registra | SEG-004, 007 |
+
+- Usuario nuevo sin contraseña dictada: le llega una invitación. Varios roles y varios locales por persona, acceso temporal con fecha de retiro.
+- Permisos por módulo › opción del menú con Ver, Registrar, Modificar, Eliminar, Importar y Exportar. Solo se cambian con «Modificar permisos» y «Guardar cambios»: cuenta los cambios y deja bitácora.
+- Duplicar un rol copia todo y lo abre en edición (SEG-003). Campos sensibles oculto/ver/editar (SEG-002, Fase 2).
+- Segregación: funciones que no se combinan, excepciones aprobadas (Pejibaye, Tucurrique) y suplentes.
+- Autorizaciones: TI ve la bandeja y recuerda; «Ver como autorizador» muestra el mensaje que le llega a quien aprueba, con comentario obligatorio.
+- Bitácora con «Autorizó», sin eventos sin autor (los procesos firman como «Sistema»), detalle por fila, inactivados con reactivar y nivel de detalle configurable.
+
+**Sistema / Configuración** (de 8 a 13 opciones)
+
+- Nueva sección **Usuarios y acceso**: accesos directos a Seguridad (no suman requerimientos).
+- Empresa, locales y áreas: editar e inactivar locales, pestaña nueva **Terminales y dispositivos**, agregar y editar áreas, editar razón social y logotipo.
+- Territorios: agregar y editar.
+- Categorías: **Categoría**, **Subcategoría** y **Editar** en cada fila (con CABYS sugerido e inactivar bloqueado si tiene artículos). Marcas y departamentos con agregar y editar. Pestaña nueva **Unidades y presentaciones**.
+- Ubicación física: editar la estructura de cada local.
+- Nuevas: **Parámetros generales** (los de caja y crédito son los mismos de `VENX.PARAM`: cambiarlos cambia la caja), **Medios de pago y monedas** (medios con código del comprobante 4.4, tipo de cambio del BCCR, cuentas bancarias), **Plantillas y mensajes** (vista previa de factura, factura a crédito con firma, tiquete, etiqueta; textos de correo y WhatsApp), **Notificaciones y alertas** (evento, a quién, por dónde) y **Conexiones con otros sistemas** (Hacienda, CABYS, BCCR, Banco Nacional, WhatsApp, correo, nodos locales).
+- Términos de pago: editar e inactivar. Estados pasa a **Estados, numeración y motivos** (numeración al aplicar y catálogo de motivos con detalle obligatorio).
+- Todo cambio pide motivo y queda en la bitácora con antes y después.
+
+Archivos: `mod-sys.js` (módulo) y `nav.js` (árboles de Sistema y Seguridad, catálogo de pantallas).
+Nota: el `nav.js` de esta carpeta había vuelto a una versión anterior (sin el menú nuevo de Ventas ni
+el de Sistema); se restauró sobre la última versión buena. Ningún otro archivo cambió.
+
 ## 2026-09-21 · Sistema · Una pantalla por opción, según la matriz
 
 Antes había 8 opciones de menú pero solo 2 con pantalla, y las dos abrían la misma «Configuración».

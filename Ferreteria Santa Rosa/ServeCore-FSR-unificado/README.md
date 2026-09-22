@@ -27,7 +27,7 @@ actualizan artefactos de ServeCore; trabajan sobre estos archivos.
 | `mod-nomina.js` · `mod-planilla.js` | Nómina y RRHH |
 | `mod-fiscal.js` | Facturación electrónica |
 | `mod-conta.js` | Contabilidad (bandeja, conciliaciones, libros, informes, cierre, reglas) |
-| `mod-ia.js` · `mod-sys.js` | IA / WhatsApp y sistema (usuarios, historial, configuración) |
+| `mod-ia.js` · `mod-sys.js` | IA / WhatsApp; Sistema / Configuración, que incluye lo que era Seguridad y Auditoría (usuarios, roles y permisos, políticas, autorizaciones, bitácora, catálogos, parámetros, plantillas, alertas, conexiones) |
 | `mark.png` | Logotipo |
 
 ## Cómo agregar una pantalla

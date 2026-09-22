@@ -821,6 +821,23 @@
       .msi.soon .mn {
         color: var(--ink-3);
       }
+      /* la opción donde está el usuario, igual que el módulo activo */
+      .msi[aria-current="page"],
+      .msi[aria-current="page"]:hover {
+        background: var(--accent-soft);
+        color: var(--accent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .msi[aria-current="page"] .mn,
+      .msi[aria-current="page"] .ic {
+        color: var(--accent);
+      }
+      .msec.aqui .msec-h h4 {
+        color: var(--accent);
+      }
+      .msec {
+        scroll-margin-top: 12px;
+      }
       .msr {
         display: flex;
         flex-direction: column;
