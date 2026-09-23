@@ -382,7 +382,8 @@
     ["6-01-06-001", "Gastos financieros", "Gasto"],
     ["6-01-06-002", "Diferencias de caja", "Gasto"],
     ["6-01-06-003", "Diferencial cambiario perdido", "Gasto"],
-    ["6-01-07-001", "Impuestos y patentes", "Gasto"]
+    ["6-01-07-001", "Impuestos y patentes", "Gasto"],
+    ["6-01-07-002", "Gasto por impuesto sobre la renta", "Gasto"]
   ].map(c => ({ cod: c[0], nom: c[1], tipo: c[2], debe: 0, haber: 0 }));
   const ctaByCod = {}; cuentas.forEach(c => ctaByCod[c.cod] = c);
 
@@ -557,6 +558,11 @@
   let cerradoHasta = null;
   const bloquearHasta = f => { cerradoHasta = f; };
   const periodoCerrado = f => !!cerradoHasta && f <= cerradoHasta;
+  const MESES_N = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "setiembre", "octubre", "noviembre", "diciembre"];
+  /* antes de tocar inventario, consecutivos o saldos: si el mes está cerrado, no se hace nada */
+  function exigePeriodoAbierto(f) {
+    if (!cargando && periodoCerrado(f)) throw new Error("El mes de " + MESES_N[f.getMonth()] + " está cerrado. Para registrar algo con esa fecha, gerencia tiene que reabrirlo en Contabilidad › Cierres.");
+  }
   function asentar(fecha, origen, glosa, detalle) {
     if (cargando && !abriendo && fecha < INICIO) {
       const m = { id: null, migrado: true, fecha, origen, glosa, detalle };
@@ -592,6 +598,7 @@
 
   function emitir(opts) {
     const fecha = opts.fecha || HOY, situacion = opts.situacion || "1";
+    exigePeriodoAbierto(fecha);
     /* la exoneración vigente del cliente a la fecha del documento */
     const t = totalizar(opts.lineas, { exoneracion: opts.clienteId ? exoneracionDe(opts.clienteId, fecha) : null });
     const tipo = opts.tipo || "FE";
@@ -1261,7 +1268,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, aceptarRecibido, INICIO, migrados, registrarApertura, get cargando() { return cargando; }, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, exigePeriodoAbierto, aceptarRecibido, INICIO, migrados, registrarApertura, get cargando() { return cargando; }, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

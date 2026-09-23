@@ -273,8 +273,9 @@
   function ivaMes() {
     const m = HOY.getMonth(), y = HOY.getFullYear();
     const delMes = D.documentos.filter(d => d.fecha.getMonth() === m && d.fecha.getFullYear() === y);
+    /* la nota de crédito devuelve IVA: resta del débito del mes */
     const contado = delMes.filter(d => d.condicion !== "Crédito");
-    const debitoContado = contado.reduce((s, d) => s + d.iva, 0);
+    const debitoContado = contado.reduce((s, d) => s + (d.tipo === "NC" ? -d.iva : d.iva), 0);
     const debitoREP = reps.filter(r => r.fecha.getMonth() === m && r.fecha.getFullYear() === y)
       .reduce((s, r) => s + r.iva, 0);
     const recib = recibidos();
@@ -339,6 +340,7 @@
     const monto = Math.round(o.monto || 0);
     if (monto <= 0 || monto > d.saldo) return { error: "El abono debe estar entre ₡1 y el saldo de ₡" + d.saldo.toLocaleString("es-CR") + "." };
     if (!D.puedeEmitir(o.locId, o.term)) return { error: "El REP sale de una caja de tienda. Cambie de local o de terminal en la barra superior." };
+    try { D.exigePeriodoAbierto(D.ahora()); } catch (e) { return { error: e.message }; }
     const fecha = D.ahora(), situacion = o.offline ? "3" : "1";
     const cons = consREP(o.locId, o.term);
     const rep = {

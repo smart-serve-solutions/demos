@@ -157,6 +157,7 @@
         const oc = D.compras[S.ocSel];
         const bad = oc.lineas.filter(l => Math.abs(l.var) > 15);
         if (bad.length) return toast("Hay una línea bloqueada", `La variación de costo de ${artOf(bad[0].artId).desc} excede el tope de ±15 %. Corríjala o pida autorización.`, "cr");
+        try { D.exigePeriodoAbierto(D.ahora()); } catch (e) { return toast("No se aplicó la compra", e.message, "cr"); }
         oc.lineas.forEach(l => D.mover(l.artId, oc.locId, l.cant, "Compra", oc.cons, D.ahora()));
         /* el IVA de cada línea con la tarifa de su artículo; el crédito fiscal es ese */
         Object.assign(oc, D.totalesCompra(oc.lineas));

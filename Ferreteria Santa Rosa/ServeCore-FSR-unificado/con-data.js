@@ -226,23 +226,17 @@
     return a;
   }
 
-  /* Depreciación y provisiones de setiembre, propuestas para el cierre */
-  (function ajustesDelMes() {
-    const m = HOY.getMonth();
-    const f = new Date(2026, m, HOY.getDate());
-    D.asentar(f, "DEP-2026-" + String(m + 1).padStart(2, "0"), "Depreciación del mes", [
-      { cta: "6-01-05-001", debe: depMensual, haber: 0 },
-      { cta: "1-02-02-001", debe: 0, haber: depMensual }
-    ]);
+  /* Depreciación y provisiones del mes: se proponen en el cierre y entran al
+     mayor solo cuando el contador las aprueba (AUTO.FINMES) */
+  function ajustesMes() {
     const planilla = planillaMes();
     const pAgui = r0(planilla / 12), pVac = r0(planilla * 0.0417), pCes = r0(planilla * 0.0533);
-    D.asentar(f, "PRO-2026-" + String(m + 1).padStart(2, "0"), "Provisiones laborales del mes", [
-      { cta: "6-01-01-003", debe: pAgui + pVac + pCes, haber: 0 },
-      { cta: "2-01-05-001", debe: 0, haber: pAgui },
-      { cta: "2-01-05-002", debe: 0, haber: pVac },
-      { cta: "2-01-05-003", debe: 0, haber: pCes }
-    ]);
-  })();
+    return {
+      dep: [{ cta: "6-01-05-001", debe: depMensual, haber: 0 }, { cta: "1-02-02-001", debe: 0, haber: depMensual }],
+      pro: [{ cta: "6-01-01-003", debe: pAgui + pVac + pCes, haber: 0 }, { cta: "2-01-05-001", debe: 0, haber: pAgui },
+        { cta: "2-01-05-002", debe: 0, haber: pVac }, { cta: "2-01-05-003", debe: 0, haber: pCes }]
+    };
+  }
 
   /* ═══ 6 · ESTADOS FINANCIEROS ══════════════════════════════════════ */
   const saldoDe = ct => {
@@ -252,15 +246,26 @@
   const porTipo = t => D.cuentas.filter(c => c.tipo === t);
   const totalTipo = t => porTipo(t).reduce((s, c) => s + saldoDe(c), 0);
 
+  /* todo sale del mayor: acumulado del año (la migración trae enero a agosto) */
+  const saldoCod = cod => (D.ctaByCod[cod] ? saldoDe(D.ctaByCod[cod]) : 0);
+  const TASA_RENTA = 30;
   function resultados() {
-    const ing = totalTipo("Ingreso"), cos = totalTipo("Costo"), gas = totalTipo("Gasto");
+    const bruto = saldoCod("4-01-01-001"), devol = -saldoCod("4-01-03-001"), desc = -saldoCod("4-01-02-001");
+    const netas = bruto - devol - desc;
+    const otros = saldoCod("4-02-01-001") + saldoCod("4-02-02-001"), difCambio = saldoCod("4-02-03-001") - saldoCod("6-01-06-003");
+    const ing = totalTipo("Ingreso"), cos = totalTipo("Costo");
+    const renta = saldoCod("6-01-07-002");                      /* la registrada en el mayor */
+    const gas = totalTipo("Gasto") - renta;
     const bruta = ing - cos, operativa = bruta - gas;
-    const renta = Math.max(0, r0(operativa * 0.30));
+    /* si todavía no se registró, se muestra la estimada, pero no se mete al balance */
+    const rentaEstimada = renta ? 0 : Math.max(0, r0(operativa * TASA_RENTA / 100));
+    const neta = operativa - renta;
     return {
-      ing, cos, gas, bruta, operativa, renta, neta: operativa - renta,
+      bruto, devol, desc, netas, otros, difCambio,
+      ing, cos, gas, bruta, operativa, renta, rentaEstimada, neta,
       margenBruto: ing ? bruta / ing * 100 : 0,
-      margenNeto: ing ? (operativa - renta) / ing * 100 : 0,
-      gastos: porTipo("Gasto").filter(c => c.debe || c.haber).map(c => ({ nom: c.nom, cod: c.cod, m: saldoDe(c) })).sort((a, b) => b.m - a.m)
+      margenNeto: ing ? neta / ing * 100 : 0,
+      gastos: porTipo("Gasto").filter(c => (c.debe || c.haber) && c.cod !== "6-01-07-002").map(c => ({ nom: c.nom, cod: c.cod, m: saldoDe(c) })).sort((a, b) => b.m - a.m)
     };
   }
   function situacion() {
@@ -270,32 +275,44 @@
     const pat = porTipo("Patrimonio").filter(c => c.debe || c.haber);
     const corriente = act.filter(c => c.cod.indexOf("1-01") === 0).reduce((s, c) => s + saldoDe(c), 0);
     const noCorriente = act.filter(c => c.cod.indexOf("1-02") === 0).reduce((s, c) => s + saldoDe(c), 0);
-    const pasCorriente = pas.reduce((s, c) => s + saldoDe(c), 0) + r.renta;
+    const pasCorriente = pas.reduce((s, c) => s + saldoDe(c), 0);
     const patrimonio = pat.reduce((s, c) => s + saldoDe(c), 0) + r.neta;
+    /* la comprobación es contra el mayor: suma de débitos igual a suma de créditos */
+    const debe = D.cuentas.reduce((s, c) => s + c.debe, 0), haber = D.cuentas.reduce((s, c) => s + c.haber, 0);
     return {
       act, pas, pat, corriente, noCorriente,
       activo: corriente + noCorriente,
       pasivo: pasCorriente, patrimonio,
-      utilidad: r.neta, renta: r.renta,
-      cuadra: Math.abs((corriente + noCorriente) - (pasCorriente + patrimonio)) < 2,
+      utilidad: r.neta, renta: r.renta, rentaEstimada: r.rentaEstimada,
+      cuadra: Math.round(debe) === Math.round(haber) && Math.abs((corriente + noCorriente) - (pasCorriente + patrimonio)) < 2,
       razonCorriente: pasCorriente ? corriente / pasCorriente : 0,
       endeudamiento: (corriente + noCorriente) ? pasCorriente / (corriente + noCorriente) * 100 : 0
     };
   }
+  /* flujo de efectivo por el método indirecto, de setiembre (desde la migración):
+     cada línea es el movimiento real de sus cuentas, así que el total da siempre
+     la variación de caja y bancos */
   function flujo() {
-    const r = resultados();
-    const dep = depMensual;
-    const varCxC = -r0(r.ing * 0.06);
-    const varInv = -r0(r.cos * 0.11);
-    const varCxP = r0(r.cos * 0.08);
-    const operacion = r.neta + dep + varCxC + varInv + varCxP;
-    const inversion = -r0(ACTIVOS.filter(a => a.compra.getFullYear() === 2026).reduce((s, a) => s + a.costo, 0) || 18400000);
-    const financiamiento = -32000000;
-    return {
-      neta: r.neta, dep, varCxC, varInv, varCxP, operacion, inversion, financiamiento,
-      neto: operacion + inversion + financiamiento,
-      inicial: 69650000
-    };
+    const esEfectivo = cod => /^1-01-0[12]-/.test(cod);
+    const movSep = cod => D.asientos.filter(a => a.origen !== "APERTURA").reduce((s, a) => s + a.detalle.filter(x => x.cta === cod).reduce((k, x) => k + (x.debe || 0) - (x.haber || 0), 0), 0);
+    const ap = D.asientos.find(a => a.origen === "APERTURA");
+    const inicial = ap ? ap.detalle.filter(x => esEfectivo(x.cta)).reduce((s, x) => s + (x.debe || 0) - (x.haber || 0), 0) : 0;
+    const efectos = { neta: 0, dep: 0, varCxC: 0, varInv: 0, varCxP: 0, otros: 0, inversion: 0, financiamiento: 0 };
+    D.cuentas.forEach(c => {
+      const m = movSep(c.cod); if (!m || esEfectivo(c.cod)) return;
+      if (/^[456]/.test(c.cod)) efectos.neta -= m;                     /* resultado del mes */
+      else if (c.cod === "1-02-02-001") efectos.dep -= m;              /* depreciación: no es salida de efectivo */
+      else if (/^1-02-01-/.test(c.cod)) efectos.inversion -= m;
+      else if (/^(3-|2-02-)/.test(c.cod)) efectos.financiamiento -= m;
+      else if (/^1-01-03-00[1-2]/.test(c.cod)) efectos.varCxC -= m;
+      else if (c.cod === "1-01-04-001") efectos.varInv -= m;
+      else if (c.cod === "2-01-01-001") efectos.varCxP -= m;
+      else efectos.otros -= m;
+    });
+    const operacion = efectos.neta + efectos.dep + efectos.varCxC + efectos.varInv + efectos.varCxP + efectos.otros;
+    const neto = operacion + efectos.inversion + efectos.financiamiento;
+    const final = D.cuentas.filter(c => esEfectivo(c.cod)).reduce((s, c) => s + c.debe - c.haber, 0);
+    return Object.assign(efectos, { operacion, neto, inicial, final, cuadra: Math.round(inicial + neto) === Math.round(final) });
   }
 
   /* ═══ 7 · CENTROS DE COSTO ═════════════════════════════════════════
@@ -386,16 +403,23 @@
   ];
 
   /* ═══ 10 · PRESUPUESTO ═════════════════════════════════════════════ */
+  /* presupuesto aprobado del año, llevado al avance del período; el real sale del mayor */
+  const PRESUPUESTO_2026 = { ventas: 9600000000, costoPct: 0.775, personalMes: 58500000, operacionMes: 49000000 };
   function presupuesto() {
     const r = resultados();
+    const f = (HOY.getMonth() + HOY.getDate() / 30) / 12;       /* avance del año */
+    const P = PRESUPUESTO_2026, pv = r0(P.ventas * f), pc = r0(P.ventas * f * P.costoPct);
+    const pPer = r0(P.personalMes * 12 * f), pOp = r0(P.operacionMes * 12 * f), pDep = r0(depMensual * 12 * f);
+    const sum = pref => porTipo("Gasto").filter(c => c.cod.indexOf(pref) === 0).reduce((s, c) => s + saldoDe(c), 0);
+    const per = sum("6-01-01"), dep = sum("6-01-05"), op = r.gas - per - dep;
     const filas = [
-      ["Ventas", r0(r.ing * 1.04), r.ing],
-      ["Costo de la mercadería vendida", r0(r.cos * 1.02), r.cos],
-      ["Utilidad bruta", r0(r.ing * 1.04 - r.cos * 1.02), r.bruta],
-      ["Gastos de personal", r0(r.gas * 0.55 * 0.97), r0(r.gas * 0.55)],
-      ["Gastos de operación", r0(r.gas * 0.30 * 1.06), r0(r.gas * 0.30)],
-      ["Depreciación", r0(r.gas * 0.15), r0(r.gas * 0.15)],
-      ["Utilidad de operación", r0(r.ing * 1.04 - r.cos * 1.02 - r.gas * 1.01), r.operativa]
+      ["Ventas", pv, r.ing],
+      ["Costo de la mercadería vendida", pc, r.cos],
+      ["Utilidad bruta", pv - pc, r.bruta],
+      ["Gastos de personal", pPer, per],
+      ["Gastos de operación", pOp, op],
+      ["Depreciación", pDep, dep],
+      ["Utilidad de operación", pv - pc - pPer - pOp - pDep, r.operativa]
     ];
     return filas.map(f => ({
       nom: f[0], pres: f[1], real: f[2], dif: f[2] - f[1],
@@ -421,7 +445,7 @@
 
   w.CON = {
     MARCO, ESTADOS_NIIF, CLASES, GRUPOS, SUBGRUPOS, plan,
-    TASAS, TOPE_GASTO, ACTIVOS, depMensual, abrirLibros, FIN_AGO, BANCO_AL_31: 48250000,
+    TASAS, TOPE_GASTO, ACTIVOS, depMensual, abrirLibros, ajustesMes, FIN_AGO, BANCO_AL_31: 48250000, TASA_RENTA,
     saldoDe, porTipo, totalTipo, resultados, situacion, flujo, porLocal, VENTA_MES,
     cierres, MESES, RENTA, IPJ, CALENDARIO, presupuesto, mayor
   };

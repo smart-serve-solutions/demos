@@ -499,7 +499,7 @@
     : /^PRO/.test(a.origen) ? "Provisiones laborales" : /^IPJ/.test(a.origen) ? "Impuesto a las personas jurídicas"
       : /^PLA/.test(a.origen) ? "Planilla" : /^OC-/.test(a.origen) ? "Compra aplicada" : /-03-/.test(a.origen) ? "Nota de crédito"
         : /-04-/.test(a.origen) ? "Tiquete electrónico" : /-01-/.test(a.origen) ? "Factura de venta" : "Documento");
-  const estadoAs = a => a.origen === "APERTURA" ? tag("Manual", "wa") : a.propuesto ? tag("Por aprobar", "wa", "clock")
+  const estadoAs = a => a.origen === "APERTURA" ? tag("Migración", "mu") : a.manual ? tag("Manual", "wa") : a.propuesto ? tag("Por aprobar", "wa", "clock")
     : a.aprobado ? tag("Aprobado · " + nombre(a.aprobado), "ok", "check") : tag("Automático", "ok", "check");
 
   function verAsiento(a) {
@@ -534,14 +534,14 @@
       aprobar: a => a.propuesto,
       contador: a => !!a.aprobado,
       reglas: a => !!a.regla && !a.aprobado && !a.propuesto,
-      manuales: a => a.origen === "APERTURA"
+      manuales: a => a.manual || a.origen === "APERTURA"
     }[diF] || (() => true);
     const rows = D.asientos.slice().sort((a, b) => b.fecha - a.fecha || b.num - a.num)
       .filter(f)
       .filter(a => !diQ || norm(a.id + " " + a.origen + " " + a.glosa + " " + reglaDe(a)).includes(norm(diQ)))
       .slice(0, 300);
     A._diRows = rows;
-    const n = k => D.asientos.filter({ aprobar: a => a.propuesto, contador: a => !!a.aprobado, reglas: a => !!a.regla && !a.aprobado && !a.propuesto, manuales: a => a.origen === "APERTURA" }[k]).length;
+    const n = k => D.asientos.filter({ aprobar: a => a.propuesto, contador: a => !!a.aprobado, reglas: a => !!a.regla && !a.aprobado && !a.propuesto, manuales: a => a.manual || a.origen === "APERTURA" }[k]).length;
     v.innerHTML = `<div class="wrap">
         <div class="scrollx">${seg("dif", [{ v: "todos", t: "Todos" }, { v: "aprobar", t: "Por aprobar · " + n("aprobar") },
       { v: "reglas", t: "De reglas de conciliación · " + n("reglas") }, { v: "contador", t: "Aprobados por el contador · " + n("contador") },
@@ -571,23 +571,77 @@
     const q = $("#diq", v);
     if (q) q.addEventListener("input", () => { diQ = q.value; A.refresh(); setTimeout(() => { const n = $("#diq"); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 0); });
     const e = $("#diExp", document); if (e) e.addEventListener("click", () => toast("Asientos exportados para Neo", "Solo los del local piloto, en el formato que Neo importa, mientras los dos sistemas conviven. Cuando se apaga Neo, esta salida se apaga con él.", "ok"));
-    const n = $("#diNuevo", document); if (n) n.addEventListener("click", () => openSheet({
-      title: "Asiento manual",
-      sub: "Queda marcado como manual, con el usuario que lo hizo, y pasa por la aprobación del cierre",
-      body: `<div class="grid g2">
-            ${U.field("Fecha", '<input class="inp" type="date" value="2026-09-13">')}
-            ${U.field("Glosa", '<input class="inp" placeholder="Motivo del asiento">')}</div>
-          <div class="alert wa" style="margin-top:14px;border:1px solid var(--warn-line);border-radius:11px">${icon("alert")}
-            <div><b>Un asiento manual es la excepción</b><div class="mut" style="font-size:12.5px;line-height:1.5">
-            Los asientos los genera el documento o una regla. Si hay que digitar uno, casi siempre falta una regla:
-            el sistema lo permite, lo marca y lo muestra en el resumen que ve quien aprueba el cierre.</div></div></div>`,
-      footer: `<button class="btn" id="amC">Cancelar</button><div style="flex:1"></div><button class="btn pri" id="amOk">${icon("check")}Registrar</button>`,
-      after: root => {
-        $("#amC", root).addEventListener("click", closeSheet);
-        $("#amOk", root).addEventListener("click", () => { closeSheet(); toast("Asiento registrado", "Marcado como manual, con usuario y hora, y visible en el resumen del cierre.", "ok"); });
-      }
-    }));
+    const n = $("#diNuevo", document); if (n) n.addEventListener("click", asientoManual);
     $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => verAsiento(A._diRows[+tr.dataset.i])));
+  }
+
+  /* asiento manual: cuadrícula de partidas manejable con el teclado (Tab entre celdas,
+     Enter en la última agrega una línea); no se registra si no cuadra */
+  function asientoManual() {
+    if (!D.puede("Contabilidad", "Gerencia")) return toast("Su rol no registra asientos", "Un asiento manual lo registra contabilidad. Usted entró como " + D.sesion.cargo + "; cambie de usuario en el encabezado.", "cr");
+    const hoy = D.ahora(), iso = hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" + String(hoy.getDate()).padStart(2, "0");
+    const opts = D.cuentas.map(k => `<option value="${k.cod}">${esc(k.cod + " · " + k.nom)}</option>`).join("");
+    const fila = () => `<tr class="amf"><td><input class="inp num am-cta" list="amCtas" placeholder="Cuenta" style="width:120px"></td>
+      <td><span class="am-nom dim" style="font-size:12px"></span></td>
+      <td><input class="inp am-gl" placeholder="Detalle de la línea"></td>
+      <td><input class="inp num am-d" inputmode="numeric" style="width:120px;text-align:right" placeholder="0"></td>
+      <td><input class="inp num am-h" inputmode="numeric" style="width:120px;text-align:right" placeholder="0"></td>
+      <td><button class="btn sm am-x" tabindex="-1" aria-label="Quitar línea">✕</button></td></tr>`;
+    openSheet({
+      wide: true,
+      title: "Asiento manual",
+      sub: "Lo registra " + D.sesion.nom + " · queda marcado como manual y aparece en el resumen del cierre",
+      body: `<datalist id="amCtas">${opts}</datalist>
+        <div class="grid g2">
+          ${U.field("Fecha", `<input class="inp" type="date" id="amF" value="${iso}">`)}
+          ${U.field("Glosa", '<input class="inp" id="amG" placeholder="Motivo del asiento">')}</div>
+        <table class="dt" style="margin-top:12px;width:100%"><thead><tr><th>Cuenta</th><th>Nombre</th><th>Detalle</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th></th></tr></thead>
+          <tbody id="amL">${fila()}${fila()}</tbody></table>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px"><button class="btn sm" id="amMas">${icon("plus")}Línea</button>
+          <span class="dim" style="font-size:12px">Tab pasa de celda en celda · Enter en el haber de la última línea agrega otra</span><div style="flex:1"></div>
+          <span id="amTot" class="num" style="font-size:13px"></span></div>
+        <div class="alert wa" style="margin-top:14px;border:1px solid var(--warn-line);border-radius:11px">${icon("alert")}
+          <div><b>Un asiento manual es la excepción</b><div class="mut" style="font-size:12.5px;line-height:1.5">
+          Los asientos los genera el documento o una regla. Si hay que digitar uno, casi siempre falta una regla:
+          el sistema lo permite, lo marca y lo muestra en el resumen que ve quien aprueba el cierre.</div></div></div>`,
+      footer: `<button class="btn" id="amC">Cancelar</button><div style="flex:1"></div><button class="btn pri" id="amOk" disabled>${icon("check")}Registrar</button>`,
+      after: root => {
+        const num = x => parseInt(String(x.value).replace(/\D/g, ""), 10) || 0;
+        const lineas = () => $$(".amf", root).map(tr => ({ tr, cta: $(".am-cta", tr).value.trim().split(" ")[0], gl: $(".am-gl", tr).value.trim(), debe: num($(".am-d", tr)), haber: num($(".am-h", tr)) }))
+          .filter(l => l.cta || l.debe || l.haber);
+        const calc = () => {
+          const ls = lineas();
+          $$(".amf", root).forEach(tr => { const k = D.ctaByCod[$(".am-cta", tr).value.trim().split(" ")[0]]; $(".am-nom", tr).textContent = k ? k.nom : $(".am-cta", tr).value ? "no existe" : ""; });
+          const td = ls.reduce((s, l) => s + l.debe, 0), th = ls.reduce((s, l) => s + l.haber, 0), dif = td - th;
+          const malas = ls.filter(l => !D.ctaByCod[l.cta] || (l.debe && l.haber) || (!l.debe && !l.haber));
+          $("#amTot", root).innerHTML = `Debe <b>${grp(td)}</b> · Haber <b>${grp(th)}</b> · ` + (dif ? `<span style="color:var(--crit);font-weight:700">Descuadre ${c(dif)}</span>` : td ? '<span style="color:var(--ok);font-weight:700">Cuadra</span>' : "");
+          $("#amOk", root).disabled = !(td && !dif && ls.length >= 2 && !malas.length && $("#amG", root).value.trim());
+        };
+        const conectar = tr => {
+          $$("input", tr).forEach(i => i.addEventListener("input", calc));
+          $(".am-x", tr).addEventListener("click", () => { if ($$(".amf", root).length > 2) tr.remove(); calc(); });
+          $(".am-h", tr).addEventListener("keydown", e => { if (e.key === "Enter" && tr === $$(".amf", root).slice(-1)[0]) { e.preventDefault(); agregar(); } });
+        };
+        const agregar = () => { $("#amL", root).insertAdjacentHTML("beforeend", fila()); const tr = $$(".amf", root).slice(-1)[0]; conectar(tr); $(".am-cta", tr).focus(); };
+        $$(".amf", root).forEach(conectar);
+        $("#amG", root).addEventListener("input", calc);
+        $("#amMas", root).addEventListener("click", agregar);
+        $("#amC", root).addEventListener("click", closeSheet);
+        $("#amOk", root).addEventListener("click", () => {
+          const [y, m, d] = $("#amF", root).value.split("-").map(Number);
+          const f = new Date(y, m - 1, d, 12, 0);
+          const det = lineas().map(l => ({ cta: l.cta, debe: l.debe, haber: l.haber, nota: l.gl }));
+          let a;
+          try { a = D.asentar(f, "MAN-" + (D.asientos.filter(x => x.manual).length + 1), $("#amG", root).value.trim(), det); }
+          catch (e) { return toast("No se registró", e.message, "cr"); }
+          a.manual = true; a.por = D.sesion.nom;
+          D.bitacora.unshift({ id: "BTM" + Date.now(), fecha: D.ahora(), usuario: D.sesion.nom, rol: D.sesion.cargo, locId: S.locId, accion: "Registró asiento manual", detalle: a.id + " · " + a.glosa, sev: "Alta", antes: "", despues: c(det.reduce((s, x) => s + x.debe, 0)), ip: D.sesion.ip });
+          closeSheet(); toast("Asiento " + a.id + " registrado", "Marcado como manual, con " + D.sesion.nom + " como autor, y visible en el resumen del cierre.", "ok"); A.refresh();
+        });
+        setTimeout(() => $(".am-cta", root).focus(), 40);
+        calc();
+      }
+    });
   }
 
   /* movimiento de una cuenta, dentro de Saldos y movimientos */
@@ -603,7 +657,7 @@
       body: `<div class="mitems" style="max-height:calc(100dvh - 360px)">${conMov.map(x =>
         `<button class="mitem" data-cta="${esc(x.cod)}" aria-selected="${x.cod === saldoCta}">
             <span style="flex:1;min-width:0"><span class="itd">${esc(x.nom)}</span><span class="itc">${esc(x.cod)}</span></span>
-            <span class="num" style="font-size:12px">${grp(Math.abs(C.saldoDe(x)))}</span></button>`).join("")}</div>`
+            <span class="num" style="font-size:12px">${sgn(C.saldoDe(x))}</span></button>`).join("")}</div>`
     })}
         <div class="wrap">
           <div><button class="btn sm" id="myAtras">${icon("chev", 'style="transform:rotate(180deg)"')}Todas las cuentas</button></div>
@@ -611,7 +665,7 @@
             ${stat("Movimientos", mov.length, { txt: "partidas en el período", dir: "" })}
             ${stat("Debe", c(td), { txt: "acumulado", dir: "" })}
             ${stat("Haber", c(th), { txt: "acumulado", dir: "" })}
-            ${stat("Saldo", c(Math.abs(C.saldoDe(ct))), { txt: ct.tipo || "", dir: "" }, "var(--ok)")}
+            ${stat("Saldo", c(C.saldoDe(ct)), { txt: (ct.tipo || "") + (C.saldoDe(ct) < 0 ? " · saldo contrario a su naturaleza" : ""), dir: "" }, C.saldoDe(ct) < 0 ? "var(--warn)" : "var(--ok)")}
           </div>
           ${card({
       title: "Movimiento de " + (ct.nom || "la cuenta"), hint: "toque un movimiento para ver su asiento",
@@ -623,41 +677,56 @@
           { t: "Glosa", fmt: r => `${esc(r.as.glosa)}<span class="sub ui">${esc(reglaDe(r.as))}</span>` },
           { t: "Debe", r: true, cls: "mono", fmt: r => r.debe ? grp(r.debe) : '<span class="dim">—</span>' },
           { t: "Haber", r: true, cls: "mono", fmt: r => r.haber ? grp(r.haber) : '<span class="dim">—</span>' },
-          { t: "Saldo", r: true, cls: "mono", fmt: r => `<b>${grp(Math.abs(r.saldo))}</b>` }
+          { t: "Saldo", r: true, cls: "mono", fmt: r => `<b>${sgn(r.saldo)}</b>` }
         ], rows: A._myRows,
         foot: [{ v: "Totales", span: 3 }, { v: grp(td), r: true, cls: "mono" }, { v: grp(th), r: true, cls: "mono" },
-        { v: grp(Math.abs(C.saldoDe(ct))), r: true, cls: "mono" }]
+        { v: sgn(C.saldoDe(ct)), r: true, cls: "mono" }]
       }) : empty("book", "Sin movimiento", "Esta cuenta no tiene partidas en el período.")
     })}
         </div></div>`;
   }
 
+  /* balance de comprobación: saldo de la migración, movimiento del período y saldo
+     final por su signo real (una cuenta de activo con saldo acreedor se ve acreedora) */
+  /* saldo con su signo: negativo si va contra la naturaleza de la cuenta */
+  const sgn = n => (n < 0 ? "−" : "") + grp(Math.abs(n));
   function balance(v) {
-      const rows = D.cuentas.filter(ct => ct.debe || ct.haber);
+      const ap = D.asientos.find(a => a.origen === "APERTURA");
+      const ini = {}; (ap ? ap.detalle : []).forEach(x => { ini[x.cta] = (ini[x.cta] || 0) + (x.debe || 0) - (x.haber || 0); });
+      const rows = D.cuentas.filter(ct => ct.debe || ct.haber).map(ct => {
+        const i = ini[ct.cod] || 0;
+        const md = ct.debe - (i > 0 ? i : 0), mh = ct.haber - (i < 0 ? -i : 0);
+        const fin = ct.debe - ct.haber;
+        return { cod: ct.cod, nom: ct.nom, tipo: ct.tipo, ini: i, md, mh, fin, raro: (fin > 0 && /Pasivo|Patrimonio|Ingreso/.test(ct.tipo)) || (fin < 0 && /Activo|Gasto|Costo/.test(ct.tipo)) };
+      });
       A._balRows = rows;
-      const td = rows.reduce((s, r) => s + r.debe, 0), th = rows.reduce((s, r) => s + r.haber, 0);
+      const sum = f => rows.reduce((s, r) => s + f(r), 0);
+      const tiD = sum(r => Math.max(0, r.ini)), tiH = sum(r => Math.max(0, -r.ini)), tmd = sum(r => r.md), tmh = sum(r => r.mh);
+      const tfD = sum(r => Math.max(0, r.fin)), tfH = sum(r => Math.max(0, -r.fin));
+      const cuadra = Math.round(tfD) === Math.round(tfH) && Math.round(tmd) === Math.round(tmh);
+      const dc = n => n ? `${grp(Math.abs(n))} <span class="dim">${n > 0 ? "D" : "C"}</span>` : '<span class="dim">—</span>';
       v.innerHTML = `<div class="wrap">
         <div class="grid g4">
-          ${stat("Cuentas con movimiento", rows.length, { txt: "de " + D.cuentas.length + " en el catálogo", dir: "" })}
-          ${stat("Total debe", c(td), { txt: "sumatoria de partidas deudoras", dir: "" })}
-          ${stat("Total haber", c(th), { txt: "sumatoria de partidas acreedoras", dir: "" })}
-          ${stat(td === th ? "Cuadra" : "Descuadre", td === th ? "₡0" : c(Math.abs(td - th)), { txt: "diferencia entre debe y haber", dir: td === th ? "up" : "down" }, td === th ? "var(--ok)" : "var(--crit)")}
+          ${stat("Cuentas con saldo o movimiento", rows.length, { txt: "de " + D.cuentas.length + " en el catálogo", dir: "" })}
+          ${stat("Movimiento de setiembre", c(tmd), { txt: "debe igual a haber: " + c(tmh), dir: "" })}
+          ${stat("Saldos contrarios a su naturaleza", rows.filter(r => r.raro).length, { txt: "cuentas reguladoras y devoluciones incluidas", dir: "" }, rows.some(r => r.raro) ? "var(--warn)" : "var(--ok)")}
+          ${stat(cuadra ? "Cuadra" : "Descuadre", cuadra ? "₡0" : c(Math.abs(tfD - tfH)), { txt: "saldos deudores contra acreedores", dir: cuadra ? "up" : "down" }, cuadra ? "var(--ok)" : "var(--crit)")}
         </div>
         ${card({
-        title: "Balance de comprobación", hint: "toque una cuenta para ver su movimiento",
+        title: "Balance de comprobación", hint: "saldo de la migración al 31 de agosto + movimiento de setiembre = saldo final · toque una cuenta para ver su movimiento",
         body: table({
           h: "calc(100dvh - 460px)", onRow: true,
           cols: [
             { t: "Cuenta", cls: "mono", fmt: r => esc(r.cod) },
-            { t: "Descripción", fmt: r => esc(r.nom) },
-            { t: "Tipo", fmt: r => tag(r.tipo, r.tipo === "Activo" ? "ac" : r.tipo === "Ingreso" ? "ok" : r.tipo === "Gasto" || r.tipo === "Costo" ? "wa" : "mu") },
-            { t: "Debe", r: true, cls: "mono", fmt: r => r.debe ? grp(r.debe) : '<span class="dim">—</span>' },
-            { t: "Haber", r: true, cls: "mono", fmt: r => r.haber ? grp(r.haber) : '<span class="dim">—</span>' },
-            { t: "Saldo deudor", r: true, cls: "mono", fmt: r => C.saldoDe(r) > 0 && (r.tipo === "Activo" || r.tipo === "Gasto" || r.tipo === "Costo") ? grp(C.saldoDe(r)) : '<span class="dim">—</span>' },
-            { t: "Saldo acreedor", r: true, cls: "mono", fmt: r => C.saldoDe(r) > 0 && (r.tipo === "Pasivo" || r.tipo === "Patrimonio" || r.tipo === "Ingreso") ? grp(C.saldoDe(r)) : '<span class="dim">—</span>' }
-          ], rows,
-          foot: [{ v: "Totales", span: 3 }, { v: grp(td), r: true, cls: "mono" }, { v: grp(th), r: true, cls: "mono" },
-          { v: td === th ? "Cuadra" : "Descuadre", r: true }, { v: "" }]
+            { t: "Descripción", fmt: r => esc(r.nom) + (r.raro ? ` <span class="dim" style="font-size:11.5px">· saldo contrario a su naturaleza</span>` : "") },
+            { t: "Saldo al 31 ago", r: true, cls: "mono", fmt: r => dc(r.ini) },
+            { t: "Debe", r: true, cls: "mono", fmt: r => r.md ? grp(r.md) : '<span class="dim">—</span>' },
+            { t: "Haber", r: true, cls: "mono", fmt: r => r.mh ? grp(r.mh) : '<span class="dim">—</span>' },
+            { t: "Saldo deudor", r: true, cls: "mono", fmt: r => r.fin > 0 ? grp(r.fin) : '<span class="dim">—</span>' },
+            { t: "Saldo acreedor", r: true, cls: "mono", fmt: r => r.fin < 0 ? grp(-r.fin) : '<span class="dim">—</span>' }
+          ], rows, rowCls: r => r.raro ? "wa" : "",
+          foot: [{ v: "Totales", span: 2 }, { v: grp(tiD) + " D · " + grp(tiH) + " C", r: true, cls: "mono" }, { v: grp(tmd), r: true, cls: "mono" }, { v: grp(tmh), r: true, cls: "mono" },
+          { v: grp(tfD), r: true, cls: "mono" }, { v: grp(tfH), r: true, cls: "mono" }]
         })
       })}</div>`;
   }
@@ -684,7 +753,7 @@
             { t: "Naturaleza", fmt: r => r.sumaria ? '<span class="dim">sumaria</span>' : tag("Movimiento", "mu") },
             { t: "Debe", r: true, cls: "mono", fmt: r => r.debe ? grp(r.debe) : '<span class="dim">—</span>' },
             { t: "Haber", r: true, cls: "mono", fmt: r => r.haber ? grp(r.haber) : '<span class="dim">—</span>' },
-            { t: "Saldo", r: true, cls: "mono", fmt: r => (r.debe || r.haber) ? `<b>${grp(Math.abs(r.debe - r.haber))}</b>` : '<span class="dim">sin movimiento</span>' }
+            { t: "Saldo", r: true, cls: "mono", fmt: r => (r.debe || r.haber) ? `<b>${grp(Math.abs(r.debe - r.haber))}</b> <span class="dim">${r.debe - r.haber >= 0 ? "D" : "C"}</span>` : '<span class="dim">sin movimiento</span>' }
           ], rows, rowCls: r => r.nivel === 1 ? "sel" : ""
         })
       })}</div>`;
@@ -815,12 +884,18 @@
         <div class="grid" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:start">
           ${card({
         title: "Estado de resultado integral", hint: "el porcentaje es sobre ventas",
-        body: linea("Ventas de mercadería y servicios", r.ing, false, null, 100) +
+        body: linea("Ventas brutas de mercadería", r.bruto, false, null, r.ing ? r.bruto / r.ing * 100 : 0) +
+          linea("Devoluciones sobre ventas", -r.devol, false, null, r.ing ? -r.devol / r.ing * 100 : 0) +
+          linea("Descuentos sobre ventas", -r.desc, false, null, r.ing ? -r.desc / r.ing * 100 : 0) +
+          linea("Ventas netas", r.netas, true, null, r.ing ? r.netas / r.ing * 100 : 0) +
+          linea("Servicios y otros ingresos", r.otros, false, null, r.ing ? r.otros / r.ing * 100 : 0) +
+          (r.difCambio ? linea("Diferencial cambiario neto", r.difCambio, false, null, r.ing ? r.difCambio / r.ing * 100 : 0) : "") +
           linea("Costo de la mercadería vendida", -r.cos, false, null, r.ing ? -r.cos / r.ing * 100 : 0) +
           linea("Utilidad bruta", r.bruta, true, "var(--ok)", r.margenBruto) +
           r.gastos.map(g => linea(g.nom, -g.m, false, null, r.ing ? -g.m / r.ing * 100 : 0)).join("") +
           linea("Utilidad de operación", r.operativa, true, null, r.ing ? r.operativa / r.ing * 100 : 0) +
-          linea("Impuesto sobre la renta estimado · 30 %", -r.renta, false, "var(--warn)", r.ing ? -r.renta / r.ing * 100 : 0) +
+          (r.renta ? linea("Impuesto sobre la renta", -r.renta, false, "var(--warn)", r.ing ? -r.renta / r.ing * 100 : 0)
+            : linea("Impuesto sobre la renta estimado · " + C.TASA_RENTA + " % (sin registrar; se propone en el cierre)", 0, false, "var(--warn)", null)) +
           linea("Utilidad neta del período", r.neta, true, r.neta > 0 ? "var(--ok)" : "var(--crit)", r.margenNeto)
       })}
           <div style="display:flex;flex-direction:column;gap:14px">
@@ -829,7 +904,7 @@
         body: bars([
           { n: "Costo de mercadería", v: r.cos, lab: pc(r.ing ? r.cos / r.ing * 100 : 0) },
           { n: "Gastos de operación", v: r.gas, lab: pc(r.ing ? r.gas / r.ing * 100 : 0) },
-          { n: "Impuesto sobre la renta", v: r.renta, lab: pc(r.ing ? r.renta / r.ing * 100 : 0) },
+          { n: "Impuesto sobre la renta", v: r.renta || r.rentaEstimada, lab: pc(r.ing ? (r.renta || r.rentaEstimada) / r.ing * 100 : 0) + (r.renta ? "" : " estimado") },
           { n: "Utilidad neta", v: Math.max(0, r.neta), lab: pc(r.margenNeto), cls: "good" }
         ], { max: r.ing })
       })}
@@ -872,9 +947,7 @@
       })}
           ${card({
         title: "Pasivo y patrimonio",
-        body: grupo("Pasivo corriente", s.pas,
-          `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--hair-2)">
-             <span style="color:var(--ink-2);font-size:13px">Impuesto sobre la renta estimado</span><span class="num" style="font-size:13.5px">${c(s.renta)}</span></div>`) +
+        body: grupo("Pasivo corriente", s.pas, "") +
           grupo("Patrimonio", s.pat,
             `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--hair-2)">
              <span style="color:var(--ink-2);font-size:13px">Utilidad del período</span><span class="num" style="font-size:13.5px">${c(s.utilidad)}</span></div>`) +
@@ -906,12 +979,13 @@
         </div>
         <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start">
           ${card({
-        title: "Flujos de efectivo",
+        title: "Flujos de efectivo", hint: "setiembre, desde la migración · método indirecto, calculado del mayor",
         body: linea("Utilidad neta del período", f.neta, true) +
           linea("Depreciación del período", f.dep, false, "no es salida de efectivo, se devuelve") +
           linea("Variación de cuentas por cobrar", f.varCxC, false, "lo facturado que aún no entra en caja") +
           linea("Variación de inventarios", f.varInv, false, "la mercadería es efectivo en la bodega") +
           linea("Variación de cuentas por pagar", f.varCxP, false, "lo que los proveedores financian") +
+          linea("Otras partidas de operación", f.otros, false, "IVA, efectivo en tránsito, tarjetas por liquidar, provisiones y anticipos") +
           linea("Flujo neto de operación", f.operacion, true) +
           linea("Compra de activos fijos", f.inversion, false) +
           linea("Flujo neto de inversión", f.inversion, true) +
@@ -919,7 +993,8 @@
           linea("Flujo neto de financiamiento", f.financiamiento, true) +
           linea("Variación neta del efectivo", f.neto, true) +
           linea("Efectivo al inicio del período", f.inicial, false) +
-          linea("Efectivo al cierre", f.inicial + f.neto, true)
+          linea("Efectivo al cierre", f.inicial + f.neto, true) +
+          `<div class="hl" style="justify-content:space-between;margin-top:6px"><span>Contra caja y bancos del balance (${c(f.final)})</span>${f.cuadra ? tag("Coincide", "ok", "check") : tag("No coincide", "cr", "alert")}</div>`
       })}
           ${card({
         title: "Por qué gerencia pide este estado", hint: "el que menos se hace y más falta",
@@ -1161,14 +1236,15 @@
     if (faltan.length) return toast("Todavía no se puede enviar", "Faltan " + faltan.length + " puntos: " + faltan.map(x => x.t.toLowerCase()).join(", ") + ".", "wa");
     openSheet({
       title: "Enviar el cierre de " + mesCorto() + " a aprobación",
-      sub: "Lo envía " + AU.REVISOR.nom + " · " + AU.REVISOR.rol,
+      sub: "Lo envía " + D.sesion.nom + " · " + D.sesion.cargo,
       body: `${resumenHtml()}
         <div style="margin-top:14px">${U.field("Nota para quien aprueba (opcional)", `<textarea class="inp" id="enNota" placeholder="Por ejemplo: la merma de Pacayas ya se explicó con la encargada de bodega."></textarea>`)}</div>`,
       footer: `<button class="btn" id="enC">Cancelar</button><div style="flex:1"></div><button class="btn pri" id="enOk">${icon("arrowup")}Enviar a aprobación</button>`,
       after: root => {
         $("#enC", root).addEventListener("click", closeSheet);
         $("#enOk", root).addEventListener("click", () => {
-          AU.enviarAprobacion($("#enNota", root).value.trim());
+          const r = AU.enviarAprobacion($("#enNota", root).value.trim());
+          if (r.error) return toast("No se envió", r.error, "cr");
           closeSheet();
           toast("Cierre enviado a aprobación", "Quien aprueba recibe el aviso por WhatsApp y lo ve aquí mismo, en la lista de cierre.", "ok");
           A.refresh();
@@ -1184,14 +1260,13 @@
     openSheet({
       wide: true,
       title: "Aprobación final del cierre de " + m,
-      sub: "El sistema lo preparó y " + AU.REVISOR.nom + " lo revisó · la decisión es suya",
+      sub: "El sistema lo preparó y " + (AU.CIERRE.enviadoPor || AU.REVISOR.nom) + " lo revisó · la decisión es de gerencia",
       body: `<div class="grid g2" style="align-items:start">
           <div class="wrap">
             <div>
               <div class="mut" style="font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Quién aprueba</div>
-              <div style="display:flex;flex-direction:column;gap:8px">${AU.APROBADORES.map((p, i) => `<label class="rc"><input type="radio" name="apQuien" value="${i}" ${i === AU.APROBADORES.length - 1 ? "checked" : ""}>
-                <span><b>${esc(p.nom)}</b><span>${esc(p.rol)}</span></span></label>`).join("")}</div>
-              <div class="mut" style="font-size:12px;margin-top:8px;line-height:1.5">En producción aprueba quien tiene el permiso «Aprobar cierre»; en el demo se escoge aquí.</div>
+              <div class="hl" style="justify-content:space-between"><span><b>${esc(D.sesion.nom)}</b> · ${esc(D.sesion.cargo)}</span>${D.puede("Gerencia") && D.sesion.nom !== AU.CIERRE.enviadoPor ? tag("Puede aprobar", "ok", "check") : tag("No puede aprobar", "cr", "alert")}</div>
+              <div class="mut" style="font-size:12px;margin-top:8px;line-height:1.5">Aprueba gerencia, y nunca quien envió el cierre. En la demo se cambia de usuario en el encabezado.</div>
             </div>
             ${nota ? `<div class="alert in" style="border:1px solid var(--accent-line);border-radius:11px">${icon("chat")}<div><b>Nota del contador</b><div class="mut" style="font-size:12.5px;line-height:1.5">${esc(nota)}</div></div></div>` : ""}
             ${U.field("Comentario", `<textarea class="inp" id="apNota" placeholder="Obligatorio si lo devuelve: qué hay que revisar."></textarea>`)}
@@ -1209,22 +1284,21 @@
       footer: `<button class="btn" id="apDev">${icon("swap")}Devolver al contador</button><div style="flex:1"></div>
                <button class="btn pri" id="apOk">${icon("lock")}Aprobar y cerrar ${esc(m)}</button>`,
       after: root => {
-        const quien = () => AU.APROBADORES[+$('input[name="apQuien"]:checked', root).value];
+
         $("#apDev", root).addEventListener("click", () => {
           const n = $("#apNota", root).value.trim();
           if (!n) { toast("Falta el comentario", "Escriba qué hay que revisar; le llega al contador en su bandeja.", "wa"); $("#apNota", root).focus(); return; }
-          const p = quien();
-          AU.devolverCierre(p, n);
+          if (!AU.devolverCierre(null, n)) return toast("No se devolvió", "Devolver el cierre lo hace gerencia.", "cr");
           closeSheet();
           toast("Cierre devuelto a " + nombre(AU.REVISOR.nom), "La observación quedó en su bandeja. Cuando la atienda, lo vuelve a enviar.", "wa");
           A.refresh();
         });
         $("#apOk", root).addEventListener("click", () => {
           if (!$("#apLeido", root).checked) { toast("Falta confirmar la revisión", "Marque que revisó el resumen y los estados del mes.", "wa"); return; }
-          const p = quien();
-          const cerrado = AU.aprobarCierre(p, $("#apNota", root).value.trim());
+          const cerrado = AU.aprobarCierre($("#apNota", root).value.trim());
+          if (cerrado.error) return toast("No se aprobó", cerrado.error, "cr");
           closeSheet();
-          if (cerrado) toast(cerrado.nom[0].toUpperCase() + cerrado.nom.slice(1) + " cerrado", "Aprobado por " + p.nom + ". El período queda bloqueado y " + (AU.mesAbierto() || { nom: "el siguiente" }).nom + " queda abierto.", "ok");
+          toast(cerrado.nom[0].toUpperCase() + cerrado.nom.slice(1) + " cerrado", "Aprobado por " + D.sesion.nom + ". Ya no admite asientos con fecha de ese mes; " + (AU.mesAbierto() || { nom: "el siguiente" }).nom + " queda abierto.", "ok");
           A.refresh();
         });
       }
@@ -1292,7 +1366,7 @@
       const pend = C.CALENDARIO.filter(x => x.estado === "Pendiente" || x.estado === "Próximo");
       v.innerHTML = `<div class="wrap">
         <div class="grid g4">
-          ${stat("Renta estimada del período", c(r.renta), { txt: "30 % sobre la utilidad de operación", dir: "" }, "var(--warn)")}
+          ${stat("Renta del período", c(r.renta || r.rentaEstimada), { txt: r.renta ? "registrada en el mayor" : C.TASA_RENTA + " % estimado · se registra al aprobar el cierre", dir: "" }, "var(--warn)")}
           ${stat("Tarifa aplicable", "30 %", { txt: "ingresos brutos sobre " + c(R.umbral), dir: "" })}
           ${stat("Obligaciones pendientes", pend.length, { txt: pend.map(x => x.t.split("·")[0].trim()).slice(0, 2).join(" · "), dir: pend.length ? "down" : "up" }, pend.length ? "var(--warn)" : "var(--ok)")}
           ${stat("Próximo pago parcial", "30 de setiembre", { txt: "segundo de los tres del año", dir: "" }, "var(--crit)")}
@@ -1397,7 +1471,23 @@
   }
   function periodosWire(v) {
     A.wireIr(v);
-    $$("[data-reabrir]", v).forEach(x => x.addEventListener("click", () => toast("Reabrir " + C.cierres[+x.dataset.reabrir].nom, "Exige el motivo y la aprobación de gerencia; queda en la bitácora con quién, cuándo y por qué, y el mes vuelve a pasar por la aprobación final.", "wa")));
+    $$("[data-reabrir]", v).forEach(x => x.addEventListener("click", () => {
+      const m = C.cierres[+x.dataset.reabrir];
+      openSheet({
+        title: "Reabrir " + m.nom, sub: "Lo hace gerencia · queda en la bitácora con quién, cuándo y por qué",
+        body: U.field("Motivo", `<textarea class="inp" id="raMot" placeholder="Por ejemplo: llegó una factura de proveedor de ese mes que hay que registrar"></textarea>`) +
+          `<div class="mut" style="font-size:12.5px;margin-top:10px">Al reabrirlo vuelve a admitir asientos con fecha del mes y tiene que pasar otra vez por la aprobación final.</div>`,
+        footer: `<button class="btn" data-cerrar>Cancelar</button><div style="flex:1"></div><button class="btn pri" id="raOk">${icon("lock")}Reabrir</button>`,
+        after: root => {
+          $$("[data-cerrar]", root).forEach(b => b.addEventListener("click", closeSheet));
+          $("#raOk", root).addEventListener("click", () => {
+            const r = AU.reabrirCierre(m.mes, $("#raMot", root).value.trim());
+            if (r.error) return toast("No se reabrió", r.error, "cr");
+            closeSheet(); toast(m.nom + " reabierto", "Admite asientos otra vez; vuelve a pasar por la aprobación final.", "wa"); A.refresh();
+          });
+        }
+      });
+    }));
   }
 
   A.workspace("con-cierre", {

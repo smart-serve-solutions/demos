@@ -865,14 +865,15 @@
               return toast("El anticipo no alcanza", (cli ? cli.nom + " tiene " + c(favor) + " a favor" : "Consumidor final no tiene anticipos") + "; se intentó aplicar " + c(anticipo) + ".", "cr");
           }
           const principal = aplicados.filter(x => !x.vuelto).sort((a, b) => b.monto - a.monto)[0];
-          const doc = D.emitir({
+          let doc;
+          try { doc = D.emitir({
             tipo: cli ? "FE" : "TE", locId: S.locId, term: S.term,
             clienteId: S.cart.cliId, vendedor: S.vendedor,
             lineas: lineasFiscales(),
             condicion: S.cart.condicion, medio: credito ? "Crédito" : principal.medio, pagos: aplicados,
             ordenCompra: credito ? $("#pOC", el).value.trim() : "", retira: credito ? $("#pRet", el).value : "",
             hacienda: S.offline ? "En cola" : "Aceptado", situacion: S.offline ? "3" : "1", fecha: D.ahora()
-          });
+          }); } catch (e) { return toast("No se aplicó la factura", e.message, "cr"); }
           if (w.VENX) w.VENX.consumir(doc.cons);
           const ant = D.pagadoCon(doc, "Anticipo");
           if (ant && cli) cli.saldoFavor -= ant;

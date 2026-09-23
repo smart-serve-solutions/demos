@@ -280,6 +280,7 @@
   }
   function cerrar(t, contado, justificacion, por, contadoUsd, hora) {
     const ahora = () => hora || ahoraReal();
+    D.exigePeriodoAbierto(ahora());
     const r = resumen(t);
     const dif = Math.round(contado - r.efectivo);
     /* diferencia en dólares: se valora al tipo de compra del día contra «Diferencias de caja» */
@@ -391,7 +392,7 @@
     const cli = D.cliById[p.clienteId];
     if (cli) cli.saldoFavor = (cli.saldoFavor || 0) + p.total;
   }
-  function confirmarPago(p) { p.estadoPed = "Pagado · por facturar"; p.pagado = ahora(); registrarAnticipo(p); anotar("Confirmó pago de pedido", p.cons, "Sistema", p.locId, "Baja"); }
+  function confirmarPago(p) { D.exigePeriodoAbierto(ahora()); p.estadoPed = "Pagado · por facturar"; p.pagado = ahora(); registrarAnticipo(p); anotar("Confirmó pago de pedido", p.cons, "Sistema", p.locId, "Baja"); }
   D.proformas.filter(p => p.pagado).forEach(registrarAnticipo);
   function marcarPerdida(p, motivo) { p.estado = "Vencida"; p.motivo = motivo; anotar("Marcó proforma como perdida", p.cons + " · " + motivo, "Kevin Solano", p.locId, "Baja"); }
 
@@ -501,6 +502,7 @@
     if (aFavor && cli) cli.saldoFavor = (cli.saldoFavor || 0) + aFavor;
   }
   function emitirNC(o) {
+    D.exigePeriodoAbierto(ahora());
     const d = o.doc;
     const lineas = o.lineas.filter(l => l.cant > 0).map(l => ({ artId: l.artId, cant: l.cant, precio: l.precio, desc: l.desc || 0, nota: l.nota }));
     /* la NC devuelve el IVA con la misma exoneración de la factura */

@@ -275,20 +275,31 @@
   }
 
   /* ═══ 11 · FIN DE MES — lo que el sistema dejó propuesto ═══════════ */
-  const origenDe = pref => D.asientos.find(a => a.origen.indexOf(pref) === 0);
-  const asDep = origenDe("DEP-"), asPro = origenDe("PRO-");
-  [asDep, asPro].forEach(a => { if (a) { a.propuesto = true; a.regla = /^DEP/.test(a.origen) ? "Depreciación mensual" : "Provisiones laborales"; } });
-  const sumaDebe = a => (a ? a.detalle.reduce((s, x) => s + (x.debe || 0), 0) : 0);
+  /* nada de esto está en el mayor todavía: el sistema lo prepara y entra al
+     aprobarlo, con el monto calculado en ese momento */
+  const sumaDebe = det => det.reduce((s, x) => s + (x.debe || 0), 0);
+  const aj = C.ajustesMes();
+  const saldoCta = cod => C.saldoDe(D.ctaByCod[cod]);
+  /* diferencial cambiario: la cuenta en dólares al tipo de cambio del cierre contra lo que dice el libro */
+  const USD_BN = 25000;
+  const difCambio = () => r0(USD_BN * D.tcDe(D.ahora()).compra - saldoCta("1-01-02-005"));
+  /* estimación: solo lo que falta (o sobra) contra la que ya está registrada */
+  const estimacionFalta = () => cartera().estimacion - (-saldoCta("1-01-03-002"));
+  /* renta del año hasta hoy, menos la que ya se registró */
+  const rentaFalta = () => { const r = C.resultados(); return Math.max(0, r0(r.operativa * C.TASA_RENTA / 100) - r.renta); };
   const FINMES = [
-    { id: "FM1", t: "Depreciación de setiembre", d: "Línea recta, tasas del reglamento, " + C.ACTIVOS.length + " activos", monto: sumaDebe(asDep), asiento: asDep && asDep.id, estado: "Propuesto" },
-    { id: "FM2", t: "Provisiones laborales de setiembre", d: "Aguinaldo, vacaciones y cesantía sobre la planilla del mes", monto: sumaDebe(asPro), asiento: asPro && asPro.id, estado: "Propuesto" },
+    { id: "FM1", t: "Depreciación de setiembre", d: "Línea recta, tasas del reglamento, " + C.ACTIVOS.length + " activos", monto: sumaDebe(aj.dep), estado: "Propuesto", det: () => aj.dep },
+    { id: "FM2", t: "Provisiones laborales de setiembre", d: "Aguinaldo, vacaciones y cesantía sobre la planilla del mes", monto: sumaDebe(aj.pro), estado: "Propuesto", det: () => aj.pro },
     { id: "FM3", t: "IVA diferido con más de 90 días", d: "Ventas a crédito sin cobrar a los 90 días: el IVA se declara igual este mes", monto: F ? F.ivaMes().diferidoVencido : 0, estado: "Propuesto",
       det: m => [{ cta: "2-01-02-002", debe: m, haber: 0 }, { cta: "2-01-02-001", debe: 0, haber: m }] },
-    { id: "FM4", t: "Estimación por incobrables", d: "Según la antigüedad de la cartera y la política de la empresa", monto: 0, estado: "Propuesto",
-      det: m => [{ cta: "6-01-04-002", debe: m, haber: 0 }, { cta: "1-01-03-002", debe: 0, haber: m }] },
-    { id: "FM5", t: "Diferencial cambiario", d: "Sin saldos en dólares al cierre de setiembre", monto: 0, estado: "Sin movimiento" }
+    { id: "FM4", t: "Estimación por incobrables", d: "Según la antigüedad desde el vencimiento; se registra solo la diferencia contra la estimación existente", monto: 0, calc: estimacionFalta, estado: "Propuesto",
+      det: m => m >= 0 ? [{ cta: "6-01-04-002", debe: m, haber: 0 }, { cta: "1-01-03-002", debe: 0, haber: m }] : [{ cta: "1-01-03-002", debe: -m, haber: 0 }, { cta: "6-01-04-002", debe: 0, haber: -m }] },
+    { id: "FM5", t: "Diferencial cambiario", d: "US$ " + USD_BN.toLocaleString("es-CR") + " del Banco Nacional al tipo de compra del cierre", monto: 0, calc: difCambio, estado: "Propuesto",
+      det: m => m >= 0 ? [{ cta: "1-01-02-005", debe: m, haber: 0 }, { cta: "4-02-03-001", debe: 0, haber: m }] : [{ cta: "6-01-06-003", debe: -m, haber: 0 }, { cta: "1-01-02-005", debe: 0, haber: -m }] },
+    { id: "FM6", t: "Impuesto sobre la renta estimado", d: C.TASA_RENTA + " % de la utilidad del año hasta hoy, menos lo ya registrado", monto: 0, calc: rentaFalta, estado: "Propuesto",
+      det: m => [{ cta: "6-01-07-002", debe: m, haber: 0 }, { cta: "2-01-04-001", debe: 0, haber: m }] }
   ];
-  FINMES[3].monto = cartera().estimacion;
+  FINMES.forEach(f => { if (f.calc) f.monto = f.calc(); if (!f.monto) f.estado = "Sin movimiento"; });
 
   /* ═══ 12 · IMPUESTOS — borradores que presenta una persona ══════════ */
   const trimestre = ids => C.porLocal().filter(r => ids.indexOf(r.loc.id) >= 0).reduce((s, r) => s + r.venta, 0) * 3;
@@ -448,13 +459,12 @@
   }));
   FINMES.filter(f => f.estado === "Propuesto").forEach(f => add({
     id: "FM-" + f.id, grupo: "finmes", k: "in", ic: "calc", t: f.t, d: f.d, monto: f.monto,
-    sugerencia: f.asiento ? "El asiento ya se generó el día 1 y espera su aprobación: " + f.asiento + "." : "El sistema preparó el asiento; se registra al aprobarlo.", conf: null,
+    sugerencia: "El sistema preparó el asiento; entra al mayor cuando se aprueba, con el monto de ese momento.", conf: null,
     acciones: ["aceptar"], aceptarTexto: "Aprobar el asiento",
     hacer: () => {
+      if (f.calc) f.monto = f.calc();
+      if (f.monto) { const n = D.asentar(D.ahora(), "CIE-" + f.id, f.t, f.det(f.monto)); n.regla = "Cierre de mes"; n.aprobado = D.sesion.nom; f.asiento = n.id; }
       f.estado = "Aprobado";
-      const a = f.asiento && D.asientos.find(x => x.id === f.asiento);
-      if (a) { a.propuesto = false; a.aprobado = REVISOR.nom; }
-      else if (f.det && f.monto) { const n = D.asentar(HOY, "CIE-" + f.id, f.t, f.det(f.monto)); n.regla = "Cierre de mes"; n.aprobado = REVISOR.nom; f.asiento = n.id; }
     }
   }));
 
@@ -535,28 +545,54 @@
      una observación que cae en la bandeja del contador.                  */
   const mesAbierto = () => C.cierres.find(x => !x.bloqueado);
   const CIERRE = { estado: "En revisión", historial: [] };
+  /* quien envía, aprueba, devuelve o reabre es la persona de la sesión, con su rol */
+  const yo = () => ({ nom: D.sesion.nom, rol: D.sesion.cargo });
   function hito(t, persona, nota) {
-    CIERRE.historial.unshift({ fecha: ahora(), por: persona.nom, rol: persona.rol, t, nota: nota || "" });
+    CIERRE.historial.unshift({ fecha: D.ahora(), por: persona.nom, rol: persona.rol, t, nota: nota || "" });
     anotar(t, (mesAbierto() || {}).nom + (nota ? " · " + nota : ""), persona);
   }
   function enviarAprobacion(nota) {
-    if (CIERRE.estado === "Enviado a aprobación" || listaCierre().some(x => !x.ok)) return false;
-    CIERRE.estado = "Enviado a aprobación"; CIERRE.enviado = ahora(); CIERRE.nota = nota || "";
-    hito("Envió el cierre a aprobación", REVISOR, nota);
-    return true;
+    if (!D.puede("Contabilidad", "Gerencia")) return { error: "Enviar el cierre lo hace contabilidad." };
+    if (CIERRE.estado === "Enviado a aprobación" || listaCierre().some(x => !x.ok)) return { error: "La lista de cierre todavía tiene puntos pendientes." };
+    CIERRE.estado = "Enviado a aprobación"; CIERRE.enviado = D.ahora(); CIERRE.nota = nota || ""; CIERRE.enviadoPor = D.sesion.nom;
+    hito("Envió el cierre a aprobación", yo(), nota);
+    return { ok: true };
   }
-  function aprobarCierre(persona, nota) {
+  /* aprobar bloquea el mes de verdad: desde ahí D.asentar rechaza cualquier fecha del período */
+  function aprobarCierre(nota) {
     const m = mesAbierto();
-    if (!m || CIERRE.estado !== "Enviado a aprobación") return null;
+    if (!m || CIERRE.estado !== "Enviado a aprobación") return { error: "El cierre no está enviado a aprobación." };
+    if (!D.puede("Gerencia")) return { error: "Aprobar el cierre lo hace gerencia. Usted entró como " + D.sesion.cargo + "; cambie de usuario en el encabezado." };
+    if (D.sesion.nom === CIERRE.enviadoPor) return { error: "Quien envió el cierre no puede aprobarlo (registrar asientos ↔ aprobar el cierre)." };
     m.asientos = D.asientos.filter(a => a.fecha.getMonth() === m.mes && a.fecha.getFullYear() === 2026).length;
-    Object.assign(m, { estado: "Cerrado", bloqueado: true, cerrado: ahora(), por: persona.nom, rol: persona.rol, nota: nota || "", revisado: REVISOR.nom });
-    CIERRE.estado = "Cerrado"; CIERRE.aprobado = { por: persona.nom, rol: persona.rol, fecha: m.cerrado, nota: nota || "" };
-    hito("Aprobó el cierre", persona, nota);
+    Object.assign(m, { estado: "Cerrado", bloqueado: true, cerrado: D.ahora(), por: D.sesion.nom, rol: D.sesion.cargo, nota: nota || "", revisado: CIERRE.enviadoPor });
+    D.bloquearHasta(new Date(2026, m.mes + 1, 0, 23, 59, 59));
+    CIERRE.estado = "Cerrado"; CIERRE.aprobado = { por: D.sesion.nom, rol: D.sesion.cargo, fecha: m.cerrado, nota: nota || "" };
+    hito("Aprobó el cierre", yo(), nota);
     if (m.mes < 11) C.cierres.unshift({ mes: m.mes + 1, nom: C.MESES[m.mes + 1] + " 2026", asientos: 0, estado: "Abierto", cerrado: null, por: null, bloqueado: false });
+    return m;
+  }
+  /* reabrir: solo el último mes cerrado, solo gerencia y con motivo; el candado vuelve un mes atrás */
+  function reabrirCierre(mes, motivo) {
+    const cerrados = C.cierres.filter(x => x.bloqueado).sort((a, b) => b.mes - a.mes);
+    const m = C.cierres.find(x => x.mes === mes);
+    if (!m || !m.bloqueado) return { error: "Ese mes no está cerrado." };
+    if (m !== cerrados[0]) return { error: "Solo se reabre el último mes cerrado; " + cerrados[0].nom + " va primero." };
+    if (mes <= 7) return { error: "Agosto y los meses anteriores vienen de la migración del sistema anterior; no se reabren aquí." };
+    if (!D.puede("Gerencia")) return { error: "Reabrir un mes lo hace gerencia." };
+    if (!motivo || motivo.length < 10) return { error: "Escriba el motivo; queda en la bitácora." };
+    Object.assign(m, { estado: "Abierto", bloqueado: false, reabierto: { por: D.sesion.nom, fecha: D.ahora(), motivo } });
+    D.bloquearHasta(new Date(2026, mes, 0, 23, 59, 59));
+    const sig = C.cierres.find(x => x.mes === mes + 1 && !x.bloqueado && !x.asientos);
+    if (sig) C.cierres.splice(C.cierres.indexOf(sig), 1);
+    CIERRE.estado = "En revisión";
+    hito("Reabrió el cierre", yo(), motivo);
     return m;
   }
   function devolverCierre(persona, nota) {
     if (CIERRE.estado !== "Enviado a aprobación") return false;
+    if (!D.puede("Gerencia")) return false;
+    persona = yo();
     CIERRE.estado = "Devuelto";
     hito("Devolvió el cierre al contador", persona, nota);
     add({
@@ -590,6 +626,6 @@
     REVISOR, APROBADORES, POLITICA, REGLAS, nuevaRegla, GRUPOS, ACC,
     get cierres() { return cierres(); }, lotes, sinpe, get depositos() { return depositos(); }, GASTOS, AJUSTES, INV, FINMES, IMPUESTOS,
     cartera, proveedores, bandeja, resolver, resolverGrupo, hechoSolo, listaCierre, resueltos, anotar,
-    items, CIERRE, mesAbierto, enviarAprobacion, aprobarCierre, devolverCierre, revisarImpuesto, presentarImpuesto
+    items, CIERRE, mesAbierto, enviarAprobacion, aprobarCierre, reabrirCierre, devolverCierre, revisarImpuesto, presentarImpuesto
   };
 })(window);

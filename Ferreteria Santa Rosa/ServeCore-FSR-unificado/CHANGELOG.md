@@ -1,5 +1,33 @@
 # Cambios
 
+## 2026-09-23 · Contabilidad · Cierre de mes real, estados desde el mayor, balance y asiento manual
+
+Parte 3 de la auditoría de Contabilidad (C4, C7, U1 y U2) y el signo de las NC en el D-150 (parte de C5).
+
+- **Cierre de mes con candado real.** Envía contabilidad; aprueba gerencia y nunca quien envió (se toma de la
+  sesión, ya no de una lista). Al aprobar, `D.bloquearHasta` cierra el mes: ningún módulo registra con esa fecha, y
+  la caja, los cobros, las NC, el cierre de caja y las compras lo avisan antes de tocar inventario, consecutivos o
+  saldos (`D.exigePeriodoAbierto`). **Reabrir** funciona: solo el último mes cerrado, solo gerencia, con motivo en la
+  bitácora; el candado vuelve un mes atrás. Agosto y lo anterior (la migración) no se reabren.
+- **Fin de mes como propuesta.** Depreciación, provisiones, IVA diferido vencido, estimación por incobrables,
+  diferencial cambiario (la cuenta en dólares al tipo de cierre) y renta estimada entran al mayor solo al aprobarlos,
+  con el monto de ese momento. Antes la depreciación y las provisiones ya pesaban en el mayor sin aprobar. La
+  estimación registra solo la diferencia contra la existente; la renta, lo que falta sobre lo ya registrado.
+- **Estados financieros desde el mayor.** Resultados con ventas brutas, devoluciones, descuentos y ventas netas,
+  servicios y diferencial aparte; la renta es la registrada (la estimada se muestra como tal y no entra al balance).
+  El balance cuadra contra el mayor, no porque la renta se sume a los dos lados. Flujo de efectivo indirecto de
+  setiembre calculado de los movimientos reales, con control contra caja y bancos. Presupuesto aprobado del año
+  prorrateado al avance, ya no «lo real × 1,04».
+- **Balance de comprobación:** saldo al 31 de agosto, debe y haber de setiembre y saldo final deudor o acreedor por
+  su signo real; marca los saldos contrarios a su naturaleza. El mayor y el catálogo ya no borran el signo.
+- **Asiento manual real:** cuadrícula con cuentas del catálogo (autocompletado), detalle por línea, debe y haber;
+  Tab entre celdas y Enter agrega una línea; descuadre en vivo y «Registrar» solo si cuadra. Lo registra
+  contabilidad o gerencia, queda marcado como manual con su autor y en la bitácora.
+- **D-150:** el IVA de las notas de crédito resta del débito del mes (antes sumaba).
+
+Archivos: `data.js`, `fis-data.js`, `con-data.js`, `con-auto.js`, `mod-conta.js`, `mod-venta.js`,
+`mod-venta-gestion.js`, `mod-compra.js`, `ven-auto.js`.
+
 ## 2026-09-23 · Contabilidad · Cierres de caja, depósitos y banco con una sola fuente
 
 Parte 2 de la auditoría de Contabilidad (C3 y U3).

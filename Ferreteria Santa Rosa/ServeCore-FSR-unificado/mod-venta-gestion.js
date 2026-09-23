@@ -163,7 +163,7 @@
           if (!visto) { toast("Primero termine de contar", "El sistema compara contra lo esperado cuando el conteo está completo.", "in"); return; }
           const dif = Math.round(cont - r.efectivo), difU = +(usd - r.dolares).toFixed(2), jus = $("#arqJus", el).value.trim();
           if ((dif || difU) && !jus) { toast("Falta la justificación", "Hay una diferencia de " + c(dif) + (difU ? " y US$ " + dec(difU, 2) : "") + ": anote por qué antes de cerrar.", "cr"); $("#arqJus", el).focus(); return; }
-          V.cerrar(t, cont, jus, undefined, usd);
+          try { V.cerrar(t, cont, jus, undefined, usd); } catch (e) { return toast("No se cerró el turno", e.message, "cr"); }
           const sig = $("#arqSig", el).value;
           if (sig) V.abrir(t.locId, t.n, sig, t.fondo);
           closeSheet();
@@ -501,7 +501,7 @@
       const [acc, id] = b.dataset.ped.split(":"), p = D.proformas.find(x => x.id === id);
       if (acc === "fact") return aCaja(p);
       if (acc === "link") { V.enviarLink(p, "WhatsApp"); toast("Link de pago enviado", "Por WhatsApp al " + ((D.cliById[p.clienteId] || {}).tel || "cliente") + ".", "ok"); }
-      if (acc === "pago") { V.confirmarPago(p); toast("Pago recibido", p.cons + " quedó pagado; falta facturarlo.", "ok"); }
+      if (acc === "pago") { try { V.confirmarPago(p); } catch (e) { return toast("No se registró el pago", e.message, "cr"); } toast("Pago recibido", p.cons + " quedó pagado; falta facturarlo.", "ok"); }
       if (acc === "conf") {
         const falta = p.lineas.filter(l => D.disp(l.artId, p.locId) < l.cant);
         p.estadoPed = "Listo para facturar";
@@ -970,7 +970,8 @@
         V.BOLETAS.unshift({ id: "BD-" + String(900 + V.BOLETAS.length).padStart(5, "0"), doc: d, lineas, total: monto, concepto: o.concepto, destino: o.destino, reintegro: o.reintegro, solicita: S.vendedor, locId: S.locId, term: S.term, fecha: V.ahora(), firma: true, estado: "Por aprobar", motivo: dev.motivo || "Sin motivo" });
         toast("Enviada a aprobación", "El administrador la ve en Pendientes de ventas. Al aprobarla se emite la nota.", "wa");
       } else {
-        const nc = V.emitirNC(o);
+        let nc;
+        try { nc = V.emitirNC(o); } catch (e) { return toast("No se emitió la nota de crédito", e.message, "cr"); }
         toast("Nota de crédito " + nc.cons, (S.offline ? "Quedó en cola para Hacienda. " : "Aceptada por Hacienda. ") + (o.destino === "Vuelve a la venta" ? "La mercadería volvió al disponible." : o.destino !== "—" ? "La mercadería va a " + o.destino.toLowerCase() + "." : ""), "ok");
       }
       Object.assign(dev, { doc: null, q: "", cant: {}, firma: false, reintegro: null, motivo: "" });
@@ -978,7 +979,7 @@
     });
     $$("[data-bol]", p).forEach(b => b.addEventListener("click", () => {
       const [acc, id] = b.dataset.bol.split(":"), x = V.BOLETAS.find(y => y.id === id);
-      if (acc === "ok") { const nc = V.aprobarBoleta(x, "Marta Rojas"); toast("Aprobada · NC " + nc.cons, "Se emitió la nota de crédito con la firma del cliente.", "ok"); }
+      if (acc === "ok") { let nc; try { nc = V.aprobarBoleta(x, "Marta Rojas"); } catch (e) { return toast("No se emitió la nota de crédito", e.message, "cr"); } toast("Aprobada · NC " + nc.cons, "Se emitió la nota de crédito con la firma del cliente.", "ok"); }
       else { x.estado = "Rechazada"; V.anotar("Rechazó devolución", x.id + " · " + cliNom(x.doc.clienteId), "Marta Rojas", x.locId); toast("Devolución rechazada", "Quedó en la bitácora.", "in"); }
       A.refresh();
     }));
