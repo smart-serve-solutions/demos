@@ -117,12 +117,14 @@
             ${card({
         title: "Contra lo que dice el sistema", flush: true,
         body: table({
-          cols: [{ t: "Medio" , fmt: x => esc(x.medio) }, { t: "Esperado", r: true, cls: "mono", fmt: x => grp(x.monto) }, { t: "Contado", r: true, cls: "mono", fmt: x => x.id ? `<span id="${x.id}">0</span>` : grp(x.monto) }],
+          /* arqueo ciego: el efectivo esperado no se ve hasta que el cajero termina de contar */
+          cols: [{ t: "Medio" , fmt: x => esc(x.medio) }, { t: "Esperado", r: true, cls: "mono", fmt: x => x.id ? `<span id="arqEsp" class="dim">oculto</span>` : grp(x.monto) }, { t: "Contado", r: true, cls: "mono", fmt: x => x.id ? `<span id="${x.id}">0</span>` : grp(x.monto) }],
           rows: [{ medio: "Efectivo (con fondo, menos retiros)", monto: r.efectivo, id: "arqCont" }, { medio: "Vouchers de tarjeta", monto: tarj }, { medio: "SINPE y transferencias", monto: r.porMedio.filter(m => m.medio === "SINPE móvil" || m.medio === "Transferencia").reduce((s, m) => s + m.monto, 0) }]
         })
       })}
             <div style="display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair)">
-              <span class="b">Diferencia en efectivo</span><span class="num" id="arqDif" style="font-size:20px;font-weight:700">₡0</span></div>
+              <span class="b">Diferencia en efectivo</span><span class="num dim" id="arqDif" style="font-size:14px;font-weight:600">se muestra al terminar de contar</span></div>
+            <button class="btn" id="arqVer">${icon("check")}Terminé de contar</button>
             <div class="field" style="margin:0"><label for="arqJus">Justificación (obligatoria si hay diferencia)</label><textarea id="arqJus" rows="2" placeholder="Por qué no cuadra"></textarea></div>
             <div class="field" style="margin:0"><label for="arqSig">¿Sigue otra persona en esta caja?</label>
               <select id="arqSig"><option value="">No, la caja queda cerrada</option>${hab.filter(h => h[0] !== t.cajero).map(h => `<option>${esc(h[0])}</option>`).join("")}</select></div>
@@ -131,17 +133,29 @@
       footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="arqOk">${icon("check")}Cerrar el turno</button>`,
       after(el) {
         cerrar(el);
-        let cont = 0;
+        let cont = 0, visto = false;
         const calc = () => {
           cont = $$("[data-den]", el).reduce((s, i) => s + (parseInt(i.value, 10) || 0) * +i.dataset.den, 0);
           $("#arqCont", el).textContent = grp(cont);
+          if (!visto) return;
           const dif = cont - r.efectivo, e = $("#arqDif", el);
           e.textContent = (dif < 0 ? "−₡" : "₡") + grp(dif);
+          e.style.fontSize = "20px"; e.style.fontWeight = "700";
           e.style.color = dif === 0 ? "var(--ok)" : "var(--crit)";
         };
         $$("[data-den]", el).forEach(i => i.addEventListener("input", calc));
         calc();
+        /* al terminar de contar, el conteo queda fijo y recién entonces se compara */
+        $("#arqVer", el).addEventListener("click", () => {
+          visto = true;
+          $$("[data-den]", el).forEach(i => { i.readOnly = true; });
+          $("#arqEsp", el).textContent = grp(r.efectivo); $("#arqEsp", el).classList.remove("dim");
+          $("#arqVer", el).disabled = true;
+          V.anotar("Contó el efectivo de la caja", cajaNom(t) + " · contado ₡" + cont, t.cajero, t.locId, "Baja");
+          calc();
+        });
         $("#arqOk", el).addEventListener("click", () => {
+          if (!visto) { toast("Primero termine de contar", "El sistema compara contra lo esperado cuando el conteo está completo.", "in"); return; }
           const dif = Math.round(cont - r.efectivo), jus = $("#arqJus", el).value.trim();
           if (dif && !jus) { toast("Falta la justificación", "Hay una diferencia de " + c(dif) + ": anote por qué antes de cerrar.", "cr"); $("#arqJus", el).focus(); return; }
           V.cerrar(t, cont, jus);
@@ -795,7 +809,7 @@
       sub: `${cliNom(d.clienteId)} · ${fh(d.fecha)} · ${locNom(d.locId)} caja ${d.term} · ${d.vendedor}`,
       body: `<div class="card" style="margin-bottom:14px"><div class="card-b flush"><div class="strip">
           <div class="cell"><div class="cl">Clave numérica</div><div class="cv num" style="font-size:11px;word-break:break-all">${esc(d.clave)}</div></div>
-          <div class="cell"><div class="cl">${d.tipo === "NC" ? "Concepto" : "Condición"}</div><div class="cv">${d.tipo === "NC" ? esc(d.concepto || "—") + (d.refiere ? `<span class="sub ui">sobre ${esc(d.refiere)}</span>` : "") : esc(d.condicion) + " · " + esc(d.medio)}</div></div>
+          <div class="cell"><div class="cl">${d.tipo === "NC" ? "Concepto" : "Condición"}</div><div class="cv">${d.tipo === "NC" ? esc(d.concepto || "—") + (d.refiere ? `<span class="sub ui">sobre ${esc(d.refiere)}</span>` : "") : esc(d.condicion) + " · " + esc(D.mediosTxt(d))}</div></div>
           <div class="cell"><div class="cl">Hacienda</div><div class="cv">${hacTag(d)}</div></div>
           ${d.tipo === "NC" ? `<div class="cell"><div class="cl">Reintegro</div><div class="cv">${esc(d.reintegro || "—")}</div></div>` : `<div class="cell"><div class="cl">Saldo</div><div class="cv num">${d.saldo ? c(d.saldo) : "Pagada"}</div></div>`}
         </div></div></div>
@@ -878,7 +892,7 @@
     v.innerHTML = `<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);align-items:start">
       <div class="wrap">
         ${paso(1, "La factura", d ? `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-            <div style="flex:1;min-width:200px"><b class="num">${esc(d.cons)}</b><div class="mut" style="font-size:12.5px">${esc(cliNom(d.clienteId))} · ${fh(d.fecha)} · ${esc(locNom(d.locId))} · ${esc(d.condicion)} ${esc(d.medio)} · ${c(d.total)}</div></div>
+            <div style="flex:1;min-width:200px"><b class="num">${esc(d.cons)}</b><div class="mut" style="font-size:12.5px">${esc(cliNom(d.clienteId))} · ${fh(d.fecha)} · ${esc(locNom(d.locId))} · ${esc(d.condicion)} ${esc(D.mediosTxt(d))} · ${c(d.total)}</div></div>
             <button class="btn sm" id="devOtra">Cambiar de factura</button></div>`
       : `<div class="tb-search" style="width:100%;margin-bottom:10px">${icon("scan")}<input id="devQ" value="${esc(dev.q)}" placeholder="Escanee el tiquete o escriba el consecutivo o el cliente" autocomplete="off"></div>
             ${table({ onRow: true, cols: [{ t: "Documento", cls: "mono", fmt: x => esc(x.cons) }, { t: "Cliente", fmt: x => esc(cliNom(x.clienteId)) }, { t: "Fecha", cls: "mono", fmt: x => fecha(x.fecha) }, { t: "Total", r: true, cls: "mono", fmt: x => grp(x.total) }], rows: res })}`)}

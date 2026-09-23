@@ -7567,7 +7567,7 @@
     });
   const bloqueFiscal = (d) => {
     const act = D.actividadPrincipal();
-    return `Clave ${esc(d.clave)}<br>Actividad ${esc(act.cod)} · ${d.condicion === "Crédito" ? "Condición 02 crédito" : "Condición 01 contado"} · ${esc(d.medio)}<br>Situación ${esc(d.situacion)} · factura electrónica 4.4${d.exoneracion ? `<br>Exoneración ${esc(d.exoneracion.numero)} · ${esc(d.exoneracion.institucion)} · ${d.exoneracion.pct} puntos de IVA` : ""}`;
+    return `Clave ${esc(d.clave)}<br>Actividad ${esc(act.cod)} · ${d.condicion === "Crédito" ? "Condición 02 crédito" : "Condición 01 contado"} · ${esc(D.mediosTxt(d))}<br>Situación ${esc(d.situacion)} · factura electrónica 4.4${d.exoneracion ? `<br>Exoneración ${esc(d.exoneracion.numero)} · ${esc(d.exoneracion.institucion)} · ${d.exoneracion.pct} puntos de IVA` : ""}`;
   };
   function vistaDoc(p) {
     if (p.tam.indexOf("80 mm") >= 0) {
@@ -7579,7 +7579,7 @@
       <div style="border-top:1px dashed #9aa1b1;margin:8px 0"></div>
       <div class="sx-dl" style="border:0"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>
       ${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl" style="border:0"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}
-      <div class="sx-dl" style="border:0"><b>TOTAL</b><b>${c(d.total)}</b></div><div class="sx-dl" style="border:0"><span>${esc(d.medio)}</span><span>${c(d.total)}</span></div>
+      <div class="sx-dl" style="border:0"><b>TOTAL</b><b>${c(d.total)}</b></div>${(d.pagos || []).map((x) => `<div class="sx-dl" style="border:0"><span>${esc(x.medio)}</span><span>${c(x.monto)}</span></div>`).join("")}
       <div style="margin-top:8px;word-break:break-all" class="sx-dm">${bloqueFiscal(d)}</div>
       <div style="text-align:center;margin-top:8px" class="sx-dm">${esc(PL_CFG.pie)}<br>Consulte su comprobante: consulta.santarosa.cr/c/8F3K2Q<br>(no abre el sistema · vence en 30 días)</div></div>`;
     }

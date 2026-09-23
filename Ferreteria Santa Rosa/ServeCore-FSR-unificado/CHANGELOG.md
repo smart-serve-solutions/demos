@@ -1,5 +1,27 @@
 # Cambios
 
+## 2026-09-22 · Ventas / POS · Controles de la caja
+
+Hallazgos F1, F2, U1 y U3 de la auditoría del POS, y la parte de F4 sobre el turno.
+
+- **Pagos mixtos.** El cobro arma una lista de pagos (hasta 4 medios, como admite la 4.4) con su referencia;
+  Alt+1…6 escoge el medio. Aplicar solo se habilita cuando lo pagado cubre el total; solo el efectivo da
+  vuelto (y el vuelto no se registra como ingreso); tarjeta, SINPE, transferencia, cheque y anticipo no pueden
+  pasar del total. La factura guarda `doc.pagos` y el asiento lleva un débito por pago; el resumen del turno y
+  los lotes del datáfono los leen de ahí.
+- **Crédito controlado en la caja.** No factura a crédito si el cliente no tiene crédito, está bloqueado por
+  mora o la factura pasa el disponible, salvo un sobregiro autorizado hoy que alcance (y queda consumido).
+  La factura a crédito pide la orden de compra del cliente y quién retira.
+- **Autorización de margen real.** La solicitud queda pendiente con su motivo; la aprueba otra persona con su
+  PIN (nunca quien vende). La bitácora guarda quién pidió y quién autorizó con su propio usuario y rol. Todo
+  cambio de precio en la caja queda en la bitácora con el antes y el después, y anula la autorización.
+- **Turno abierto obligatorio** para cobrar.
+- **Arqueo ciego.** El efectivo esperado y la diferencia se ven solo al presionar «Terminé de contar», que deja
+  el conteo fijo; no se puede cerrar el turno antes.
+- Se quitó el botón «Imprimir» del cobro, que no hacía nada: el comprobante se imprime al aplicar.
+
+Archivos: `data.js`, `ven-auto.js`, `con-auto.js`, `mod-venta.js`, `mod-venta-gestion.js`, `mod-sys.js`.
+
 ## 2026-09-22 · Contabilidad de Ventas · Asientos que faltaban y cuentas reales
 
 Hallazgos C4, C6 y F4 de la auditoría del POS y 4 y 5 de Configuración.

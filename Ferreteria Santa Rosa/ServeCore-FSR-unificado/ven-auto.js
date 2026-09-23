@@ -159,7 +159,7 @@
      al aplicar la factura se consumen y al cancelarla se cierran (VEN-010) */
   const USO = {};
   const CARGA = new Date();   /* lo que la caja autoriza en esta sesión lleva la hora real */
-  const vivasCaja = () => D.bitacora.filter(b => b.accion === "Autorizó venta bajo margen" && (esHoy(b.fecha) || b.fecha >= CARGA) && b.detalle.indexOf(" · margen ") > 0 && b.rol === "Gerencia");
+  const vivasCaja = () => D.bitacora.filter(b => b.accion === "Autorizó venta bajo margen" && (esHoy(b.fecha) || b.fecha >= CARGA) && b.detalle.indexOf(" · margen ") > 0 && (b.rol === "Gerencia" || b.rol === "Jefatura de piso"));
   function consumir(factura) { vivasCaja().forEach(b => { if (!USO[b.id]) USO[b.id] = { estado: "Consumida", factura }; }); }
   function revertir() { vivasCaja().forEach(b => { if (!USO[b.id]) USO[b.id] = { estado: "Revertida", reversion: "La factura se canceló en la caja; la autorización se cerró sola" }; }); }
   function autorizaciones() {
@@ -240,8 +240,13 @@
     let ventas = 0, devol = 0;
     docs.forEach(d => {
       if (d.tipo === "NC") { if (d.reintegro === "Efectivo") devol += d.total; return; }
-      const m = d.condicion === "Crédito" ? "Crédito" : por[d.medio] ? d.medio : "Efectivo";
-      por[m].n++; por[m].monto += d.total; ventas += d.total;
+      ventas += d.total;
+      if (d.condicion === "Crédito") { por["Crédito"].n++; por["Crédito"].monto += d.total; return; }
+      /* una venta con pago mixto suma a cada medio lo que entró por él */
+      (d.pagos && d.pagos.length ? d.pagos : [{ medio: d.medio, monto: d.total }]).forEach(x => {
+        const m = por[x.medio] ? x.medio : "Efectivo";
+        por[m].n++; por[m].monto += x.monto;
+      });
     });
     const retiros = t.retiros.reduce((s, r) => s + r.monto, 0);
     const efectivo = t.fondo + por["Efectivo"].monto + por["Dólares"].monto - retiros - devol;

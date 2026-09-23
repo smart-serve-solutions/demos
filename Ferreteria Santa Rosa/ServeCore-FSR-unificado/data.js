@@ -471,6 +471,9 @@
     if (t.ivaExon) filas.push(["IVA exonerado" + (t.exoneracion ? " · " + t.exoneracion.numero : ""), -t.ivaExon]);
     return filas;
   }
+  /* cuánto entró por un medio en un documento (una venta puede tener varios) */
+  const mediosTxt = d => (d.condicion === "Crédito" ? "Crédito" : (d.pagos && d.pagos.length ? d.pagos.map(x => x.medio).join(" + ") : d.medio));
+  const pagadoCon = (d, medio) => (d.pagos || []).filter(x => x.medio === medio).reduce((s, x) => s + x.monto, 0);
   function costoLineas(lineas) {
     return lineas.reduce((s, l) => s + l.cant * (artById[l.artId] ? artById[l.artId].costo : 0), 0);
   }
@@ -524,6 +527,9 @@
       clienteId: opts.clienteId, vendedor: opts.vendedor || pick(VENDEDORES),
       lineas: opts.lineas, ...t,
       condicion: opts.condicion || "Contado", medio: opts.medio || "Efectivo",
+      /* pagos de la factura (hasta 4 medios, como admite la 4.4); a crédito no hay pago */
+      pagos: opts.condicion === "Crédito" ? [] : opts.pagos && opts.pagos.length ? opts.pagos.map(x => ({ ...x })) : [{ medio: opts.medio || "Efectivo", monto: t.total }],
+      ordenCompra: opts.ordenCompra || "", retira: opts.retira || "",
       hacienda: opts.hacienda || "Aceptado",
       costo: costoLineas(opts.lineas),
       saldo: opts.condicion === "Crédito" ? t.total : 0,
@@ -537,7 +543,8 @@
 
     /* contabilidad */
     const det = [];
-    det.push({ cta: doc.condicion === "Crédito" ? "1-01-03-001" : cuentaMedio(doc.medio), debe: doc.total, haber: 0 });
+    if (doc.condicion === "Crédito") det.push({ cta: "1-01-03-001", debe: doc.total, haber: 0 });
+    else doc.pagos.forEach(x => det.push({ cta: cuentaMedio(x.medio), debe: x.monto, haber: 0 }));
     det.push({ cta: "4-01-01-001", debe: 0, haber: doc.grav + doc.exe });
     det.push({ cta: doc.condicion === "Crédito" ? "2-01-02-002" : "2-01-02-001", debe: 0, haber: doc.iva });
     det.push({ cta: "5-01-01-001", debe: doc.costo, haber: 0 });
@@ -1131,7 +1138,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

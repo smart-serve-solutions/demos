@@ -98,7 +98,7 @@
       /* el lote del datáfono es lo que ese local cobró con tarjeta ese día,
          menos lo que se devolvió a la misma tarjeta */
       const delDia = x => x.locId === l.id && x.fecha.toDateString() === f.toDateString();
-      const bruto = D.documentos.filter(x => delDia(x) && x.tipo !== "NC" && x.condicion !== "Crédito" && x.medio === "Tarjeta").reduce((s, x) => s + x.total, 0)
+      const bruto = D.documentos.filter(x => delDia(x) && x.tipo !== "NC").reduce((s, x) => s + D.pagadoCon(x, "Tarjeta"), 0)
         - D.documentos.filter(x => delDia(x) && x.tipo === "NC" && x.reintegro === "A la misma tarjeta").reduce((s, x) => s + x.total, 0);
       if (bruto > 0) {
         const comision = r0(bruto * POLITICA.comisionDatafono / 100);

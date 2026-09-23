@@ -116,7 +116,8 @@
       ${posField("Observaciones", `<textarea id="pNota" placeholder="Nota interna de la línea…" rows="2" style="width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--hair);background:var(--surface);resize:vertical">${esc(l.nota || "")}</textarea>`)}
       ${bajo ? `<div style="margin:-2px 0 12px;padding:10px 12px;border-radius:9px;background:${l.auth ? "var(--ok-soft)" : "var(--crit-soft)"};border:1px solid ${l.auth ? "var(--ok-line)" : "var(--crit-line)"};color:${l.auth ? "var(--ok)" : "var(--crit)"};font-size:12.5px;font-weight:650">
           <div style="display:flex;gap:7px;align-items:center">${icon(l.auth ? "shield" : "alert")}<span>Margen ${dec(x.m)} % · mínimo de ${dec(x.min, 0)} % en «${esc(D.famById[a.fam].nom)}»</span></div>
-          ${l.auth ? `<div style="font-weight:500;margin-top:4px">Autorizado por Adrián Vindas · quedó en la bitácora.</div>`
+          ${l.auth ? `<div style="font-weight:500;margin-top:4px">Autorizado por ${esc(l.auth.por)} · quedó en la bitácora.</div>`
+        : l.authReq ? `<div style="font-weight:500;margin-top:4px">Solicitud pendiente · la pidió ${esc(l.authReq.solicita)}</div><button class="btn sm" data-auth="${idx}" style="margin-top:8px">${icon("shield")}Aprobar con PIN</button>`
         : `<button class="btn sm" data-auth="${idx}" style="margin-top:8px">${icon("shield")}Solicitar autorización</button>`}</div>` : ""}
       <div style="padding:12px 14px;border-radius:11px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;flex-direction:column;gap:4px">
         ${posRow("Mercadería", c(neto))}
@@ -406,7 +407,15 @@
           if (isFinite(n) && n > 0 && n !== L.cant) { L.cant = n; tocaBorrador(); }
         } else {
           n = Math.round(n);
-          if (isFinite(n) && n >= 0 && n !== L.precio) { L.precio = n; L.auth = false; tocaBorrador(); }
+          if (isFinite(n) && n >= 0 && n !== L.precio) {
+            /* todo cambio de precio en la caja queda en la bitácora con el antes y el después */
+            D.bitacora.unshift({
+              id: "BTP" + Date.now(), fecha: D.ahora(), usuario: S.vendedor, rol: "Caja", locId: S.locId,
+              accion: "Cambió precio en caja", detalle: artOf(L.artId).desc + " · lista " + c(artOf(L.artId).precio),
+              sev: "Media", antes: c(L.precio), despues: c(n), ip: "10.2.14.8"
+            });
+            L.precio = n; L.auth = false; L.authReq = null; tocaBorrador();
+          }
         }
         S.posSel = i;
         A.refresh();
@@ -487,37 +496,68 @@
     }
   });
 
+  /* quién puede autorizar un precio bajo el margen. En la demo el PIN se
+     muestra para poder probarlo; en producción es el de cada persona */
+  const AUTORIZADORES = [
+    { nom: "Adrián Vindas", rol: "Gerencia", cargo: "Gerencia general", ini: "AV", pin: "4821", canal: ["WhatsApp", "acc", "chat"] },
+    { nom: "Marta Rojas", rol: "Jefatura de piso", cargo: "Jefatura de piso", ini: "MR", pin: "7730", canal: ["Correo", "mu", "mail"] }
+  ];
   function autorizar(i) {
     const l = S.cart.lineas[i], a = artOf(l.artId), x = lineMargen(l);
+    const pend = l.authReq;
+    const quienes = AUTORIZADORES.filter(p => p.nom !== S.vendedor);
     openSheet({
-      title: "Autorización de precio bajo el margen mínimo",
+      title: pend ? "Aprobar precio bajo el margen mínimo" : "Autorización de precio bajo el margen mínimo",
       sub: `Línea ${i + 1} · ${a.desc}`,
       body: `<div style="display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;justify-content:space-between;padding:11px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);font-size:13px"><span>Margen mínimo de «${esc(D.famById[a.fam].nom)}»</span><span class="num b">${x.min},0 %</span></div>
         <div style="display:flex;justify-content:space-between;padding:11px 13px;border-radius:10px;background:var(--crit-soft);border:1px solid var(--crit-line);font-size:13px"><span>Margen del precio solicitado</span><span class="num b" style="color:var(--crit)">${dec(x.m)} %</span></div>
         <div style="display:flex;justify-content:space-between;padding:11px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);font-size:13px"><span>Utilidad que se deja de percibir</span><span class="num b">${c(Math.round((a.costo / (1 - x.min / 100) - x.pv) * l.cant))}</span></div>
-        <div><div style="font-size:12px;font-weight:700;color:var(--ink-4);margin-bottom:7px">Puede autorizar</div>
+        ${pend ? `<div style="padding:11px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);font-size:13px">Solicitó <b>${esc(pend.solicita)}</b> a las ${hora(pend.fecha)}<div class="mut" style="margin-top:4px">${esc(pend.motivo)}</div></div>
+        <div class="grid g2" style="gap:12px">
+          <div class="field" style="margin:0"><label for="authQuien">Autoriza</label><select id="authQuien">${quienes.map(p => `<option value="${esc(p.nom)}">${esc(p.nom)} · ${esc(p.cargo)}</option>`).join("")}</select></div>
+          <div class="field" style="margin:0"><label for="authPin">PIN de quien autoriza</label><input id="authPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></div></div>
+        <div class="dim" style="font-size:11.5px">PIN de demostración: ${AUTORIZADORES.map(p => esc(p.nom.split(" ")[0]) + " " + p.pin).join(" · ")}</div>`
+        : `<div><div style="font-size:12px;font-weight:700;color:var(--ink-4);margin-bottom:7px">Puede autorizar</div>
           <div style="display:flex;flex-direction:column;gap:7px">
-            <div class="rec" style="border-bottom:0"><span class="avatar">AV</span><div style="flex:1"><div class="b" style="font-size:13.5px">Adrián Vindas</div><div class="mut" style="font-size:12px">Gerencia general</div></div>${tag("WhatsApp", "acc", "chat")}</div>
-            <div class="rec" style="border-bottom:0"><span class="avatar">MR</span><div style="flex:1"><div class="b" style="font-size:13.5px">Marta Rojas</div><div class="mut" style="font-size:12px">Jefatura de piso · ${esc(locNom(S.locId))}</div></div>${tag("Correo", "mu", "mail")}</div>
+            ${quienes.map(p => `<div class="rec" style="border-bottom:0"><span class="avatar">${p.ini}</span><div style="flex:1"><div class="b" style="font-size:13.5px">${esc(p.nom)}</div><div class="mut" style="font-size:12px">${esc(p.cargo)}${p.rol === "Jefatura de piso" ? " · " + esc(locNom(S.locId)) : ""}</div></div>${tag(p.canal[0], p.canal[1], p.canal[2])}</div>`).join("")}
           </div></div>
-        <div class="field"><label for="motivo">Motivo (obligatorio)</label><textarea id="motivo" rows="3">Cierre de obra del cliente. Compite con precio de la competencia; se recupera con el volumen del resto de la factura.</textarea></div>
+        <div class="field"><label for="motivo">Motivo (obligatorio)</label><textarea id="motivo" rows="3" placeholder="Por qué se necesita este precio"></textarea></div>`}
         <div style="display:flex;gap:10px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair)">${icon("shield")}
-          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Quedan en la bitácora el usuario que solicita, el que autoriza, el motivo, el margen mínimo vigente y el precio aplicado. La autorización sirve para <strong>esta línea y esta factura</strong>; no queda una casilla abierta.</div></div>
+          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Quien vende no puede autorizarse a sí mismo. Quedan en la bitácora el usuario que solicita, el que autoriza, el motivo, el margen mínimo vigente y el precio aplicado. La autorización sirve para <strong>esta línea y este precio</strong>: si el precio cambia, hay que pedirla de nuevo.</div></div>
       </div>`,
-      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="okAuth">${icon("shield")}Enviar solicitud</button>`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="okAuth">${icon("shield")}${pend ? "Aprobar" : "Enviar solicitud"}</button>`,
       after(el) {
         $$("[data-cerrar]", el).forEach(b => b.addEventListener("click", closeSheet));
+        const f = $(pend ? "#authPin" : "#motivo", el); if (f) setTimeout(() => f.focus(), 40);
         $("#okAuth", el).addEventListener("click", () => {
-          l.auth = true;
+          if (!pend) {
+            const motivo = $("#motivo", el).value.trim();
+            if (motivo.length < 8) { toast("Falta el motivo", "Explique por qué se necesita el precio; queda en la bitácora.", "cr"); return; }
+            l.authReq = { solicita: S.vendedor, motivo, fecha: D.ahora(), precio: l.precio };
+            D.bitacora.unshift({
+              id: "BTS" + Date.now(), fecha: D.ahora(), usuario: S.vendedor, rol: "Caja", locId: S.locId,
+              accion: "Solicitó autorización de margen", detalle: `${a.desc} · margen ${dec(x.m)} % contra mínimo ${x.min} % · ${motivo}`,
+              sev: "Media", antes: x.min + ",0 %", despues: dec(x.m) + " %", ip: "10.2.14.8"
+            });
+            closeSheet();
+            toast("Solicitud enviada", quienes.map(p => p.nom).join(" o ") + " la reciben. La línea queda pendiente hasta que alguien la apruebe con su PIN.", "in");
+            A.refresh();
+            return;
+          }
+          const p = AUTORIZADORES.find(q => q.nom === $("#authQuien", el).value);
+          if (!p || p.nom === pend.solicita) { toast("No puede autorizar su propia solicitud", "La aprueba otra persona con permiso.", "cr"); return; }
+          if ($("#authPin", el).value !== p.pin) { toast("PIN incorrecto", "El PIN no corresponde a " + p.nom + ".", "cr"); $("#authPin", el).value = ""; return; }
+          l.auth = { por: p.nom, rol: p.rol, fecha: D.ahora(), precio: l.precio };
           D.bitacora.unshift({
-            id: "BT" + Date.now(), fecha: new Date(), usuario: "Adrián Vindas", rol: "Gerencia",
+            id: "BT" + Date.now(), fecha: D.ahora(), usuario: p.nom, rol: p.rol,
             locId: S.locId, accion: "Autorizó venta bajo margen",
-            detalle: `${a.desc} · margen ${dec(x.m)} % contra mínimo ${x.min} %`,
+            detalle: `${a.desc} · margen ${dec(x.m)} % contra mínimo ${x.min} % · solicitó ${pend.solicita} · ${pend.motivo}`,
             sev: "Alta", antes: x.min + ",0 %", despues: dec(x.m) + " %", ip: "10.2.14.8"
           });
+          l.authReq = null;
           closeSheet();
-          toast("Autorización registrada", "Adrián Vindas autorizó la línea. Quedó en la bitácora.", "ok");
+          toast("Autorización registrada", p.nom + " aprobó la línea con su PIN. Quedó en la bitácora.", "ok");
           A.refresh();
         });
       }
@@ -680,67 +720,148 @@
     A.refresh();
   }
 
+  /* control de crédito antes de cobrar: mora, límite y sobregiro autorizado del día */
+  function revisarCredito(cli, total) {
+    const V = w.VENX;
+    if (!cli || !cli.limite) return { error: "Este cliente no tiene crédito aprobado. Cámbielo a contado o pida el crédito en Clientes › Crédito." };
+    const disp = cli.limite - cli.saldo, exceso = Math.max(0, total - disp);
+    const bq = V ? V.bloqueo(cli.id) : null;
+    const ficha = V && V.FICHA[cli.id];
+    const sob = ficha && ficha.sobregiros.find(x => V.esHoy(x.fecha) && !x.usado && x.monto >= exceso);
+    if ((bq && bq.k === "cr") || exceso > 0) {
+      if (sob) return { sobregiro: sob, aviso: "Se usa el sobregiro que autorizó " + sob.autorizo + " hoy (" + c(sob.monto) + ")." };
+      return { error: (bq && bq.k === "cr" ? bq.t + ". " + bq.d : "La factura pasa el crédito disponible por " + c(exceso) + ".") + " Gerencia puede autorizar un sobregiro en Clientes › Crédito." };
+    }
+    return { aviso: bq ? bq.d : "" };
+  }
+  const ALT_MEDIOS = [["cash", "Efectivo"], ["card", "Tarjeta"], ["phone", "SINPE móvil"], ["bank", "Transferencia"], ["file", "Cheque"], ["wallet", "Anticipo"]];
   function cobrar() {
     if (!D.puedeEmitir(S.locId, S.term)) return toast(
       "Esta terminal no emite comprobantes",
       "Solo las cajas de las tiendas facturan. Cambie a una tienda y a una de sus terminales en la barra superior.", "cr");
+    /* sin turno abierto no hay a quién cuadrarle el efectivo */
+    const V = w.VENX;
+    if (V && !V.turnoDe(S.locId, S.term)) return toast(
+      "La caja " + S.term + " no tiene turno abierto",
+      "Abra el turno con su fondo en Ventas › Caja y turnos antes de cobrar.", "cr");
     const sinAutorizar = pendientes().length;
     if (sinAutorizar) return toast(
       sinAutorizar === 1 ? "Falta una autorización de margen" : "Faltan " + sinAutorizar + " autorizaciones de margen",
       "Abra la línea marcada en rojo y solicite la autorización. La factura no se aplica mientras tanto.", "cr");
     const t = cartTot();
     const cli = cliCart();
-    const redondeo = Math.ceil(t.total / 5000) * 5000;
+    const credito = S.cart.condicion === "Crédito";
+    const rc = credito ? revisarCredito(cli, t.total) : null;
+    if (rc && rc.error) return toast("No se puede facturar a crédito", rc.error, "cr");
+    const pagos = [];
+    const pagado = () => pagos.reduce((s, x) => s + x.monto, 0);
+    const pendiente = () => Math.max(0, t.total - pagado());
+    const autorizados = cli ? ["El titular"].concat(cli.autorizados || []) : [];
     openSheet({
-      title: "Cobro de la factura", sub: `${cli ? cli.nom : "Consumidor final"} · ${c(t.total)}`,
-      body: `<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px" id="medios">
-          ${[["cash", "Efectivo"], ["card", "Tarjeta"], ["phone", "SINPE móvil"], ["bank", "Transferencia"], ["file", "Cheque"], ["wallet", "Anticipo"]]
-          .map((m, i) => `<button class="btn" style="flex-direction:column;padding:15px 8px;gap:6px" data-medio="${m[1]}" aria-pressed="${i === 0}">${icon(m[0])}${m[1]}</button>`).join("")}
+      title: credito ? "Factura a crédito" : "Cobro de la factura", sub: `${cli ? cli.nom : "Consumidor final"} · ${c(t.total)}`,
+      body: credito ? `
+        <div class="grid g2" style="gap:12px">
+          <div class="field" style="margin:0"><label for="pOC">Orden de compra del cliente</label><input id="pOC" placeholder="Opcional · sale en la factura"></div>
+          <div class="field" style="margin:0"><label for="pRet">Retira</label><select id="pRet">${autorizados.map(x => `<option>${esc(x)}</option>`).join("")}</select></div></div>
+        <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:13px"><span>Crédito disponible</span><span class="num b">${c(cli.limite - cli.saldo)}</span></div>
+        ${rc.aviso ? `<div style="margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--warn-soft,var(--surface-2));border:1px solid var(--hair);font-size:12.5px">${icon("alert")} ${esc(rc.aviso)}</div>` : ""}
+        <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;gap:10px">${icon("info")}
+          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Condición 02 · crédito a ${cli.plazo} días. El <strong>Recibo Electrónico de Pago</strong> se emite cuando entre el dinero.</div></div>`
+        : `<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px" id="medios">
+          ${ALT_MEDIOS.map((m, i) => `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px" data-medio="${m[1]}" aria-pressed="${i === 0}">${icon(m[0])}${m[1]}<kbd style="font-size:10px">Alt+${i + 1}</kbd></button>`).join("")}
         </div>
-        <div class="field" style="margin-top:16px"><label for="monto">Monto recibido</label>
-          <input id="monto" class="num" style="font-size:22px;font-weight:600;text-align:right;padding:11px 13px" value="${grp(redondeo)}"></div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:11px;border-top:1px solid var(--hair-2)">
-          <span style="font-size:13px;font-weight:600">Vuelto</span>
-          <span class="num" id="vuelto" style="font-size:21px;font-weight:700;color:var(--ok)">${c(redondeo - t.total)}</span></div>
-        ${S.cart.condicion === "Crédito" && cli ? `<div style="margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;gap:10px">${icon("info")}
-          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Venta a crédito con IVA diferido: el <strong>Recibo Electrónico de Pago</strong> se emite cuando entre el dinero, no ahora. El IVA se declara en el mes del REP.</div></div>` : ""}
-        <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);display:flex;gap:10px">${icon("shield")}
-          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Al aplicar: se firma y ${S.offline ? "se encola para" : "se envía a"} Hacienda, baja el inventario, se genera el asiento contable${S.cart.condicion === "Crédito" ? " y la cuenta por cobrar" : ""}.</div></div>`,
-      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn">${icon("print")}Imprimir</button><button class="btn pri" id="okPay">${icon("check")}Aplicar</button>`,
+        <div class="grid g2" style="gap:12px;margin-top:14px">
+          <div class="field" style="margin:0"><label for="monto">Monto</label><input id="monto" class="num" style="font-size:20px;font-weight:600;text-align:right;padding:10px 12px" value="${grp(t.total)}"></div>
+          <div class="field" style="margin:0"><label for="pRef">Referencia</label><input id="pRef" placeholder="Autorización, SINPE o n.º de cheque"></div></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm" id="addPago">${icon("plus")}Agregar este pago y seguir con otro medio</button></div>
+        <div id="pagosLista" style="margin-top:10px"></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:1px solid var(--hair-2)">
+          <span style="font-size:13px;font-weight:600" id="vueltoLbl">Vuelto</span>
+          <span class="num" id="vuelto" style="font-size:21px;font-weight:700;color:var(--ok)">₡0</span></div>`
+        + `<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);display:flex;gap:10px">${icon("shield")}
+          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Al aplicar: se firma y ${S.offline ? "se encola para" : "se envía a"} Hacienda, se imprime el comprobante, baja el inventario y se genera el asiento contable${credito ? " y la cuenta por cobrar" : ""}.</div></div>`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="okPay">${icon("check")}Aplicar</button>`,
       after(el) {
         let medio = "Efectivo";
-        $$("[data-medio]", el).forEach(b => b.addEventListener("click", () => {
+        $$("[data-cerrar]", el).forEach(b => b.addEventListener("click", closeSheet));
+        const mo = $("#monto", el), okB = $("#okPay", el);
+        const leer = () => (mo ? parseInt(mo.value.replace(/\D/g, ""), 10) || 0 : 0);
+        /* lo que se aplicaría si se presiona Aplicar ahora: los pagos agregados más el que está en pantalla */
+        const propuesta = () => {
+          const m = leer();
+          return m > 0 && pagos.length < 4 ? pagos.concat([{ medio, monto: m, ref: $("#pRef", el).value.trim() }]) : pagos.slice();
+        };
+        const pintar = () => {
+          if (credito) return;
+          $("#pagosLista", el).innerHTML = pagos.map((x, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--hair-2)">
+            <span>${esc(x.medio)}${x.ref ? ` <span class="dim">· ${esc(x.ref)}</span>` : ""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num b">${c(x.monto)}</span><button class="btn sm" data-quitar="${i}" aria-label="Quitar pago">✕</button></span></div>`).join("");
+          $$("[data-quitar]", el).forEach(b => b.addEventListener("click", () => { pagos.splice(+b.dataset.quitar, 1); mo.value = grp(pendiente()); pintar(); }));
+          const pr = propuesta(), suma = pr.reduce((s, x) => s + x.monto, 0), dif = suma - t.total;
+          const noEfectivo = pr.filter(x => x.medio !== "Efectivo").reduce((s, x) => s + x.monto, 0);
+          const e = $("#vuelto", el), lbl = $("#vueltoLbl", el);
+          lbl.textContent = dif < 0 ? "Falta por cobrar" : "Vuelto";
+          e.textContent = c(Math.abs(dif));
+          e.style.color = dif < 0 ? "var(--crit)" : "var(--ok)";
+          /* solo el efectivo da vuelto; los demás medios no pueden pasar el total */
+          okB.disabled = dif < 0 || noEfectivo > t.total || (dif > 0 && !pr.some(x => x.medio === "Efectivo"));
+          $("#addPago", el).disabled = pagos.length >= 3 || leer() <= 0 || leer() >= pendiente();
+        };
+        const elegir = b => {
           $$("[data-medio]", el).forEach(x => x.setAttribute("aria-pressed", "false"));
           b.setAttribute("aria-pressed", "true"); medio = b.dataset.medio;
-        }));
-        $$("[data-cerrar]", el).forEach(b => b.addEventListener("click", closeSheet));
-        const mo = $("#monto", el);
-        mo.addEventListener("input", () => {
-          const val = parseInt(mo.value.replace(/\D/g, ""), 10) || 0;
-          const d = val - t.total;
-          const e = $("#vuelto", el);
-          e.textContent = c(d);
-          e.style.color = d < 0 ? "var(--crit)" : "var(--ok)";
-        });
-        $("#okPay", el).addEventListener("click", () => {
-          /* el anticipo solo alcanza hasta lo que el cliente dejó pagado */
-          const favor = cli ? cli.saldoFavor || 0 : 0;
-          if (S.cart.condicion !== "Crédito" && medio === "Anticipo" && favor < t.total)
-            return toast("El anticipo no alcanza", (cli ? cli.nom + " tiene " + c(favor) + " a favor" : "Consumidor final no tiene anticipos") + "; la factura es de " + c(t.total) + ".", "cr");
+          if (medio !== "Efectivo" && leer() > pendiente()) mo.value = grp(pendiente());
+          pintar();
+        };
+        $$("[data-medio]", el).forEach(b => b.addEventListener("click", () => elegir(b)));
+        if (mo) {
+          mo.addEventListener("input", pintar);
+          $("#addPago", el).addEventListener("click", () => {
+            const m = Math.min(leer(), pendiente());
+            if (m <= 0) return;
+            pagos.push({ medio, monto: m, ref: $("#pRef", el).value.trim() });
+            mo.value = grp(pendiente()); $("#pRef", el).value = "";
+            pintar(); mo.focus(); mo.select();
+          });
+          el.addEventListener("keydown", e => {
+            if (e.altKey && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); const b = $$("[data-medio]", el)[+e.code.slice(5) - 1]; if (b) elegir(b); }
+          });
+          setTimeout(() => { mo.focus(); mo.select(); }, 40);
+        }
+        pintar();
+        okB.addEventListener("click", () => {
+          let aplicados = [];
+          if (!credito) {
+            const pr = propuesta();
+            /* el efectivo que sobra es vuelto: se registra solo lo que queda en la caja */
+            const noEf = pr.filter(x => x.medio !== "Efectivo").reduce((s, x) => s + x.monto, 0);
+            let restoEf = t.total - noEf;
+            aplicados = pr.map(x => ({ ...x })).filter(x => {
+              if (x.medio !== "Efectivo") return true;
+              x.monto = Math.min(x.monto, restoEf); restoEf -= x.monto; return x.monto > 0;
+            });
+            const anticipo = aplicados.filter(x => x.medio === "Anticipo").reduce((s, x) => s + x.monto, 0);
+            const favor = cli ? cli.saldoFavor || 0 : 0;
+            if (anticipo > favor)
+              return toast("El anticipo no alcanza", (cli ? cli.nom + " tiene " + c(favor) + " a favor" : "Consumidor final no tiene anticipos") + "; se intentó aplicar " + c(anticipo) + ".", "cr");
+          }
+          const principal = aplicados.slice().sort((a, b) => b.monto - a.monto)[0];
           const doc = D.emitir({
             tipo: cli ? "FE" : "TE", locId: S.locId, term: S.term,
             clienteId: S.cart.cliId, vendedor: S.vendedor,
             lineas: lineasFiscales(),
-            condicion: S.cart.condicion, medio: S.cart.condicion === "Crédito" ? "Crédito" : medio,
+            condicion: S.cart.condicion, medio: credito ? "Crédito" : principal.medio, pagos: aplicados,
+            ordenCompra: credito ? $("#pOC", el).value.trim() : "", retira: credito ? $("#pRet", el).value : "",
             hacienda: S.offline ? "En cola" : "Aceptado", situacion: S.offline ? "3" : "1", fecha: D.ahora()
           });
           if (w.VENX) w.VENX.consumir(doc.cons);
-          if (doc.medio === "Anticipo" && cli) cli.saldoFavor -= doc.total;
+          const ant = D.pagadoCon(doc, "Anticipo");
+          if (ant && cli) cli.saldoFavor -= ant;
+          if (rc && rc.sobregiro) rc.sobregiro.usado = doc.cons;
           closeSheet();
           S.cart = { cliId: S.cart.cliId, condicion: S.cart.condicion, lineas: [], draft: null, apartado: [] };
           S.posSel = null;
           toast("Factura " + doc.cons + " aplicada",
-            `${S.offline ? "Queda en cola para Hacienda." : "Aceptada por Hacienda."} Bajó el inventario y generó el asiento${S.cart.condicion === "Crédito" ? " y la cuenta por cobrar" : ""}.`, "ok");
+            `${S.offline ? "Queda en cola para Hacienda." : "Aceptada por Hacienda."} ${doc.pagos.length > 1 ? "Cobrada con " + D.mediosTxt(doc) + ". " : ""}Bajó el inventario y generó el asiento${credito ? " y la cuenta por cobrar" : ""}.`, "ok");
           A.refresh();
         });
       }
