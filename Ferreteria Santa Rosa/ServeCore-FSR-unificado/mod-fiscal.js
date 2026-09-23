@@ -282,7 +282,8 @@
           footer: `<div style="flex:1"></div><button class="btn pri" id="mrX">Cerrar</button>`,
           after: root => {
             $("#mrX", root).addEventListener("click", closeSheet);
-            const resp = (estado, msg) => { r.estado = estado; closeSheet(); toast("Mensaje de receptor enviado", msg, "ok"); A.refresh(); };
+            /* r es una vista; el comprobante se acepta en su registro original */
+            const resp = (estado, msg) => { D.aceptarRecibido(D.recibidos.find(x => x.id === r.id), estado); closeSheet(); toast("Mensaje de receptor enviado", msg, "ok"); A.refresh(); };
             $("#mrA", root).addEventListener("click", () => resp("Aceptado", "Confirmación de aceptación transmitida a Hacienda. El IVA entra al crédito fiscal del período."));
             $("#mrP", root).addEventListener("click", () => resp("Aceptado parcial", "Aceptación parcial transmitida. Solo el monto aceptado da crédito fiscal; el proveedor debe emitir la nota de crédito por la diferencia."));
             $("#mrR", root).addEventListener("click", () => resp("Rechazado", "Rechazo transmitido. Sin crédito fiscal, y el proveedor queda notificado para anular el comprobante."));

@@ -218,6 +218,8 @@
   reps.sort((a, b) => a.fecha - b.fecha).forEach(r => {
     r.cons = consREP(r.locId, r.term); r.id = "REP-" + r.cons;
     r.situacion = "1"; r.clave = D.clave(r.cons, r.fecha, r.situacion);
+    /* los cobros del histórico también se asientan (los de antes de setiembre van en la migración) */
+    asentarCobro(r, D.documentos.find(x => x.cons === r.docCons));
   });
   reps.sort((a, b) => b.fecha - a.fecha);
 
@@ -315,8 +317,18 @@
   }
   function aceptarRecibidos() {
     let n = 0;
-    D.recibidos.forEach(r => { if (r.estado === "Sin aceptar" && r.ocLigada) { r.estado = "Aceptado"; n++; } });
+    D.recibidos.forEach(r => { if (r.estado === "Sin aceptar" && r.ocLigada) { D.aceptarRecibido(r, "Aceptado"); n++; } });
     return n;
+  }
+  /* asiento de un cobro: entra a caja si es efectivo y al banco lo demás; el
+     IVA del abono pasa del diferido al IVA por pagar del mes del REP */
+  function asentarCobro(rep, d) {
+    rep.asiento = D.asentar(rep.fecha, rep.cons, `Cobro de ${d.cons} · REP`, [
+      { cta: D.cuentaMedio(rep.medio), debe: rep.monto, haber: 0 },
+      { cta: "1-01-03-001", debe: 0, haber: rep.monto },
+      { cta: "2-01-02-002", debe: rep.iva, haber: 0 },
+      { cta: "2-01-02-001", debe: 0, haber: rep.iva }
+    ]).id;
   }
   /* cobro de una factura a crédito: la única vía, la usen la caja o Facturación.
      Valida, emite el REP desde la caja que cobra, baja la cartera y asienta.
@@ -337,14 +349,7 @@
     reps.unshift(rep);
     d.saldo -= monto;
     if (D.cliById[d.clienteId]) D.cliById[d.clienteId].saldo -= monto;
-    /* entra a caja si es efectivo; lo demás, al banco. El IVA del abono pasa
-       del diferido al IVA por pagar del mes del REP */
-    D.asentar(fecha, cons, `Cobro de ${d.cons} · REP`, [
-      { cta: rep.medio === "Efectivo" ? "1-01-01-001" : "1-01-02-001", debe: monto, haber: 0 },
-      { cta: "1-01-03-001", debe: 0, haber: monto },
-      { cta: "2-01-02-002", debe: rep.iva, haber: 0 },
-      { cta: "2-01-02-001", debe: 0, haber: rep.iva }
-    ]);
+    asentarCobro(rep, d);
     return { rep };
   }
 

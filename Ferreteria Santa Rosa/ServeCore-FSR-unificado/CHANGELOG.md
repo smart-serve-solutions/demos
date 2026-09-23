@@ -1,5 +1,31 @@
 # Cambios
 
+## 2026-09-23 · Contabilidad · Migración al 31 de agosto y auxiliares cuadrados con el mayor
+
+Parte 1 de la auditoría de Contabilidad (C1 y C2, y la antigüedad de F2).
+
+- **La contabilidad en vivo empieza el 1 de setiembre.** Lo anterior entra en un solo asiento de migración al 31 de
+  agosto (`CON.abrirLibros`, al final de la carga). Los documentos anteriores quedan como migrados, sin asiento
+  propio (`D.migrados`). Antes, la apertura era al 1.º de enero con montos escritos a mano y convivía con asientos
+  sueltos de abril a agosto.
+- **Cada saldo de balance sale de su auxiliar:** cartera (facturas a crédito abiertas), inventario (kardex al
+  costo), proveedores, IVA diferido, saldos a favor y tarjetas por liquidar. El mayor termina igual al auxiliar.
+- **Activos fijos desde el registro**, con la depreciación hasta agosto y las cuentas que faltaban (edificios,
+  maquinaria y equipo). El activo no corriente ya no sale negativo.
+- Bancos, fondos de caja, cargas sociales e impuesto al salario de agosto, provisiones laborales acumuladas e IVA de
+  agosto por pagar (cuenta nueva de liquidación) con su origen. Resultados de enero a agosto a la escala real de la
+  empresa. Capital y utilidades de años anteriores fijos; la diferencia son inversiones a plazo del sistema anterior.
+- **Cobros del histórico con asiento** (`asentarCobro`, la misma vía de la caja y de Facturación).
+- **Comprobantes de proveedor aceptados** crean la cuenta por pagar y el crédito fiscal (`D.aceptarRecibido`), salvo
+  que ya lo haya registrado la orden aplicada; la nota de crédito del proveedor lo reversa. Aceptar desde
+  Facturación ya queda guardado (antes se modificaba una copia).
+- **Cuadres calculados:** cartera y proveedores muestran la diferencia real entre auxiliar y libro, y la lista de
+  cierre la usa. Se quitó el «saldo migrado de Neo» y el «₡0 · cuadra» fijo.
+- La antigüedad de la cartera se mide desde el vencimiento (fecha más el plazo del cliente).
+- `D.asentar` rechaza cuentas que no existen en el catálogo.
+
+Archivos: `data.js`, `fis-data.js`, `con-data.js`, `con-auto.js`, `mod-conta.js`, `mod-fiscal.js`, `index.html`.
+
 ## 2026-09-23 · Compras e impuestos · IVA de las compras por tarifa
 
 Decisión pendiente de la auditoría: el IVA de las compras era un 13 % fijo.

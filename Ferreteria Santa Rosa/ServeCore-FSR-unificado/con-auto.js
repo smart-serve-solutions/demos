@@ -251,18 +251,21 @@
     const docs = D.documentos.filter(d => d.saldo > 0);
     const aux = docs.reduce((s, d) => s + d.saldo, 0);
     const libro = C.saldoDe(D.ctaByCod["1-01-03-001"]);
-    const tramos = [[0, 30, "Al día"], [31, 60, "31 a 60 días"], [61, 90, "61 a 90 días"], [91, 120, "91 a 120 días"], [121, 9999, "Más de 120 días"]]
+    /* la antigüedad se mide desde el vencimiento (fecha + plazo del cliente), no desde la emisión */
+    const vencida = d => Math.round((HOY - d.fecha) / 86400000) - ((D.cliById[d.clienteId] || {}).plazo || 30);
+    const tramos = [[-9999, 0, "Al día"], [1, 30, "1 a 30 días vencida"], [31, 60, "31 a 60 días vencida"], [61, 90, "61 a 90 días vencida"], [91, 9999, "Más de 90 días vencida"]]
       .map(t => {
-        const s = docs.filter(d => { const x = Math.round((HOY - d.fecha) / 86400000); return x >= t[0] && x <= t[1]; }).reduce((a, d) => a + d.saldo, 0);
+        const s = docs.filter(d => { const x = vencida(d); return x >= t[0] && x <= t[1]; }).reduce((a, d) => a + d.saldo, 0);
         const pol = POLITICA.incobrables.find(p => t[0] >= p[0] && t[0] <= p[1]);
         return { t: t[2], saldo: s, pct: pol ? pol[2] : 0, estimacion: r0(s * (pol ? pol[2] : 0) / 100) };
       });
-    return { aux, libro, migrado: libro - aux, tramos, estimacion: tramos.reduce((s, t) => s + t.estimacion, 0) };
+    return { aux, libro, diferencia: libro - aux, tramos, estimacion: tramos.reduce((s, t) => s + t.estimacion, 0) };
   }
   function proveedores() {
-    const aux = D.cxp.reduce((s, x) => s + x.saldo, 0) + GASTOS.filter(g => g.canal === "XML" && g.asiento).reduce((s, g) => s + g.monto, 0);
+    /* lo que se le debe a cada proveedor (facturas, compras aplicadas y comprobantes aceptados) más los gastos por XML */
+    const aux = D.proveedores.reduce((s, p) => s + p.saldo, 0) + GASTOS.filter(g => g.canal === "XML" && g.asiento).reduce((s, g) => s + g.monto, 0);
     const libro = C.saldoDe(D.ctaByCod["2-01-01-001"]);
-    return { aux, libro, migrado: libro - aux };
+    return { aux, libro, diferencia: libro - aux };
   }
 
   /* ═══ 11 · FIN DE MES — lo que el sistema dejó propuesto ═══════════ */
@@ -511,7 +514,7 @@
       { t: "Compras y comprobantes de proveedor", d: pend("compras") ? "Comprobantes o recepciones por resolver" : "Todo comprobante aceptado ante Hacienda", ok: !pend("compras"), ir: "contabilidad" },
       { t: "Gastos confirmados", d: pend("gastos") ? pend("gastos") + " gastos por confirmar" : "Todo gasto registrado con su cuenta", ok: !pend("gastos"), ir: "contabilidad" },
       { t: "Asientos de fin de mes aprobados", d: pend("finmes") ? pend("finmes") + " asientos propuestos sin aprobar" : "Depreciación, provisiones, IVA diferido e incobrables", ok: !pend("finmes"), ir: "contabilidad" },
-      { t: "Cartera y proveedores cuadrados", d: "Los auxiliares cuadran con su cuenta", ok: true, ir: "con-conciliaciones|cartera" },
+      (() => { const dk = cartera().diferencia, dp = proveedores().diferencia; return { t: "Cartera y proveedores cuadrados", d: !dk && !dp ? "Los auxiliares cuadran con su cuenta" : "Diferencia: clientes ₡" + dk + " · proveedores ₡" + dp, ok: !dk && !dp, ir: "con-conciliaciones|cartera" }; })(),
       { t: "Balance de comprobación cuadrado", d: "Debe igual haber en todo el período", ok: s.cuadra, ir: "con-libros|saldos" },
       { t: "Borradores de impuestos listos", d: "IVA, retenciones y patentes prellenados", ok: true, ir: "con-cierre|impuestos" }
     ].concat(items.some(it => it.grupo === "cierre")

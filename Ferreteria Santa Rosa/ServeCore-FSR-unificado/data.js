@@ -327,6 +327,7 @@
     ["1-01-02-003", "Banco de Costa Rica cta. corriente", "Activo"],
     ["1-01-02-004", "Banco Popular cta. corriente", "Activo"],
     ["1-01-02-005", "Banco Nacional cta. dólares", "Activo"],
+    ["1-01-02-006", "Inversiones a plazo · Banco Nacional", "Activo"],
     ["1-01-03-001", "Cuentas por cobrar clientes", "Activo"],
     ["1-01-03-002", "Estimación por incobrables", "Activo"],
     ["1-01-03-003", "Cuentas por cobrar a colaboradores", "Activo"],
@@ -338,11 +339,14 @@
     ["1-02-01-001", "Mobiliario y equipo", "Activo"],
     ["1-02-01-002", "Flota vehicular", "Activo"],
     ["1-02-01-003", "Equipo de cómputo", "Activo"],
+    ["1-02-01-004", "Edificios", "Activo"],
+    ["1-02-01-005", "Maquinaria y equipo", "Activo"],
     ["1-02-02-001", "Depreciación acumulada", "Activo"],
     ["2-01-01-001", "Cuentas por pagar proveedores", "Pasivo"],
     ["2-01-01-002", "Mercadería recibida por facturar", "Pasivo"],
     ["2-01-02-001", "IVA repercutido (débito fiscal)", "Pasivo"],
     ["2-01-02-002", "IVA por pagar diferido", "Pasivo"],
+    ["2-01-02-003", "IVA por pagar (liquidación del mes)", "Pasivo"],
     ["2-01-03-001", "Cargas sociales por pagar", "Pasivo"],
     ["2-01-03-002", "Salarios por pagar", "Pasivo"],
     ["2-01-03-003", "Impuesto al salario retenido por pagar", "Pasivo"],
@@ -540,12 +544,26 @@
 
   /* ── asientos ───────────────────────────────────────────────── */
   const asientos = [];
+  /* la contabilidad en vivo empieza el 1 de setiembre: lo anterior viene del
+     sistema anterior y entra en un solo asiento de migración al 31 de agosto,
+     armado desde los auxiliares (CON.abrirLibros). Mientras carga la demo, los
+     documentos con fecha anterior quedan como migrados, sin asiento propio. */
+  const INICIO = new Date(2026, 8, 1);
+  let cargando = true, abriendo = false;
+  const migrados = [];
   /* período cerrado: Contabilidad fija hasta qué fecha no se registra nada más */
   let cerradoHasta = null;
   const bloquearHasta = f => { cerradoHasta = f; };
   const periodoCerrado = f => !!cerradoHasta && f <= cerradoHasta;
   function asentar(fecha, origen, glosa, detalle) {
-    if (periodoCerrado(fecha)) throw new Error(`Período cerrado (${origen}): no se registra con fecha ${fecha.toLocaleDateString("es-CR")}`);
+    if (cargando && !abriendo && fecha < INICIO) {
+      const m = { id: null, migrado: true, fecha, origen, glosa, detalle };
+      migrados.push(m);
+      return m;
+    }
+    if (!abriendo && periodoCerrado(fecha)) throw new Error(`Período cerrado (${origen}): no se registra con fecha ${fecha.toLocaleDateString("es-CR")}`);
+    const falta = detalle.find(d => !ctaByCod[d.cta]);
+    if (falta) throw new Error(`Cuenta ${falta.cta} no existe en el catálogo (${origen})`);
     /* partida doble: un asiento que no cuadra no entra al mayor */
     const debe = detalle.reduce((s, d) => s + (d.debe || 0), 0), haber = detalle.reduce((s, d) => s + (d.haber || 0), 0);
     if (Math.round(debe) !== Math.round(haber)) throw new Error(`Asiento descuadrado (${origen}): débitos ${debe} ≠ créditos ${haber}`);
@@ -553,10 +571,16 @@
     const a = { id: "AS-" + seq.AS, num: seq.AS, fecha, origen, glosa, detalle };
     detalle.forEach(d => {
       const c = ctaByCod[d.cta];
-      if (c) { c.debe += d.debe || 0; c.haber += d.haber || 0; }
+      c.debe += d.debe || 0; c.haber += d.haber || 0;
     });
     asientos.push(a);
     return a;
+  }
+  /* registra la migración al 31 de agosto y da por terminada la carga */
+  function registrarApertura(glosa, detalle) {
+    abriendo = true;
+    try { return asentar(new Date(2026, 7, 31, 23, 59), "APERTURA", glosa, detalle); }
+    finally { abriendo = false; cargando = false; }
   }
 
   /* ── documentos de venta ────────────────────────────────────── */
@@ -582,7 +606,8 @@
       hacienda: opts.hacienda || "Aceptado",
       costo: costoLineas(opts.lineas),
       saldo: opts.condicion === "Crédito" ? t.total : 0,
-      despacho: opts.despacho || null
+      despacho: opts.despacho || null,
+      migrado: fecha < INICIO
     };
     doc.margen = doc.grav ? +(((doc.grav - doc.costo) / doc.grav) * 100).toFixed(1) : 0;
     documentos.unshift(doc);
@@ -904,12 +929,32 @@
     });
   }
 
+  /* aceptar el comprobante de un proveedor crea la cuenta por pagar y el crédito
+     fiscal, salvo que la orden de compra aplicada ya lo haya registrado. La nota
+     de crédito del proveedor lo reversa. */
+  function aceptarRecibido(r, estado) {
+    r.estado = estado;
+    if (!/Aceptado/.test(estado) || r.asiento) return r;
+    const oc = r.ocLigada && compras.find(c => c.cons === r.ocLigada);
+    if (oc && oc.estado === "Aplicada") { r.asiento = "en " + oc.cons; return r; }
+    const base = r.monto - r.iva, nc = /crédito/.test(r.tipo);
+    const det = [
+      { cta: "1-01-04-001", debe: nc ? 0 : base, haber: nc ? base : 0 },
+      { cta: "1-01-05-001", debe: nc ? 0 : r.iva, haber: nc ? r.iva : 0 },
+      { cta: "2-01-01-001", debe: nc ? r.monto : 0, haber: nc ? 0 : r.monto }
+    ];
+    r.asiento = asentar(r.fecha, "REC-" + r.id, (nc ? "Nota de crédito de " : "Factura de ") + provById[r.provId].nom, det).id;
+    provById[r.provId].saldo += nc ? -r.monto : r.monto;
+    return r;
+  }
+  recibidos.filter(r => /Aceptado/.test(r.estado)).forEach(r => aceptarRecibido(r, r.estado));
+
   /* ── cuentas por pagar ──────────────────────────────────────── */
   const cxp = [];
   proveedores.forEach(p => {
     for (let i = 0; i < ri(2, 5); i++) {
       const monto = ri(300000, 12000000);
-      const emit = ri(1, 55);
+      const emit = ri(13, 70);   /* facturas del sistema anterior: vienen en la migración */
       cxp.push({
         id: "CP" + cxp.length, provId: p.id, doc: "FE-" + pad(ri(100000, 999999), 6),
         fecha: dayAgo(emit), vence: dayAgo(emit - p.plazo), monto, saldo: chance(0.25) ? Math.round(monto * 0.4) : monto,
@@ -1083,7 +1128,7 @@
     const dep = chance(0.55);
     const monto = ri(180000, 14000000);
     banco.push({
-      id: "MB" + i, fecha: dayAgo(ri(0, 20)),
+      id: "MB" + i, fecha: dayAgo(ri(0, 12)),
       desc: dep ? pick(["Depósito de caja Santa Rosa", "Depósito de caja Turrialba", "Transferencia recibida", "SINPE recibido", "Liquidación de datáfono"])
         : pick(["Pago a proveedor", "Planilla quincenal", "Pago de servicios", "Comisión bancaria", "Retiro de efectivo"]),
       debe: dep ? monto : 0, haber: dep ? 0 : monto,
@@ -1214,7 +1259,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, aceptarRecibido, INICIO, migrados, registrarApertura, get cargando() { return cargando; }, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

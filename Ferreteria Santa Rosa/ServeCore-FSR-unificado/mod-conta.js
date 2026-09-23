@@ -384,9 +384,9 @@
         ], rows, rowCls: r => r.estado === "Diferencia" ? "wa" : "",
         foot: [{ v: "Total con detalle por local" }, { v: grp(kardex), r: true, cls: "mono" }, { v: grp(libro), r: true, cls: "mono" }, { v: c(libro - kardex), r: true, cls: "mono" }, { v: "", span: 2 }]
       }) + `<div class="mut" style="font-size:12.5px;padding:12px 16px;line-height:1.55;border-top:1px solid var(--hair-2)">
-        La cuenta de inventario del libro suma ${c(cuenta)}: ${c(cuenta - libro)} de eso es el saldo inicial que viene de Neo en el
-        asiento de apertura, que en el demo no trae detalle por local. En producción la migración trae el kardex valorizado de cada
-        local y esa línea desaparece.</div>`
+        La cuenta 1-01-04-001 suma ${c(cuenta)} y el kardex valorizado de toda la empresa ${c(kardex)}${cuenta === kardex ? ": cuadran" : ": difieren en " + c(cuenta - kardex)}.
+        La migración del 31 de agosto trajo el inventario de cada local al costo; las diferencias por local de arriba son partidas
+        que todavía están en la bandeja.</div>`
     })}
         <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);align-items:start">
           ${card({
@@ -417,17 +417,18 @@
     const k = AU.cartera(), p = AU.proveedores();
     const fm = AU.FINMES.find(x => x.id === "FM4");
     const esperando = D.compras.filter(x => x.estado === "Registrada");
-    const cuadre = (t, cod, aux, mig, lib, auxT) => card({
+    /* el auxiliar contra la cuenta del mayor; la diferencia se calcula, no se supone */
+    const cuadre = (t, cod, aux, dif, lib, auxT) => card({
       title: t, hint: "cuenta " + cod,
       body: `<div class="hl" style="justify-content:space-between"><span>${esc(auxT)}</span><b>${c(aux)}</b></div>
-        <div class="hl" style="justify-content:space-between"><span>Saldo migrado de Neo, sin detalle en el demo</span><b>${c(mig)}</b></div>
         <div class="hl" style="justify-content:space-between"><span style="font-weight:700;color:var(--ink)">Saldo de la cuenta en el libro</span><b>${c(lib)}</b></div>
-        <div class="hl" style="justify-content:space-between"><span>Diferencia</span>${tag("₡0 · cuadra", "ok", "check")}</div>`
+        <div class="hl" style="justify-content:space-between"><span>Diferencia</span>${dif ? tag(c(dif) + " · no cuadra", "cr", "alert") : tag("₡0 · cuadra", "ok", "check")}</div>
+        <div class="mut" style="font-size:12px;margin-top:6px">Lo anterior al 1 de setiembre entró con la migración del 31 de agosto, factura por factura.</div>`
     });
     v.innerHTML = `<div class="wrap">
         <div class="grid g2">
-          ${cuadre("Clientes", "1-01-03-001", k.aux, k.migrado, k.libro, "Facturas a crédito abiertas")}
-          ${cuadre("Proveedores", "2-01-01-001", p.aux, p.migrado, p.libro, "Facturas de proveedor por pagar")}
+          ${cuadre("Clientes", "1-01-03-001", k.aux, k.diferencia, k.libro, "Facturas a crédito abiertas")}
+          ${cuadre("Proveedores", "2-01-01-001", p.aux, p.diferencia, p.libro, "Facturas de proveedor por pagar")}
         </div>
         ${card({
       title: "Antigüedad de la cartera y estimación por incobrables", hint: "la política de la empresa, calculada sola cada mes",

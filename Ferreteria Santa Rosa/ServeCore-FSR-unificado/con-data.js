@@ -126,51 +126,121 @@
   });
   const depMensual = ACTIVOS.reduce((s, a) => s + (a.libros > 0 ? a.mensual : 0), 0);
 
-  /* ═══ 5 · ASIENTO DE APERTURA Y AJUSTES DEL PERÍODO ════════════════
-     Sin apertura no hay patrimonio, y sin patrimonio el balance no
-     dice nada. Se registra una sola vez, al cargar el módulo.           */
-  (function apertura() {
-    if (w.__conAbierto) return;
-    w.__conAbierto = true;
-    const ene = new Date(2026, 0, 1);
-    const debe = [
-      ["1-01-01-001", 12000000], ["1-01-02-001", 48250000], ["1-01-02-002", 9400000],
-      ["1-01-03-001", 186000000], ["1-01-04-001", 1240000000],
-      ["1-02-01-001", 56350000], ["1-02-01-002", 70700000], ["1-02-01-003", 12950000]
-    ];
-    const haber = [
-      ["1-02-02-001", 214600000], ["2-01-01-001", 318000000], ["2-01-03-001", 18400000],
-      ["2-01-03-002", 9200000], ["3-01-01-001", 150000000]
-    ];
-    const td = debe.reduce((s, x) => s + x[1], 0);
-    const th = haber.reduce((s, x) => s + x[1], 0);
-    haber.push(["3-02-01-001", td - th]);          /* utilidades acumuladas cuadran la apertura */
-    D.asentar(ene, "APERTURA", "Saldos de apertura del período fiscal 2026",
-      debe.map(x => ({ cta: x[0], debe: x[1], haber: 0 }))
-        .concat(haber.map(x => ({ cta: x[0], debe: 0, haber: x[1] }))));
+  /* ═══ 5 · MIGRACIÓN AL 31 DE AGOSTO Y AJUSTES DEL PERÍODO ══════════
+     La contabilidad en vivo empieza el 1 de setiembre. Lo anterior entra en
+     un solo asiento de migración, y cada saldo de balance sale de su
+     auxiliar: cartera, inventario, proveedores, IVA diferido y anticipos se
+     calculan al final de la carga (abrirLibros) para que el mayor cuadre con
+     su detalle. Los resultados de enero a agosto vienen a la escala real de
+     la empresa (la planilla y los gastos fijos son los del levantamiento). */
+  const FIN_AGO = new Date(2026, 7, 31, 23, 59);
+  const MESES_MIGRADOS = 8;
+  const VENTA_MES_REAL = 790000000;
+  const COSTO_PCT = 0.78;
+  const CLASE_CTA = {
+    "Edificaciones": "1-02-01-004", "Maquinaria y equipo": "1-02-01-005", "Vehículos y flota": "1-02-01-002",
+    "Mobiliario y equipo de oficina": "1-02-01-001", "Equipo de cómputo": "1-02-01-003"
+  };
+  const mesesHasta = (desde, hasta) => Math.max(0, (hasta.getFullYear() - desde.getFullYear()) * 12 + (hasta.getMonth() - desde.getMonth()) + 1);
+  const planillaMes = () => (w.NOM ? w.NOM.activos().reduce((s, e) => s + e.salario, 0) : 40000000);
+  const pctDe = arr => (arr || []).reduce((s, x) => s + x.p, 0);
 
-    /* Depreciación y provisiones del mes en curso. Los documentos de venta
-       del demo cubren una ventana corta, así que los ajustes periódicos se
-       registran por ese mismo período: de otro modo el resultado compararía
-       nueve meses de gasto contra unos días de venta. */
+  function abrirLibros() {
+    if (!D.cargando) return null;   /* una sola vez */
+    const lineas = [];
+    const pone = (cta, monto, nota) => { if (monto) lineas.push(monto > 0 ? { cta, debe: r0(monto), haber: 0, nota } : { cta, debe: 0, haber: r0(-monto), nota }); };
+    const mov = cta => D.ctaByCod[cta].debe - D.ctaByCod[cta].haber;   /* lo que ya se movió en setiembre */
+    /* saldo a la apertura para que el mayor termine igual al auxiliar (+ deudor, − acreedor) */
+    const desdeAux = (cta, auxDeudor, nota) => pone(cta, auxDeudor - mov(cta), nota);
+
+    /* auxiliares */
+    const cxc = D.documentos.filter(d => d.condicion === "Crédito" && d.saldo > 0).reduce((s, d) => s + d.saldo, 0);
+    let inv = 0;
+    Object.keys(D.existencias).forEach(id => { const a = D.artById[id]; if (a) Object.values(D.existencias[id]).forEach(e => inv += Math.max(0, e.cant) * a.costo); });
+    const ivaDif = D.documentos.filter(d => d.condicion === "Crédito" && d.saldo > 0 && d.total).reduce((s, d) => s + r0(d.saldo * d.iva / d.total), 0);
+    const favor = D.clientes.reduce((s, c) => s + (c.saldoFavor || 0), 0);
+    const gastosXml = w.AUTO ? w.AUTO.GASTOS.filter(g => g.canal === "XML" && g.asiento).reduce((s, g) => s + g.monto, 0) : 0;
+    const cxp = D.proveedores.reduce((s, p) => s + p.saldo, 0) + gastosXml;
+    const tarjetas = w.AUTO ? w.AUTO.lotes.filter(x => !x.acreditado).reduce((s, x) => s + x.bruto, 0) : 0;
+
+    desdeAux("1-01-03-001", cxc, "facturas a crédito abiertas");
+    desdeAux("1-01-04-001", inv, "kardex valorizado al costo");
+    desdeAux("1-01-03-004", tarjetas, "lotes del datáfono sin acreditar");
+    desdeAux("2-01-02-002", -ivaDif, "IVA de la cartera a crédito");
+    desdeAux("2-01-06-001", -favor, "saldos a favor de clientes");
+    desdeAux("2-01-01-001", -cxp, "facturas de proveedor por pagar");
+
+    /* estados de cuenta y arqueos al 31 de agosto */
+    const fondos = D.locales.reduce((s, l) => s + (l.tipo === "tienda" ? l.terminales : 0), 0) * (w.VENX ? w.VENX.PARAM.fondoCaja : 50000);
+    pone("1-01-01-001", fondos + 13400000, "fondos de caja y efectivo del 31 por depositar");
+    pone("1-01-02-001", 48250000); pone("1-01-02-002", 9400000); pone("1-01-02-003", 6120000); pone("1-01-02-004", 3280000);
+    pone("1-01-02-005", 25000 * D.tcDe(FIN_AGO).compra, "US$ 25 000 al tipo de compra del 31");
+    pone("1-01-03-002", -2400000, "estimación por incobrables");
+
+    /* activos fijos: el registro, con la depreciación hasta agosto */
+    const ppe = {}, dep = { v: 0 };
+    ACTIVOS.forEach(a => {
+      const cta = CLASE_CTA[a.clase];
+      ppe[cta] = (ppe[cta] || 0) + a.costo;
+      dep.v += Math.min(a.costo, r0(a.costo * a.tasa / 100 / 12 * mesesHasta(a.compra, new Date(2026, 7, 1))));
+    });
+    Object.keys(ppe).forEach(cta => pone(cta, ppe[cta]));
+    pone("1-02-02-001", -dep.v, "depreciación acumulada del registro de activos");
+
+    /* planilla de agosto por pagar en setiembre y provisiones acumuladas */
+    const pl = planillaMes();
+    const patr = w.NOM ? pctDe(w.NOM.TASAS.patrono) : 26.67, obr = w.NOM ? pctDe(w.NOM.TASAS.obrero) : 10.83;
+    pone("2-01-03-001", -pl * (patr + obr) / 100, "CCSS, FODESAF, IMAS y Banco Popular de agosto");
+    pone("2-01-03-003", -pl * 0.035, "impuesto al salario retenido en agosto");
+    pone("2-01-05-001", -pl / 12 * 9, "aguinaldo de diciembre a agosto");
+    pone("2-01-05-002", -pl * 0.0417 * 4, "vacaciones pendientes");
+    pone("2-01-05-003", -pl * 0.0533 * MESES_MIGRADOS, "cesantía");
+
+    /* IVA de agosto: se declara y paga a más tardar el 15 de setiembre */
+    const vbMes = VENTA_MES_REAL;
+    pone("2-01-02-003", -(vbMes * 0.13 * 0.94 - vbMes * COSTO_PCT * 0.13 * 0.95), "IVA de agosto por pagar");
+
+    /* resultados de enero a agosto */
+    const vb = vbMes * MESES_MIGRADOS, vn = vb * (1 - 0.019);
+    pone("4-01-01-001", -vb, "ventas de enero a agosto");
+    pone("4-01-02-001", vb * 0.012); pone("4-01-03-001", vb * 0.007);
+    pone("4-02-01-001", -vb * 0.0015); pone("4-02-02-001", -vb * 0.006);
+    pone("5-01-01-001", vn * COSTO_PCT);
+    pone("6-01-01-001", pl * MESES_MIGRADOS); pone("6-01-01-002", pl * MESES_MIGRADOS * patr / 100);
+    pone("6-01-01-003", pl * MESES_MIGRADOS * (1 / 12 + 0.0417 + 0.0533));
+    pone("6-01-02-001", 14500000 * MESES_MIGRADOS); pone("6-01-02-002", 6200000 * MESES_MIGRADOS);
+    pone("6-01-02-003", 3900000 * MESES_MIGRADOS); pone("6-01-02-004", 11600000 * MESES_MIGRADOS);
+    pone("6-01-02-005", 4800000 * MESES_MIGRADOS); pone("6-01-03-001", vb * 0.0015);
+    pone("6-01-04-001", 2800000 * MESES_MIGRADOS); pone("6-01-04-002", 2400000);
+    pone("6-01-05-001", depMensual * MESES_MIGRADOS); pone("6-01-06-001", vb * 0.35 * 0.0275);
+    pone("6-01-06-002", 180000); pone("6-01-07-001", 231100 + 725000 * MESES_MIGRADOS);
+
+    /* patrimonio: capital y utilidades de años anteriores; lo que falta para
+       cuadrar son las inversiones a plazo que el sistema anterior traía */
+    pone("3-01-01-001", -150000000); pone("3-02-01-001", -186400000);
+    const dif = lineas.reduce((s, x) => s + x.debe - x.haber, 0);
+    if (dif < 0) pone("1-01-02-006", -dif, "inversiones a plazo al 31 de agosto");
+    else pone("3-02-01-001", -dif);
+    const a = D.registrarApertura("Migración del sistema anterior · saldos al 31 de agosto de 2026", lineas);
+    a.regla = "Migración";
+    return a;
+  }
+
+  /* Depreciación y provisiones de setiembre, propuestas para el cierre */
+  (function ajustesDelMes() {
     const m = HOY.getMonth();
     const f = new Date(2026, m, HOY.getDate());
     D.asentar(f, "DEP-2026-" + String(m + 1).padStart(2, "0"), "Depreciación del mes", [
       { cta: "6-01-05-001", debe: depMensual, haber: 0 },
       { cta: "1-02-02-001", debe: 0, haber: depMensual }
     ]);
-    const planilla = w.NOM ? w.NOM.activos().reduce((s, e) => s + e.salario, 0) : 44000000;
+    const planilla = planillaMes();
     const pAgui = r0(planilla / 12), pVac = r0(planilla * 0.0417), pCes = r0(planilla * 0.0533);
     D.asentar(f, "PRO-2026-" + String(m + 1).padStart(2, "0"), "Provisiones laborales del mes", [
       { cta: "6-01-01-003", debe: pAgui + pVac + pCes, haber: 0 },
       { cta: "2-01-05-001", debe: 0, haber: pAgui },
       { cta: "2-01-05-002", debe: 0, haber: pVac },
       { cta: "2-01-05-003", debe: 0, haber: pCes }
-    ]);
-    /* impuesto a las personas jurídicas, pagado en enero */
-    D.asentar(new Date(2026, 0, 28), "IPJ-2026", "Impuesto a las personas jurídicas · Ley 9428", [
-      { cta: "6-01-07-001", debe: 231100, haber: 0 },
-      { cta: "1-01-02-001", debe: 0, haber: 231100 }
     ]);
   })();
 
@@ -233,7 +303,7 @@
      planilla y los gastos fijos sí son mensuales. Para que la resta
      signifique algo, la venta se lleva al volumen mensual de Santa Rosa
      usando los documentos del demo como clave de reparto.              */
-  const VENTA_MES = 790000000;
+  const VENTA_MES = VENTA_MES_REAL;
   const FIJOS = { tienda: 9000000, cedi: 22000000, bodega: 6000000 };
   function porLocal() {
     const planilla = {};
@@ -351,7 +421,7 @@
 
   w.CON = {
     MARCO, ESTADOS_NIIF, CLASES, GRUPOS, SUBGRUPOS, plan,
-    TASAS, TOPE_GASTO, ACTIVOS, depMensual,
+    TASAS, TOPE_GASTO, ACTIVOS, depMensual, abrirLibros, FIN_AGO,
     saldoDe, porTipo, totalTipo, resultados, situacion, flujo, porLocal, VENTA_MES,
     cierres, MESES, RENTA, IPJ, CALENDARIO, presupuesto, mayor
   };
