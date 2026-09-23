@@ -13,7 +13,7 @@
   const S_TERM = () => (w.S && w.S.term) || 1;
   /* n días antes del «hoy» del demo, a la hora que se indique */
   const dia = (n, h, m) => { const d = new Date(HOY); d.setDate(d.getDate() - n); if (h != null) d.setHours(h, m || 0, 0, 0); return d; };
-  const ahora = D.ahora;
+  const ahora = D.ahora, ahoraReal = D.ahora;
   const byCod = cod => D.articulos.find(a => a.cod === cod);
   const esHoy = d => d && d.toDateString() === HOY.toDateString();
   const diasEntre = (a, b) => Math.round((b - a) / 86400000);
@@ -202,8 +202,8 @@
     if (tm.locId === "L1" && tm.n === 2) {
       const a = nuevoTurno("L1", 2, "Yeimy Picado", dia(0, 7, 0));
       a.retiros.push({ hora: dia(0, 9, 40), monto: 150000, motivo: "Retiro a la bóveda", recibe: "Marta Rojas" });
-      a.cierre = { hora: dia(0, 10, 30), contado: null, diferencia: -500, justificacion: "Vuelto mal dado a un cliente; se anotó el nombre", por: "Marta Rojas" };
-      a.estado = "Cerrada";
+      a.cierraA = dia(0, 10, 30);
+      a.cierreDemo = { dif: -500, jus: "Vuelto mal dado a un cliente; se anotó el nombre", por: "Marta Rojas" };
       nuevoTurno("L1", 2, "Randall Mata", dia(0, 10, 30));
       return;
     }
@@ -215,27 +215,37 @@
     const t = nuevoTurno(tm.locId, tm.n, cajero, dia(0, 7, 0));
     if (tm.n === 1 && tm.locId !== "L5") t.retiros.push({ hora: dia(0, 10, 15), monto: 200000, motivo: "Retiro a la bóveda", recibe: (HABILITADOS[tm.locId].find(h => /Admin/.test(h[1])) || hab[0])[0] });
   });
+  /* desde el 1 de setiembre (inicio de la contabilidad en vivo): cada caja abrió a las 7:00 y cerró a las 18:00.
+     Se cierran con el mismo cerrar() de la caja, así el contado sale de lo que
+     de verdad entró y las diferencias llegan a la contabilidad por la misma vía */
+  const DIF_DEMO = {
+    "L5|1|1": { dif: -12500, jus: "No cuadró al contar; se cargó al cajero y se revisa con él" },
+    "L2|3|1": { dif: -2000, jus: "Billete falso retenido y reportado al OIJ" },
+    "L1|1|2": { dif: 1000, jus: "Cliente dejó el vuelto de ₡1 000; se registró como sobrante" },
+    "L1|2|3": { dif: -5000, jus: null }
+  };
+  const DIAS_CAJA = Math.round((HOY - D.INICIO) / 86400000);
+  for (let d = DIAS_CAJA; d >= 1; d--) TERMINALES.forEach(tm => {
+    if (tm.locId === "L1" && tm.n === 3 && d === 1) return;   /* esa caja sigue abierta desde ayer */
+    const hab = HABILITADOS[tm.locId] || [["Cajero", "Cajero"]];
+    const t = nuevoTurno(tm.locId, tm.n, tm.locId === "L1" && tm.n === 1 ? "Kevin Solano" : hab[(tm.n + d) % hab.length][0], dia(d, 7, 0));
+    t.cierraA = dia(d, 18, 0);
+    t.cierreDemo = DIF_DEMO[tm.locId + "|" + tm.n + "|" + d] || { dif: 0, jus: "" };
+  });
   /* un retiro no puede sacar más efectivo del que entró: se ajusta al que hubo */
   TURNOS.forEach(t => {
-    const hasta = t.cierre ? t.cierre.hora : new Date(8640000000000000);
+    const hasta = t.cierre ? t.cierre.hora : t.cierraA || new Date(8640000000000000);
     const efe = D.documentos.filter(d => d.locId === t.locId && d.term === t.n && d.fecha >= t.abre && d.fecha < hasta && d.tipo !== "NC" && d.condicion !== "Crédito" && (d.medio === "Efectivo" || d.medio === "Dólares")).reduce((k, d) => k + d.total, 0);
     let libre = t.fondo + efe - 20000;
     t.retiros = t.retiros.filter(r => { r.monto = Math.min(r.monto, Math.floor(libre / 50000) * 50000); libre -= r.monto; return r.monto > 0; });
   });
-  /* cierres de los días anteriores, con sus diferencias */
-  const CIERRES = [
-    { fecha: dia(1, 18, 5), locId: "L1", n: 1, cajero: "Kevin Solano", ventas: 1842300, diferencia: 0, justificacion: "" },
-    { fecha: dia(1, 18, 12), locId: "L1", n: 2, cajero: "Randall Mata", ventas: 1266100, diferencia: 0, justificacion: "" },
-    { fecha: dia(1, 18, 40), locId: "L2", n: 3, cajero: "Álvaro Cordero", ventas: 2140500, diferencia: -2000, justificacion: "Billete falso retenido y reportado al OIJ" },
-    { fecha: dia(2, 18, 2), locId: "L1", n: 1, cajero: "Kevin Solano", ventas: 1105800, diferencia: 1000, justificacion: "Cliente dejó el vuelto de ₡1 000; se registró como sobrante" },
-    { fecha: dia(2, 18, 25), locId: "L3", n: 1, cajero: "Yendry Chacón", ventas: 688400, diferencia: 0, justificacion: "" },
-    { fecha: dia(3, 17, 58), locId: "L1", n: 2, cajero: "Yeimy Picado", ventas: 912000, diferencia: -5000, justificacion: null }
-  ];
+  /* los cierres salen de los turnos cerrados: se llenan con cerrar() */
+  const CIERRES = [];
   const turnoDe = (locId, n) => TURNOS.filter(t => t.locId === locId && t.n === n && t.estado === "Abierta").slice(-1)[0] || null;
   const turnosDe = (locId, n) => TURNOS.filter(t => t.locId === locId && t.n === n);
   /* lo que pasó por la caja en el turno: ventas por medio, devoluciones y efectivo esperado */
   function resumen(t) {
-    const hasta = t.cierre ? t.cierre.hora : new Date(8640000000000000);
+    const hasta = t.cierre ? t.cierre.hora : t.cierraA || new Date(8640000000000000);
     const docs = D.documentos.filter(d => d.locId === t.locId && d.term === t.n && d.fecha >= t.abre && d.fecha < hasta);
     const por = {}; MEDIOS.forEach(m => { por[m] = { medio: m, n: 0, monto: 0 }; });
     let ventas = 0, devol = 0, usd = 0;
@@ -251,6 +261,9 @@
         if (x.usd) usd += x.usd;
       });
     });
+    /* los abonos de cuentas por cobrar pagados en efectivo en esta caja también están en la gaveta */
+    (w.FIS ? w.FIS.reps : []).filter(r => r.locId === t.locId && r.term === t.n && r.fecha >= t.abre && r.fecha < hasta && r.medio === "Efectivo")
+      .forEach(r => { por["Efectivo"].n++; por["Efectivo"].monto += r.monto; });
     const retiros = t.retiros.reduce((s, r) => s + r.monto, 0);
     /* los dólares se cuentan aparte, en dólares: no se mezclan con los colones de la gaveta */
     const efectivo = t.fondo + por["Efectivo"].monto - retiros - devol;
@@ -265,7 +278,8 @@
     t.retiros.push({ hora: ahora(), monto, motivo, recibe });
     anotar("Retiró efectivo de caja", locDe(t.locId).nom + " · caja " + t.n + " · ₡" + monto + " · " + motivo, t.cajero, t.locId, "Media", "", recibe);
   }
-  function cerrar(t, contado, justificacion, por, contadoUsd) {
+  function cerrar(t, contado, justificacion, por, contadoUsd, hora) {
+    const ahora = () => hora || ahoraReal();
     const r = resumen(t);
     const dif = Math.round(contado - r.efectivo);
     /* diferencia en dólares: se valora al tipo de compra del día contra «Diferencias de caja» */
@@ -291,9 +305,25 @@
         ? [{ cta: contra, debe: m, haber: 0 }, { cta: "1-01-01-001", debe: 0, haber: m }]
         : [{ cta: "1-01-01-001", debe: m, haber: 0 }, { cta: "6-01-06-002", debe: 0, haber: m }]).id;
     }
+    /* lo que se deposita: el contado más lo que se retiró a la bóveda, menos el
+       fondo que se queda en la gaveta. Sale de la caja a «efectivo en tránsito» y
+       entra al banco cuando el banco lo acredita (conciliación) */
+    const dep = contado + t.retiros.reduce((s, x) => s + x.monto, 0) - t.fondo;
+    if (dep > 0) {
+      const f = t.cierre.hora, llega = new Date(f.getFullYear(), f.getMonth(), f.getDate() + 1, 9, 30);
+      t.cierre.deposito = { id: "DP-" + t.id, locId: t.locId, n: t.n, monto: dep, fecha: f, llega, estado: "En tránsito",
+        asiento: D.asentar(f, "DP-" + t.id, "Depósito del cierre · " + locDe(t.locId).nom + " caja " + t.n, [
+          { cta: "1-01-01-004", debe: dep, haber: 0 }, { cta: "1-01-01-001", debe: 0, haber: dep }]).id };
+    }
     anotar("Cerró caja", locDe(t.locId).nom + " · caja " + t.n + " · diferencia ₡" + dif, t.cajero, t.locId, dif ? "Media" : "Baja");
+    D.bitacora[0].fecha = t.cierre.hora;
     return dif;
   }
+  /* cierra, en orden, los turnos de los días anteriores y el de la mañana */
+  TURNOS.filter(t => t.cierraA && !t.cierre).sort((a, b) => a.cierraA - b.cierraA).forEach(t => {
+    const x = t.cierreDemo;
+    cerrar(t, resumen(t).efectivo + x.dif, x.jus, x.por || t.cajero, undefined, t.cierraA);
+  });
 
   /* ═══ 7 · PROFORMAS Y PEDIDOS (VEN-003, VEN-019, REP-009, INT-008) ═══ */
   const ZONA = { "Turrialba centro": "Turrialba centro", "Turrialba": "Turrialba centro", "Santa Rosa": "Santa Rosa y alrededores", "Pacayas": "Pacayas / Cervantes", "Cervantes": "Pacayas / Cervantes", "Pejibaye": "Pejibaye", "Tucurrique": "Tucurrique", "El Centro": "Turrialba centro" };

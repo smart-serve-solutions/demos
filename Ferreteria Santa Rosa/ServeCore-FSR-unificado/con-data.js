@@ -172,7 +172,7 @@
 
     /* estados de cuenta y arqueos al 31 de agosto */
     const fondos = D.locales.reduce((s, l) => s + (l.tipo === "tienda" ? l.terminales : 0), 0) * (w.VENX ? w.VENX.PARAM.fondoCaja : 50000);
-    pone("1-01-01-001", fondos + 13400000, "fondos de caja y efectivo del 31 por depositar");
+    pone("1-01-01-001", fondos, "fondos de las cajas (lo del 31 ya se depositó)");
     pone("1-01-02-001", 48250000); pone("1-01-02-002", 9400000); pone("1-01-02-003", 6120000); pone("1-01-02-004", 3280000);
     pone("1-01-02-005", 25000 * D.tcDe(FIN_AGO).compra, "US$ 25 000 al tipo de compra del 31");
     pone("1-01-03-002", -2400000, "estimación por incobrables");
@@ -421,7 +421,7 @@
 
   w.CON = {
     MARCO, ESTADOS_NIIF, CLASES, GRUPOS, SUBGRUPOS, plan,
-    TASAS, TOPE_GASTO, ACTIVOS, depMensual, abrirLibros, FIN_AGO,
+    TASAS, TOPE_GASTO, ACTIVOS, depMensual, abrirLibros, FIN_AGO, BANCO_AL_31: 48250000,
     saldoDe, porTipo, totalTipo, resultados, situacion, flujo, porLocal, VENTA_MES,
     cierres, MESES, RENTA, IPJ, CALENDARIO, presupuesto, mayor
   };

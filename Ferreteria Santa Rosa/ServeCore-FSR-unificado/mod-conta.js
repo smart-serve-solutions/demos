@@ -201,9 +201,14 @@
     const auto = rows.filter(r => r.como === "Automático").length;
     const sug = rows.filter(r => !r.conciliado && r.pareja.t), sin = rows.filter(r => !r.conciliado && !r.pareja.t);
     const libro = C.saldoDe(D.ctaByCod["1-01-02-001"]);
-    const transito = AU.depositos.filter(d => !d.llego).reduce((s, d) => s + d.monto, 0);
-    const sinReg = sin.reduce((s, r) => s + r.debe - r.haber, 0);
-    const banco = libro - transito + sinReg;
+    /* conciliación clásica: el saldo del banco sale del estado de cuenta (saldo al 31 de
+       agosto más sus movimientos), no del libro; las partidas que el banco movió y los
+       libros todavía no, explican la diferencia */
+    const banco = C.BANCO_AL_31 + rows.reduce((s, r) => s + r.debe - r.haber, 0);
+    const pend = rows.filter(r => !r.conciliado);
+    const entradas = pend.filter(r => r.debe).reduce((s, r) => s + r.debe, 0), salidas = pend.filter(r => r.haber).reduce((s, r) => s + r.haber, 0);
+    const transito = C.saldoDe(D.ctaByCod["1-01-01-004"]);
+    const dif = banco - entradas + salidas - libro;
     const linea = (l, m, b) => `<div class="hl" style="justify-content:space-between"><span style="${b ? "font-weight:700;color:var(--ink)" : ""}">${esc(l)}</span><b style="${b ? "" : "font-weight:600"}">${c(m)}</b></div>`;
     v.innerHTML = `<div class="wrap">
         <div class="stepbar"><div class="sbt"><b>${icon("bank")} Banco Nacional conectado · lectura automática</b>
@@ -241,12 +246,13 @@
           <div style="display:flex;flex-direction:column;gap:14px">
             ${card({
       title: "Cuadre con el estado de cuenta", hint: "al " + fechaL(D.HOY),
-      body: `${linea("Saldo en libros · cuenta 1-01-02-001", libro)}
-        ${linea("Menos: depósitos en tránsito", -transito)}
-        ${linea("Menos: cargos del banco sin registrar", sinReg)}
-        ${linea("Saldo según el Banco Nacional", banco, true)}
-        <div class="mut" style="font-size:12.5px;margin-top:10px;line-height:1.55">Los depósitos en tránsito son los cierres de caja
-        de hoy, que llegan al banco mañana. ${sin.length ? "Los cargos sin registrar se resuelven en la bandeja; al registrarlos, la línea queda en cero." : "No hay cargos sin registrar."}</div>`
+      body: `${linea("Saldo según el estado de cuenta del Banco Nacional", banco, true)}
+        ${linea("Menos: entradas del banco que los libros no tienen", -entradas)}
+        ${linea("Más: salidas del banco que los libros no tienen", salidas)}
+        ${linea("Saldo según libros · cuenta 1-01-02-001", libro, true)}
+        <div class="hl" style="justify-content:space-between"><span>Diferencia sin explicar</span>${dif ? tag(c(dif), "cr", "alert") : tag("₡0 · concilia", "ok", "check")}</div>
+        <div class="mut" style="font-size:12.5px;margin-top:10px;line-height:1.55">${pend.length ? "Las partidas pendientes se resuelven en la bandeja; al registrarlas, salen de esta lista." : "No hay partidas pendientes."}
+        Los depósitos de caja que el banco todavía no acredita (${c(transito)}) están en «Efectivo en tránsito», no en el banco.</div>`
     })}
             ${card({
       title: "Cómo cruza", hint: "las reglas en Reglas › Reglas de conciliación",
@@ -290,7 +296,7 @@
     const tot = k => rows.reduce((s, r) => s + r[k], 0);
     const etiqueta = k => { const d = new Date(k); return (k === D.HOY.toDateString() ? "Hoy" : DIA[d.getDay()]) + " " + d.getDate(); };
     v.innerHTML = `<div class="wrap">
-        <div class="scrollx">${seg("cjd", [{ v: "semana", t: "Últimos 7 días" }].concat(dias.map(k => ({ v: k, t: etiqueta(k) }))), cjDia)}</div>
+        <div class="scrollx">${seg("cjd", [{ v: "semana", t: "Todo setiembre" }].concat(dias.map(k => ({ v: k, t: etiqueta(k) }))), cjDia)}</div>
         <div class="grid g4">
           ${stat("Cierres de caja", todas.length, { txt: "cada uno con su depósito, su lote y sus SINPE", dir: "" })}
           ${stat("Diferencias registradas solas", tolerancia, { txt: "hasta " + c(AU.POLITICA.toleranciaCaja) + ", en «Diferencias de caja»", dir: "" }, "var(--ok)")}

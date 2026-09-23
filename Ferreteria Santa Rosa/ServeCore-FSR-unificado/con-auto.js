@@ -77,68 +77,47 @@
     return r;
   }
 
-  /* ═══ 5 · CAJAS, DATÁFONO Y SINPE — últimos siete días ══════════════ */
-  const CAJEROS = { L1: ["Kevin Solano", "Laura Méndez", "Pablo Rojas"], L2: ["Marta Rojas", "Andrea Brenes", "Luis Alfaro", "Sofía Chaves"],
-    L3: ["Yendry Chacón", "Mario Quesada"], L4: ["Esteban Vindas", "Karla Monge"], L5: ["Diego Solano"], L6: ["Grettel Araya", "Iván Cordero"], L7: ["Josué Mora"] };
-  const cierres = [], lotes = [], sinpe = [];
+  /* ═══ 5 · CAJAS, DATÁFONO Y SINPE — últimos siete días ══════════════
+     Una sola fuente: los turnos de Ventas. El cierre, su diferencia y su
+     depósito los genera cerrar() en la caja; aquí se leen y se concilian. */
+  const V = w.VENX;
+  const mismoDia = (a, b) => a.toDateString() === b.toDateString();
+  const cierres = () => V.TURNOS.filter(t => t.cierre).map(t => {
+    const r = V.resumen(t), dif = t.cierre.diferencia, tol = POLITICA.toleranciaCaja;
+    return {
+      id: "CJ-" + t.id, turno: t, locId: t.locId, term: t.n, fecha: t.cierre.hora, cajero: t.cajero, fondo: t.fondo,
+      efectivo: r.efectivo, contado: t.cierre.contado, dif, justificacion: t.cierre.justificacion,
+      estado: !dif ? "Cuadrado" : Math.abs(dif) <= tol ? "Dentro de tolerancia" : dif < 0 ? "Faltante" : "Sobrante"
+    };
+  }).sort((a, b) => b.fecha - a.fecha);
+  const depositosDe = () => V.TURNOS.filter(t => t.cierre && t.cierre.deposito).map(t => t.cierre.deposito);
+  const depositos = () => depositosDe().map(x => ({
+    id: x.id, locId: x.locId, fecha: x.fecha, monto: x.monto, llego: x.estado === "Acreditado",
+    estado: x.estado === "Acreditado" ? "Conciliado" : x.estado, ref: x.ref || ""
+  }));
+
+  /* lotes del datáfono: lo cobrado con tarjeta en cada local y día, menos lo devuelto a la tarjeta */
+  const lotes = [], sinpe = [];
   D.tiendas.forEach(l => {
-    const escala = { L1: 1.15, L2: 1.35, L3: 0.9, L4: 0.65, L5: 0.45, L6: 1, L7: 0.5 }[l.id] || 0.7;
-    /* el día 7 solo aporta su lote: las ventas con tarjeta de ese día se liquidan igual */
     for (let d = 7; d >= 0; d--) {
       const f = dia(d);
-      const dom = f.getDay() === 0 ? 0.45 : 1;                /* el domingo abren medio día */
-      for (let t = 1; d < 7 && t <= l.terminales; t++) {
-        const efectivo = r50(ri(900000, 2600000) * escala * dom);
-        cierres.push({
-          id: `CJ-${l.id}-${pad(f.getDate(), 2)}-${t}`, locId: l.id, term: t, fecha: f,
-          cajero: CAJEROS[l.id][(t - 1) % CAJEROS[l.id].length], fondo: 100000,
-          efectivo, contado: efectivo, dif: 0, estado: "Cuadrado"
-        });
-      }
-      /* el lote del datáfono es lo que ese local cobró con tarjeta ese día,
-         menos lo que se devolvió a la misma tarjeta */
-      const delDia = x => x.locId === l.id && x.fecha.toDateString() === f.toDateString();
+      const delDia = x => x.locId === l.id && mismoDia(x.fecha, f);
       const bruto = D.documentos.filter(x => delDia(x) && x.tipo !== "NC").reduce((s, x) => s + D.pagadoCon(x, "Tarjeta"), 0)
         - D.documentos.filter(x => delDia(x) && x.tipo === "NC" && x.reintegro === "A la misma tarjeta").reduce((s, x) => s + x.total, 0);
       if (bruto > 0) {
         const comision = r0(bruto * POLITICA.comisionDatafono / 100);
         lotes.push({ id: `LT-${l.id}-${pad(f.getDate(), 2)}`, locId: l.id, fecha: f, bruto, comision, neto: bruto - comision, acreditado: d > 0, estado: d > 0 ? "Conciliado" : "En tránsito" });
       }
-      if (d === 7) continue;
-      const n = ri(3, 11);
-      sinpe.push({ locId: l.id, fecha: f, n, monto: r50(n * ri(38000, 96000)), identificados: n });
+      /* SINPE Móvil del día: las ventas y los cobros que entraron por SINPE */
+      const sp = D.documentos.filter(x => delDia(x) && x.tipo !== "NC").map(x => D.pagadoCon(x, "SINPE móvil")).filter(Boolean)
+        .concat(F.reps.filter(r => r.locId === l.id && mismoDia(r.fecha, f) && r.medio === "SINPE móvil").map(r => r.monto));
+      if (d < 7 && sp.length) sinpe.push({ locId: l.id, fecha: f, n: sp.length, monto: sp.reduce((s, m) => s + m, 0), identificados: sp.length });
     }
   });
-  /* depósitos: el efectivo de cada día se deposita al siguiente */
-  const depositos = [];
-  D.tiendas.forEach(l => {
-    const dias = {};
-    cierres.filter(c => c.locId === l.id).forEach(c => { const k = c.fecha.toDateString(); (dias[k] = dias[k] || []).push(c); });
-    Object.keys(dias).forEach(k => {
-      const cs = dias[k], f = cs[0].fecha;
-      const monto = cs.reduce((s, c) => s + c.contado, 0);
-      const hoy = f.toDateString() === dia(0).toDateString();
-      depositos.push({ id: "DP-" + l.id + "-" + pad(f.getDate(), 2), locId: l.id, fecha: f, monto, llego: !hoy, estado: hoy ? "En tránsito" : "Conciliado", ref: pad(ri(10000000, 99999999), 8) });
-    });
-  });
   /* las excepciones que la bandeja tiene que mostrar */
-  const cj = (loc, d, t) => cierres.find(c => c.locId === loc && c.term === t && c.fecha.toDateString() === dia(d).toDateString());
+  const cj = (loc, d, t) => cierres().find(c => c.locId === loc && c.term === t && mismoDia(c.fecha, dia(d)));
   const faltante = cj("L5", 1, 1);
-  if (faltante) { faltante.contado -= 12500; faltante.dif = -12500; faltante.estado = "Faltante"; }
-  const chico = cj("L2", 0, 3) || cj("L2", 0, 1);
-  if (chico) { chico.contado -= 1500; chico.dif = -1500; chico.estado = "Dentro de tolerancia"; }
-  const sobra = cj("L1", 2, 2);
-  if (sobra) { sobra.contado += 1000; sobra.dif = 1000; sobra.estado = "Dentro de tolerancia"; }
-  [chico, sobra].forEach(c => {
-    if (!c) return;
-    const m = Math.abs(c.dif), falta = c.dif < 0;
-    asiento(c.fecha, "CJ-" + c.id.slice(3), (falta ? "Faltante" : "Sobrante") + " de caja dentro de tolerancia · " + locNom(c.locId) + " caja " + c.term,
-      falta ? [{ cta: "6-01-06-002", debe: m, haber: 0 }, { cta: CAJA, debe: 0, haber: m }] : [{ cta: CAJA, debe: m, haber: 0 }, { cta: "6-01-06-002", debe: 0, haber: m }],
-      "Diferencias de caja pequeñas");
-  });
-  const depPend = depositos.find(x => x.locId === "L4" && x.fecha.toDateString() === dia(2).toDateString());
-  if (depPend) { depPend.llego = false; depPend.estado = "No llegó"; }
-  const lotePend = lotes.find(x => x.locId === "L6" && x.fecha.toDateString() === dia(1).toDateString());
+  const lotePend = lotes.find(x => x.locId === "L6" && mismoDia(x.fecha, dia(1)));
   if (lotePend) { lotePend.acreditado = false; lotePend.estado = "No acreditado"; }
   /* liquidación del lote acreditado: el banco recibe el neto, la comisión es
      gasto financiero y se cancela lo que estaba por liquidar */
@@ -149,37 +128,64 @@
       { cta: "1-01-03-004", debe: 0, haber: x.bruto }
     ], "Liquidación de lotes del datáfono", por).id;
   };
-  lotes.filter(x => x.acreditado).forEach(x => liquidarLote(x, new Date(Math.min(x.fecha.getTime() + 15 * 3600000, HOY.getTime()))));
-  const sinpeHoy = sinpe.find(x => x.locId === "L2" && x.fecha.toDateString() === dia(0).toDateString());
-  if (sinpeHoy) sinpeHoy.identificados = sinpeHoy.n - 1;
-  const sinpeAyer = sinpe.find(x => x.locId === "L5" && x.fecha.toDateString() === dia(1).toDateString());
-  if (sinpeAyer) sinpeAyer.identificados = sinpeAyer.n - 1;
 
-  /* ═══ 6 · BANCO — cada movimiento con su pareja o su sugerencia ═════ */
+  /* ═══ 6 · BANCO — el estado de cuenta del Banco Nacional ═══════════
+     Lo que el banco movió: lo que ya está en los libros (cobros por SINPE,
+     transferencias y links de pago), los depósitos de caja y los lotes del
+     datáfono cuando se acreditan, y lo que solo el banco conoce (comisiones,
+     pagos que tesorería no registró, un retiro sin documento). */
   const cli = i => D.clientes[i % D.clientes.length].nom;
   const fechaCorta = d => pad(d.getDate(), 2) + " " + ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "set", "oct", "nov", "dic"][d.getMonth()];
-  /* montos creíbles para lo que el generador del demo deja al azar */
-  D.banco.forEach(b => {
-    if (/Comisión/.test(b.desc)) b.haber = ri(3, 45) * 850;
-    else if (/Retiro/.test(b.desc)) b.haber = ri(2, 8) * 25000;
-    else if (/servicios/.test(b.desc)) b.haber = ri(90000, 1400000);
+  const ref = () => pad(ri(10000000, 99999999), 8);
+  const linea = o => { const b = Object.assign({ id: "MB" + (D.banco.length + 1), debe: 0, haber: 0, ref: ref(), conciliado: true, como: "Automático" }, o); D.banco.push(b); return b; };
+  D.banco.length = 0;
+  /* 1 · cobros que ya entraron a la cuenta en los libros, agrupados por día como los presenta el banco */
+  const porDia = {};
+  D.asientos.filter(a => a.fecha >= D.INICIO).forEach(a => a.detalle.forEach(x => {
+    if (x.cta !== BANCO || !x.debe) return;
+    const k = a.fecha.toDateString(); (porDia[k] = porDia[k] || { fecha: a.fecha, n: 0, monto: 0 }); porDia[k].n++; porDia[k].monto += x.debe;
+  }));
+  Object.values(porDia).forEach(g => linea({ fecha: new Date(g.fecha.getFullYear(), g.fecha.getMonth(), g.fecha.getDate(), 20, 0), desc: "SINPE, transferencias y links de pago · " + g.n + " movimientos", debe: g.monto,
+    pareja: { t: "Cobros del día registrados en ventas y cuentas por cobrar", regla: "SINPE de clientes", conf: 99 } }));
+  /* 2 · depósitos de caja: llegan al día siguiente. Uno queda por confirmar y otro no llegó */
+  const acreditar = (dep, b) => {
+    dep.estado = "Acreditado"; dep.ref = b.ref;
+    dep.asientoBanco = asiento(b.fecha, "BCO-" + b.ref, "Depósito acreditado · " + locNom(dep.locId) + " caja " + dep.n, [
+      { cta: BANCO, debe: dep.monto, haber: 0 }, { cta: "1-01-01-004", debe: 0, haber: dep.monto }], "Depósitos de caja").id;
+  };
+  const noLlego = depositosDe().find(x => x.locId === "L4" && mismoDia(x.fecha, dia(2)));
+  if (noLlego) noLlego.estado = "No llegó";
+  const porConfirmar = depositosDe().find(x => x.locId === "L3" && mismoDia(x.fecha, dia(1)));
+  depositosDe().filter(x => x.estado === "En tránsito" && x.llega <= HOY).forEach(dep => {
+    const b = linea({ fecha: dep.llega, desc: "Depósito de caja " + locNom(dep.locId), debe: dep.monto,
+      pareja: { t: "Depósito del cierre de caja de " + locNom(dep.locId) + " · caja " + dep.n + " del " + fechaCorta(dep.fecha), regla: "Depósitos de caja", conf: 98 } });
+    if (dep === porConfirmar) { b.conciliado = false; b.como = "Sugerido"; b.accion = () => acreditar(dep, b); dep.ref = b.ref; }
+    else acreditar(dep, b);
   });
-  const retiro = D.banco.filter(b => !b.conciliado && /Comisión/.test(b.desc))[1];
-  if (retiro) { retiro.desc = "Retiro de efectivo"; retiro.haber = 150000; }
-  D.banco.forEach((b, i) => {
-    const antes = new Date(b.fecha.getTime() - 86400000);
-    const que = /Depósito de caja (.+)/.exec(b.desc);
-    if (que) b.pareja = { t: "Depósito del cierre de caja de " + que[1] + " del " + fechaCorta(antes), regla: "Depósitos de caja", conf: 98 };
-    else if (/SINPE/.test(b.desc)) b.pareja = { t: "Cobro de la factura de contado de ruta de " + cli(i + 3), regla: "SINPE de clientes", conf: 91 };
-    else if (/Transferencia recibida/.test(b.desc)) b.pareja = { t: "Abono de " + cli(i) + " a sus facturas a crédito", regla: "Cobros por transferencia", conf: 88 };
-    else if (/datáfono/.test(b.desc)) b.pareja = { t: "Lote del datáfono del " + fechaCorta(antes) + ", neto de comisión", regla: "Liquidaciones del datáfono", conf: 96 };
-    else if (/proveedor/.test(b.desc)) b.pareja = { t: "Transferencia del lote de pago a proveedores del " + fechaCorta(antes), regla: "Pagos a proveedores", conf: 99 };
-    else if (/Planilla/.test(b.desc)) b.pareja = { t: "Pago de la planilla quincenal QUI-2026-17", regla: "Planilla", conf: 99 };
-    else if (/servicios/.test(b.desc)) b.pareja = { t: "Factura del ICE de setiembre, ya registrada", regla: "Electricidad por medidor", conf: 86 };
-    else if (/Comisión/.test(b.desc)) b.pareja = { t: null, sugerencia: "No tiene pareja: es una comisión que cobra el banco. Registrarla como gasto financiero y crear la regla para que las próximas se registren solas.", regla: null, conf: null, familia: "comision-bn", crearRegla: ["Comisiones del Banco Nacional", "Descripción «COMISION» del Banco Nacional", "Gasto financiero"] };
-    else b.pareja = { t: null, sugerencia: "No tiene pareja: un retiro de efectivo sin documento. Hay que preguntar a tesorería para qué fue.", regla: null, conf: null };
-    b.como = b.conciliado ? "Automático" : b.pareja.t ? "Sugerido" : "Sin pareja";
+  /* 3 · lotes del datáfono acreditados */
+  lotes.filter(x => x.acreditado).forEach(x => {
+    const f = new Date(Math.min(x.fecha.getTime() + 15 * 3600000, HOY.getTime()));
+    liquidarLote(x, f);
+    linea({ fecha: f, desc: "Liquidación de datáfono " + locNom(x.locId), debe: x.neto, pareja: { t: "Lote del datáfono del " + fechaCorta(x.fecha) + ", neto de comisión", regla: "Liquidaciones del datáfono", conf: 96 } });
   });
+  /* 4 · lo que solo conoce el banco */
+  const cargoPos = linea({ fecha: dia(3), desc: "CARGO POS mensual · datáfonos", haber: 42500, pareja: { t: "Cargo mensual del datáfono", regla: "Cargo mensual del datáfono", conf: 97 } });
+  asiento(cargoPos.fecha, "BCO-" + cargoPos.ref, "Cargo mensual del datáfono · Banco Nacional", [{ cta: "6-01-06-001", debe: 42500, haber: 0 }, { cta: BANCO, debe: 0, haber: 42500 }], "Cargo mensual del datáfono");
+  [[4, 18700], [1, 11050]].forEach(([d, m]) => linea({ fecha: dia(d), desc: "Comisión bancaria", haber: m, conciliado: false, como: "Sin pareja",
+    pareja: { t: null, sugerencia: "No tiene pareja: es una comisión que cobra el banco. Registrarla como gasto financiero y crear la regla para que las próximas se registren solas.", regla: null, conf: null, familia: "comision-bn", crearRegla: ["Comisiones del Banco Nacional", "Descripción «COMISION» del Banco Nacional", "Gasto financiero"] } }));
+  linea({ fecha: dia(2), desc: "Retiro de efectivo", haber: 150000, conciliado: false, como: "Sin pareja",
+    pareja: { t: null, sugerencia: "No tiene pareja: un retiro de efectivo sin documento. Queda en partidas en investigación hasta que tesorería diga para qué fue.", regla: null, conf: null } });
+  /* pagos a proveedores que tesorería hizo desde el banco y no registró: el sistema encuentra la factura */
+  D.cxp.filter(x => x.saldo > 0).filter((x, i, arr) => arr.findIndex(y => y.provId === x.provId) === i).slice(0, 2).forEach((x, i) => {
+    const p = D.provById[x.provId];
+    const b = linea({ fecha: dia(2 + i), desc: "Pago a proveedor · " + p.nom, haber: x.saldo, conciliado: false, como: "Sugerido",
+      pareja: { t: "Factura " + x.doc + " de " + p.nom + " por pagar", regla: "Pagos a proveedores", conf: 99 } });
+    b.accion = () => {
+      asiento(b.fecha, "BCO-" + b.ref, "Pago de " + x.doc + " · " + p.nom, [{ cta: "2-01-01-001", debe: b.haber, haber: 0 }, { cta: BANCO, debe: 0, haber: b.haber }], "Pagos a proveedores", D.sesion.nom);
+      x.saldo -= b.haber; p.saldo -= b.haber;
+    };
+  });
+  D.banco.sort((a, b) => b.fecha - a.fecha);
 
   /* ═══ 7 · GASTOS — facturas electrónicas y recibos por WhatsApp ══════ */
   const GASTOS = [];
@@ -340,34 +346,36 @@
       d: "Banco Nacional · " + (b.debe ? "entrada" : "salida") + " del " + fechaCorta(b.fecha) + " · referencia " + b.ref,
       monto: b.debe || b.haber, sugerencia: p.t || p.sugerencia, conf: p.conf,
       acciones: p.t ? ["aceptar", "consultar"] : p.crearRegla ? ["regla", "consultar"] : ["consultar", "aceptar"],
-      aceptarTexto: p.t ? "Aceptar el cruce" : p.crearRegla ? "Registrar como gasto" : "Registrar como caja chica",
+      aceptarTexto: p.t ? "Aceptar el cruce" : p.crearRegla ? "Registrar como gasto" : "Registrar en partidas en investigación",
       reglaNueva: p.crearRegla, familia: p.familia, resp: "Tesorería",
       hacer: () => {
-        b.conciliado = true; b.como = p.t ? "Aprobado" : "Registrado";
-        if (!p.t) asiento(b.fecha, "BCO-" + b.ref, b.desc + " · Banco Nacional",
+        if (b.accion) b.accion();
+        /* un retiro sin documento no se manda a gasto: queda en investigación hasta que aparezca el soporte */
+        else if (!p.t) asiento(b.fecha, "BCO-" + b.ref, b.desc + " · Banco Nacional",
           /Comisión/.test(b.desc) ? [{ cta: "6-01-06-001", debe: b.haber, haber: 0 }, { cta: BANCO, debe: 0, haber: b.haber }]
-            : [{ cta: CAJA, debe: b.haber, haber: 0 }, { cta: BANCO, debe: 0, haber: b.haber }],
-          /Comisión/.test(b.desc) ? "Comisiones del Banco Nacional" : "Registro manual aprobado", REVISOR.nom);
+            : [{ cta: "1-01-03-006", debe: b.haber, haber: 0 }, { cta: BANCO, debe: 0, haber: b.haber }],
+          /Comisión/.test(b.desc) ? "Comisiones del Banco Nacional" : "Partidas en investigación", D.sesion.nom);
+        b.conciliado = true; b.como = p.t ? "Aprobado" : "Registrado";
       }
     });
   });
   if (faltante) add({
     id: "CJ-FALT", grupo: "caja", k: "cr", ic: "cash", t: "Faltante de ₡12 500 en la caja 1 de Pejibaye",
     d: "Cierre del " + fechaCorta(faltante.fecha) + " · cajero " + faltante.cajero, monto: 12500,
-    sugerencia: "Pasa del tope de tolerancia de ₡2 000. Registrarlo como cuenta por cobrar al cajero, según el reglamento de cajas.", conf: null,
-    aceptarTexto: "Cargar al cajero", resp: faltante.cajero,
-    hacer: () => {
-      faltante.estado = "Cargado al cajero";
-      asiento(HOY, "CJ-" + faltante.id.slice(3), "Faltante de caja cargado a " + faltante.cajero + " · Pejibaye caja 1",
-        [{ cta: "1-01-03-003", debe: 12500, haber: 0 }, { cta: CAJA, debe: 0, haber: 12500 }], "Faltantes de caja", REVISOR.nom);
-    }
+    sugerencia: "Pasó la tolerancia de ₡" + POLITICA.toleranciaCaja + " y el cierre ya lo cargó al cajero en cuentas por cobrar a colaboradores. Falta confirmar el rebajo en la próxima planilla, según el reglamento de cajas.", conf: null,
+    aceptarTexto: "Confirmar rebajo en planilla", resp: faltante.cajero,
+    hacer: () => { faltante.turno.cierre.rebajoPlanilla = true; }
   });
-  if (depPend) add({
-    id: "CJ-DEP", grupo: "caja", k: "cr", ic: "cash", t: "El depósito de Cervantes del " + fechaCorta(depPend.fecha) + " no llegó al banco",
-    d: "Esperado el día siguiente por ₡" + String(depPend.monto).replace(/\B(?=(\d{3})+(?!\d))/g, " "), monto: depPend.monto,
+  if (noLlego) add({
+    id: "CJ-DEP", grupo: "caja", k: "cr", ic: "cash", t: "El depósito de Cervantes del " + fechaCorta(noLlego.fecha) + " no llegó al banco",
+    d: "Esperado el día siguiente por ₡" + String(noLlego.monto).replace(/\B(?=(\d{3})+(?!\d))/g, " "), monto: noLlego.monto,
     sugerencia: "Revisar con la encargada del local si el depósito se hizo. Mientras tanto queda como efectivo en tránsito.", conf: null,
     acciones: ["consultar", "aceptar"], aceptarTexto: "Llegó: conciliar", resp: "Karla Monge · Cervantes",
-    hacer: () => { depPend.llego = true; depPend.estado = "Conciliado"; }
+    hacer: () => {
+      /* llegó: el banco lo acredita y el depósito sale de «efectivo en tránsito» */
+      const b = linea({ fecha: HOY, desc: "Depósito de caja " + locNom(noLlego.locId) + " (tardío)", debe: noLlego.monto, pareja: { t: "Depósito del cierre de caja de " + locNom(noLlego.locId) + " del " + fechaCorta(noLlego.fecha), regla: "Depósitos de caja", conf: 98 } });
+      acreditar(noLlego, b); D.banco.sort((x, y) => y.fecha - x.fecha);
+    }
   });
   if (lotePend) add({
     id: "CJ-LOTE", grupo: "caja", k: "wa", ic: "card", t: "El lote del datáfono de El Centro del " + fechaCorta(lotePend.fecha) + " no se acreditó",
@@ -462,10 +470,11 @@
       anotar("Pidió explicación", it.t + " · a " + (it.resp || "responsable"));
       return it;
     }
-    it.hacer();
+    /* si el registro no se puede hacer (por ejemplo, fecha de un período cerrado), se avisa y la partida sigue pendiente */
+    try { it.hacer(); } catch (e) { if (w.UI) w.UI.toast("No se pudo registrar", e.message, "cr"); return null; }
     it.estado = "Resuelto";
     it.como = accion === "regla" ? "Aceptado y convertido en regla" : (it.aceptarTexto || "Aceptado");
-    it.por = REVISOR.nom;
+    it.por = D.sesion.nom;
     let regla = null;
     if (accion === "regla" && it.reglaNueva) {
       regla = nuevaRegla(it.reglaNueva[0], it.reglaNueva[1], it.reglaNueva[2]);
@@ -494,7 +503,7 @@
     return [
       { n: D.asientos.filter(a => !a.propuesto && !a.aprobado && a.origen !== "APERTURA" && a.fecha.getMonth() === HOY.getMonth()).length, t: "asientos registrados solos en el mes" },
       { n: hoy, t: "facturas de hoy con su asiento y su costo" },
-      { n: depositos.filter(x => x.estado === "Conciliado").length, t: "depósitos de caja conciliados" },
+      { n: depositos().filter(x => x.estado === "Conciliado").length, t: "depósitos de caja conciliados" },
       { n: lotes.filter(x => x.estado === "Conciliado").length, t: "lotes del datáfono conciliados" },
       { n: sinpe.reduce((s, x) => s + x.identificados, 0), t: "SINPE aplicados a su factura" },
       { n: GASTOS.filter(g => g.estado === "Registrado solo").length, t: "gastos registrados desde su XML" },
@@ -579,7 +588,7 @@
 
   w.AUTO = {
     REVISOR, APROBADORES, POLITICA, REGLAS, nuevaRegla, GRUPOS, ACC,
-    cierres, lotes, sinpe, depositos, GASTOS, AJUSTES, INV, FINMES, IMPUESTOS,
+    get cierres() { return cierres(); }, lotes, sinpe, get depositos() { return depositos(); }, GASTOS, AJUSTES, INV, FINMES, IMPUESTOS,
     cartera, proveedores, bandeja, resolver, resolverGrupo, hechoSolo, listaCierre, resueltos, anotar,
     items, CIERRE, mesAbierto, enviarAprobacion, aprobarCierre, devolverCierre, revisarImpuesto, presentarImpuesto
   };

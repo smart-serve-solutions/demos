@@ -322,6 +322,7 @@
   const cuentas = [
     ["1-01-01-001", "Caja general", "Activo"],
     ["1-01-01-002", "Caja en dólares", "Activo"],
+    ["1-01-01-004", "Efectivo en tránsito (depósitos de caja)", "Activo"],
     ["1-01-02-001", "Banco Nacional cta. corriente", "Activo"],
     ["1-01-02-002", "BAC San José cta. corriente", "Activo"],
     ["1-01-02-003", "Banco de Costa Rica cta. corriente", "Activo"],
@@ -333,6 +334,7 @@
     ["1-01-03-003", "Cuentas por cobrar a colaboradores", "Activo"],
     ["1-01-03-004", "Tarjetas por liquidar (datáfonos)", "Activo"],
     ["1-01-03-005", "Reclamos a proveedores", "Activo"],
+    ["1-01-03-006", "Partidas en investigación", "Activo"],
     ["1-01-04-001", "Inventario de mercadería", "Activo"],
     ["1-01-05-001", "IVA soportado (crédito fiscal)", "Activo"],
     ["1-01-06-001", "IVA diferido por cobrar", "Activo"],

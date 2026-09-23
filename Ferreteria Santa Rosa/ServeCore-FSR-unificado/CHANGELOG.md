@@ -1,5 +1,34 @@
 # Cambios
 
+## 2026-09-23 · Contabilidad · Cierres de caja, depósitos y banco con una sola fuente
+
+Parte 2 de la auditoría de Contabilidad (C3 y U3).
+
+- **Los cierres salen de los turnos de Ventas.** Desde el 1 de setiembre cada caja tiene su turno de 7:00 a 18:00,
+  cerrado con el mismo `cerrar()` de la caja: el contado sale de lo que de verdad entró (ventas, abonos en efectivo
+  y devoluciones) y las diferencias de la demo se asientan por la misma vía. Contabilidad los lee (`AUTO.cierres`
+  y `AUTO.depositos` se calculan). Antes Contabilidad inventaba montos al azar y Ventas tenía otros cierres a mano,
+  con otro fondo.
+- **Depósitos:** al cerrar, lo contado más lo retirado a la bóveda menos el fondo pasa de la caja a «efectivo en
+  tránsito» (cuenta nueva); cuando el banco lo acredita, pasa al banco. Si lo contado queda por debajo del fondo,
+  no hay depósito y el fondo se repone desde la bóveda.
+- **Estado de cuenta del Banco Nacional real:** lo que ya entró a la cuenta en los libros (SINPE, transferencias,
+  links de pago y cobros), los depósitos de caja y los lotes del datáfono cuando se acreditan, y lo que solo el
+  banco conoce (cargo mensual del datáfono, comisiones, un retiro sin documento, dos pagos a proveedores que
+  tesorería no registró, un depósito por confirmar y uno que no llegó).
+- **Conciliación clásica:** saldo según el estado de cuenta (saldo al 31 de agosto más sus movimientos), menos y
+  más las partidas que los libros no tienen, igual a saldo según libros, con la diferencia calculada. Resolver las
+  partidas en la bandeja las registra (el pago a proveedor rebaja la cuenta por pagar; el retiro sin soporte va a
+  «partidas en investigación», cuenta nueva) y la conciliación queda en ₡0.
+- SINPE del día desde las ventas y cobros reales. El faltante de Pejibaye ya se carga al cajero al cerrar; en la
+  bandeja queda confirmar el rebajo en planilla. La bandeja avisa si un registro no se puede hacer en vez de
+  trabarse, y firma con el usuario de la sesión.
+- Los abonos del histórico entran en horario de caja; los cobros en efectivo cuentan en el turno que los recibe.
+- La apertura de caja trae solo los fondos: lo del 31 de agosto ya se había depositado.
+- Contabilidad automática (`con-auto.js`) carga después de Ventas.
+
+Archivos: `data.js`, `fis-data.js`, `con-data.js`, `con-auto.js`, `ven-auto.js`, `mod-conta.js`, `index.html`.
+
 ## 2026-09-23 · Contabilidad · Migración al 31 de agosto y auxiliares cuadrados con el mayor
 
 Parte 1 de la auditoría de Contabilidad (C1 y C2, y la antigüedad de F2).

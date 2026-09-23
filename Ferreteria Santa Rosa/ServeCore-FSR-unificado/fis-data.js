@@ -190,7 +190,9 @@
     if (cobrado <= 0) return;
     const partes = doc.saldo === 0 && cobrado > 20000 && chance(0.4) ? [r0(cobrado * 0.5), cobrado - r0(cobrado * 0.5)] : [cobrado];
     const lapso = HOY - doc.fecha;
-    const fechas = partes.map(() => new Date(doc.fecha.getTime() + lapso * (0.15 + rnd() * 0.8))).sort((a, b) => a - b);
+    /* el cobro entra en horario de caja (8:00 a 17:00) y nunca después de la hora de la demo */
+    const habil = f => { const x = new Date(f); x.setHours(8 + Math.floor(rnd() * 9), Math.floor(rnd() * 60), 0, 0); return x > HOY ? new Date(HOY.getTime() - 60000) : x < doc.fecha ? new Date(doc.fecha.getTime() + 60000) : x; };
+    const fechas = partes.map(() => habil(new Date(doc.fecha.getTime() + lapso * (0.15 + rnd() * 0.8)))).sort((a, b) => a - b);
     let acumulado = 0;
     partes.forEach((monto, i) => {
       acumulado += monto;
