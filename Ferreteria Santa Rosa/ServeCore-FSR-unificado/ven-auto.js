@@ -271,8 +271,11 @@
     const difUsd = contadoUsd == null ? 0 : +(contadoUsd - r.dolares).toFixed(2);
     if (difUsd) {
       const tc = D.tcDe(ahora()), m = Math.round(Math.abs(difUsd) * tc.compra);
+      /* misma regla que en colones: un faltante mayor a la tolerancia se le carga al cajero */
+      const tol = w.AUTO ? w.AUTO.POLITICA.toleranciaCaja : 2000;
+      const contra = difUsd < 0 && m > tol ? "1-01-03-003" : "6-01-06-002";
       D.asentar(ahora(), "CJ-" + t.id + "-USD", (difUsd < 0 ? "Faltante" : "Sobrante") + " de dólares · " + locDe(t.locId).nom + " caja " + t.n + " · US$ " + Math.abs(difUsd).toFixed(2) + " × " + tc.compra,
-        difUsd < 0 ? [{ cta: "6-01-06-002", debe: m, haber: 0 }, { cta: "1-01-01-002", debe: 0, haber: m }] : [{ cta: "1-01-01-002", debe: m, haber: 0 }, { cta: "6-01-06-002", debe: 0, haber: m }]);
+        difUsd < 0 ? [{ cta: contra, debe: m, haber: 0 }, { cta: "1-01-01-002", debe: 0, haber: m }] : [{ cta: "1-01-01-002", debe: m, haber: 0 }, { cta: "6-01-06-002", debe: 0, haber: m }]);
     }
     t.cierre = { hora: ahora(), contado, diferencia: dif, contadoUsd: contadoUsd == null ? null : contadoUsd, diferenciaUsd: difUsd, justificacion: justificacion || "", por: por || t.cajero };
     t.estado = "Cerrada";

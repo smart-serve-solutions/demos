@@ -76,7 +76,7 @@
   /* permiso por rol: si no alcanza, avisa y devuelve false */
   const exige = (roles, que) => {
     if (D.puede(...roles)) return true;
-    toast("Su rol no tiene este permiso", que + " lo hace " + roles.map((r) => r.toLowerCase()).join(" o ") + ". Usted entró como " + D.sesion.cargo.toLowerCase() + " (" + D.sesion.corto + "); puede cambiar de usuario en el encabezado.", "cr");
+    toast("Su rol no tiene este permiso", que + " lo hace " + roles.map((r) => r.toLowerCase()).join(" o ") + ". Usted entró como " + D.sesion.corto + " (" + D.sesion.cargo + "); puede cambiar de usuario en el encabezado.", "cr");
     return false;
   };
   const tiendas = D.locales.filter((l) => l.tipo === "tienda");

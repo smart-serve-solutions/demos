@@ -1,5 +1,33 @@
 # Cambios
 
+## 2026-09-23 · Sistema / Configuración · Sesión, bitácora fiel, tipo de cambio y controles contables
+
+Hallazgos 6, 7, 8 y 11 de la auditoría de Configuración y la parte de F4 sobre los dólares en la caja.
+
+- **Usuario de la sesión.** El encabezado deja cambiar de persona para la demostración (Andrey · TI, Sonia ·
+  contabilidad, Adrián · gerencia). Las acciones sensibles revisan el rol y, si no alcanza, lo dicen.
+- **Bitácora fiel.** Sistema firma con la persona de la sesión, su cargo y su equipo (antes siempre «TI» desde la
+  misma IP). El autorizador se guarda como dato, ya no se deduce del texto. Un parámetro que no se aceptó
+  ya no queda anotado como si hubiera cambiado.
+- **Tipo de cambio por fecha** (`D.tipoCambio`, `D.tcDe`). El registro manual es de contabilidad o gerencia,
+  valida que la compra sea menor que la venta y que la variación no pase de 2 %, y queda en el historial como
+  «Manual» con su vigencia, sin pisar el anterior.
+- **Dólares en la caja.** Se reciben al tipo de **compra** (antes se usaba el de venta, con una pérdida que nadie
+  registraba), entran a «Caja en dólares» y el vuelto sale en colones. El arqueo cuenta los dólares aparte, sin
+  convertir; la diferencia se asienta al tipo de compra del día con la misma tolerancia que los colones.
+  Cuentas nuevas: caja en dólares y diferencial cambiario ganado y perdido.
+- **Parámetros «Contabilidad e impuestos»:** método de valuación (promedio o PEPS; UEPS no lo admiten las NIIF),
+  alcance del costo, período fiscal, fecha hasta la que está cerrado, tolerancia de caja, umbral de ajuste de
+  costo, comisión del datáfono y cuentas del diferencial cambiario. La tolerancia, el umbral y la comisión son
+  los que usan de verdad el cierre de caja, los ajustes de costo y los lotes del datáfono.
+- **Períodos cerrados:** `D.asentar` rechaza un asiento con fecha de un mes que Contabilidad ya cerró.
+- **Segregación de funciones:** reglas nuevas (alta o cambio de cuenta bancaria del proveedor ↔ pagarle, que no
+  se desactiva; registrar asientos ↔ aprobar el cierre; anular o devolver ↔ cobrar esa venta). Desactivar una
+  regla lo hace solo gerencia, con motivo, y queda en la bitácora.
+
+Archivos: `data.js`, `con-data.js`, `ven-auto.js`, `shell.js`, `index.html`, `mod-sys.js`, `mod-venta.js`,
+`mod-venta-gestion.js`.
+
 ## 2026-09-22 · Ventas / POS · Controles de la caja
 
 Hallazgos F1, F2, U1 y U3 de la auditoría del POS, y la parte de F4 sobre el turno.
