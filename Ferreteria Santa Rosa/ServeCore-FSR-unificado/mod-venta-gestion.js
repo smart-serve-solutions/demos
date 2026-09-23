@@ -111,15 +111,16 @@
       body: `<div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start">
           <div>${card({
         title: "Efectivo contado", hint: "billetes y monedas",
-        body: `<div class="grid" style="grid-template-columns:repeat(2,1fr);gap:8px">${DEN.map(d => `<div class="field" style="margin:0"><label>₡${grp(d)}</label><input class="num" data-den="${d}" inputmode="numeric" placeholder="0" style="text-align:right"></div>`).join("")}</div>`
+        body: `<div class="grid" style="grid-template-columns:repeat(2,1fr);gap:8px">${DEN.map(d => `<div class="field" style="margin:0"><label>₡${grp(d)}</label><input class="num" data-den="${d}" inputmode="numeric" placeholder="0" style="text-align:right"></div>`).join("")}</div>
+          <div class="field" style="margin:12px 0 0"><label for="arqUsd">Dólares contados (US$) · van aparte, sin convertir</label><input class="num" id="arqUsd" inputmode="decimal" placeholder="0,00" style="text-align:right"></div>`
       })}</div>
           <div style="display:flex;flex-direction:column;gap:12px">
             ${card({
         title: "Contra lo que dice el sistema", flush: true,
         body: table({
           /* arqueo ciego: el efectivo esperado no se ve hasta que el cajero termina de contar */
-          cols: [{ t: "Medio" , fmt: x => esc(x.medio) }, { t: "Esperado", r: true, cls: "mono", fmt: x => x.id ? `<span id="arqEsp" class="dim">oculto</span>` : grp(x.monto) }, { t: "Contado", r: true, cls: "mono", fmt: x => x.id ? `<span id="${x.id}">0</span>` : grp(x.monto) }],
-          rows: [{ medio: "Efectivo (con fondo, menos retiros)", monto: r.efectivo, id: "arqCont" }, { medio: "Vouchers de tarjeta", monto: tarj }, { medio: "SINPE y transferencias", monto: r.porMedio.filter(m => m.medio === "SINPE móvil" || m.medio === "Transferencia").reduce((s, m) => s + m.monto, 0) }]
+          cols: [{ t: "Medio" , fmt: x => esc(x.medio) }, { t: "Esperado", r: true, cls: "mono", fmt: x => x.id ? `<span id="${x.usd ? "arqEspUsd" : "arqEsp"}" class="dim">oculto</span>` : grp(x.monto) }, { t: "Contado", r: true, cls: "mono", fmt: x => x.id ? `<span id="${x.id}">0</span>` : grp(x.monto) }],
+          rows: [{ medio: "Efectivo en colones (con fondo, menos retiros)", monto: r.efectivo, id: "arqCont" }, { medio: "Dólares (US$)", monto: r.dolares, usd: true, id: "arqUsdC" }, { medio: "Vouchers de tarjeta", monto: tarj }, { medio: "SINPE y transferencias", monto: r.porMedio.filter(m => m.medio === "SINPE móvil" || m.medio === "Transferencia").reduce((s, m) => s + m.monto, 0) }]
         })
       })}
             <div style="display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair)">
@@ -133,32 +134,36 @@
       footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="arqOk">${icon("check")}Cerrar el turno</button>`,
       after(el) {
         cerrar(el);
-        let cont = 0, visto = false;
+        let cont = 0, usd = 0, visto = false;
         const calc = () => {
           cont = $$("[data-den]", el).reduce((s, i) => s + (parseInt(i.value, 10) || 0) * +i.dataset.den, 0);
+          usd = parseFloat(($("#arqUsd", el).value || "0").replace(/\s/g, "").replace(",", ".")) || 0;
           $("#arqCont", el).textContent = grp(cont);
+          $("#arqUsdC", el).textContent = "US$ " + dec(usd, 2);
           if (!visto) return;
-          const dif = cont - r.efectivo, e = $("#arqDif", el);
-          e.textContent = (dif < 0 ? "−₡" : "₡") + grp(dif);
+          const dif = cont - r.efectivo, difU = +(usd - r.dolares).toFixed(2), e = $("#arqDif", el);
+          e.textContent = (dif < 0 ? "−₡" : "₡") + grp(dif) + (difU ? " · " + (difU < 0 ? "−" : "") + "US$ " + dec(Math.abs(difU), 2) : "");
           e.style.fontSize = "20px"; e.style.fontWeight = "700";
-          e.style.color = dif === 0 ? "var(--ok)" : "var(--crit)";
+          e.style.color = dif === 0 && !difU ? "var(--ok)" : "var(--crit)";
         };
+        $("#arqUsd", el).addEventListener("input", calc);
         $$("[data-den]", el).forEach(i => i.addEventListener("input", calc));
         calc();
         /* al terminar de contar, el conteo queda fijo y recién entonces se compara */
         $("#arqVer", el).addEventListener("click", () => {
           visto = true;
-          $$("[data-den]", el).forEach(i => { i.readOnly = true; });
+          $$("[data-den]", el).forEach(i => { i.readOnly = true; }); $("#arqUsd", el).readOnly = true;
           $("#arqEsp", el).textContent = grp(r.efectivo); $("#arqEsp", el).classList.remove("dim");
+          $("#arqEspUsd", el).textContent = "US$ " + dec(r.dolares, 2); $("#arqEspUsd", el).classList.remove("dim");
           $("#arqVer", el).disabled = true;
           V.anotar("Contó el efectivo de la caja", cajaNom(t) + " · contado ₡" + cont, t.cajero, t.locId, "Baja");
           calc();
         });
         $("#arqOk", el).addEventListener("click", () => {
           if (!visto) { toast("Primero termine de contar", "El sistema compara contra lo esperado cuando el conteo está completo.", "in"); return; }
-          const dif = Math.round(cont - r.efectivo), jus = $("#arqJus", el).value.trim();
-          if (dif && !jus) { toast("Falta la justificación", "Hay una diferencia de " + c(dif) + ": anote por qué antes de cerrar.", "cr"); $("#arqJus", el).focus(); return; }
-          V.cerrar(t, cont, jus);
+          const dif = Math.round(cont - r.efectivo), difU = +(usd - r.dolares).toFixed(2), jus = $("#arqJus", el).value.trim();
+          if ((dif || difU) && !jus) { toast("Falta la justificación", "Hay una diferencia de " + c(dif) + (difU ? " y US$ " + dec(difU, 2) : "") + ": anote por qué antes de cerrar.", "cr"); $("#arqJus", el).focus(); return; }
+          V.cerrar(t, cont, jus, undefined, usd);
           const sig = $("#arqSig", el).value;
           if (sig) V.abrir(t.locId, t.n, sig, t.fondo);
           closeSheet();

@@ -279,11 +279,40 @@
   }));
   const provById = {}; proveedores.forEach(p => provById[p.id] = p);
 
+  /* ── sesión ─────────────────────────────────────────────────── */
+  /* quién está usando el sistema. En la demo se puede cambiar desde el
+     encabezado para mostrar que cada rol ve y puede hacer cosas distintas;
+     la bitácora firma con esta persona, su rol y su equipo */
+  const PERSONAS = [
+    { id: "andrey", nom: "Andrey Ramírez Solano", corto: "Andrey Ramírez", rol: "TI", cargo: "Encargado de TI", ini: "AR", ip: "10.2.14.8" },
+    { id: "sonia", nom: "Sonia Calderón Ruiz", corto: "Sonia Calderón", rol: "Contabilidad", cargo: "Contadora general", ini: "SC", ip: "10.2.14.31" },
+    { id: "adrian", nom: "Adrián Vindas Mora", corto: "Adrián Vindas", rol: "Gerencia", cargo: "Gerente general", ini: "AV", ip: "10.2.14.2" }
+  ];
+  const sesion = { ...PERSONAS[0] };
+  const cambiarSesion = id => { const p = PERSONAS.find(x => x.id === id); if (p) Object.assign(sesion, p); return sesion; };
+  const puede = (...roles) => roles.includes(sesion.rol);
+
+  /* ── tipo de cambio ─────────────────────────────────────────── */
+  /* uno por día, con su fuente: se factura y se revalúa con el de la fecha */
+  const tipoCambio = [
+    [7, 502.95, 508.90], [6, 503.40, 509.60], [5, 503.80, 510.10], [4, 504.10, 510.30],
+    [3, 503.60, 509.80], [2, 503.00, 509.20], [1, 502.85, 509.05], [0, 503.12, 509.40]
+  ].map(([d, compra, venta]) => ({
+    fecha: new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate() - d, 8, 0), compra, venta,
+    fuente: "BCCR · automático", usuario: "Sistema"
+  }));
+  /* el vigente a una fecha: el último publicado antes de ese momento */
+  const tcDe = fecha => {
+    const f = fecha || HOY;
+    return tipoCambio.filter(x => x.fecha <= f).slice(-1)[0] || tipoCambio[0];
+  };
+
   /* ── catálogo contable ──────────────────────────────────────── */
   /* un solo catálogo para toda la empresa: Ventas, Compras, Planilla,
      Contabilidad y Configuración escogen de aquí */
   const cuentas = [
     ["1-01-01-001", "Caja general", "Activo"],
+    ["1-01-01-002", "Caja en dólares", "Activo"],
     ["1-01-02-001", "Banco Nacional cta. corriente", "Activo"],
     ["1-01-02-002", "BAC San José cta. corriente", "Activo"],
     ["1-01-02-003", "Banco de Costa Rica cta. corriente", "Activo"],
@@ -321,6 +350,7 @@
     ["4-01-03-001", "Devoluciones sobre ventas", "Ingreso"],
     ["4-02-01-001", "Otros ingresos", "Ingreso"],
     ["4-02-02-001", "Ingresos por servicios", "Ingreso"],
+    ["4-02-03-001", "Diferencial cambiario ganado", "Ingreso"],
     ["5-01-01-001", "Costo de la mercadería vendida", "Costo"],
     ["6-01-01-001", "Salarios", "Gasto"],
     ["6-01-01-002", "Cargas sociales patronales", "Gasto"],
@@ -336,6 +366,7 @@
     ["6-01-05-001", "Depreciación del período", "Gasto"],
     ["6-01-06-001", "Gastos financieros", "Gasto"],
     ["6-01-06-002", "Diferencias de caja", "Gasto"],
+    ["6-01-06-003", "Diferencial cambiario perdido", "Gasto"],
     ["6-01-07-001", "Impuestos y patentes", "Gasto"]
   ].map(c => ({ cod: c[0], nom: c[1], tipo: c[2], debe: 0, haber: 0 }));
   const ctaByCod = {}; cuentas.forEach(c => ctaByCod[c.cod] = c);
@@ -344,7 +375,7 @@
      queda por liquidar hasta que el adquirente deposita el lote neto de
      comisión. El anticipo rebaja lo que el cliente dejó pagado. */
   const CUENTA_MEDIO = {
-    "Efectivo": "1-01-01-001", "Dólares": "1-01-01-001",
+    "Efectivo": "1-01-01-001", "Dólares": "1-01-01-002",
     "Tarjeta": "1-01-03-004", "A la misma tarjeta": "1-01-03-004",
     "SINPE móvil": "1-01-02-001", "Transferencia": "1-01-02-001", "Cheque": "1-01-02-001",
     "Anticipo": "2-01-06-001", "Saldo a favor del cliente": "2-01-06-001",
@@ -472,7 +503,7 @@
     return filas;
   }
   /* cuánto entró por un medio en un documento (una venta puede tener varios) */
-  const mediosTxt = d => (d.condicion === "Crédito" ? "Crédito" : (d.pagos && d.pagos.length ? d.pagos.map(x => x.medio).join(" + ") : d.medio));
+  const mediosTxt = d => (d.condicion === "Crédito" ? "Crédito" : (d.pagos && d.pagos.length ? d.pagos.filter(x => !x.vuelto).map(x => x.medio).join(" + ") : d.medio));
   const pagadoCon = (d, medio) => (d.pagos || []).filter(x => x.medio === medio).reduce((s, x) => s + x.monto, 0);
   function costoLineas(lineas) {
     return lineas.reduce((s, l) => s + l.cant * (artById[l.artId] ? artById[l.artId].costo : 0), 0);
@@ -496,7 +527,12 @@
 
   /* ── asientos ───────────────────────────────────────────────── */
   const asientos = [];
+  /* período cerrado: Contabilidad fija hasta qué fecha no se registra nada más */
+  let cerradoHasta = null;
+  const bloquearHasta = f => { cerradoHasta = f; };
+  const periodoCerrado = f => !!cerradoHasta && f <= cerradoHasta;
   function asentar(fecha, origen, glosa, detalle) {
+    if (periodoCerrado(fecha)) throw new Error(`Período cerrado (${origen}): no se registra con fecha ${fecha.toLocaleDateString("es-CR")}`);
     /* partida doble: un asiento que no cuadra no entra al mayor */
     const debe = detalle.reduce((s, d) => s + (d.debe || 0), 0), haber = detalle.reduce((s, d) => s + (d.haber || 0), 0);
     if (Math.round(debe) !== Math.round(haber)) throw new Error(`Asiento descuadrado (${origen}): débitos ${debe} ≠ créditos ${haber}`);
@@ -544,7 +580,8 @@
     /* contabilidad */
     const det = [];
     if (doc.condicion === "Crédito") det.push({ cta: "1-01-03-001", debe: doc.total, haber: 0 });
-    else doc.pagos.forEach(x => det.push({ cta: cuentaMedio(x.medio), debe: x.monto, haber: 0 }));
+    /* un pago negativo es vuelto que salió de la caja (por ejemplo, en colones al pagar con dólares) */
+    else doc.pagos.forEach(x => det.push(x.monto >= 0 ? { cta: cuentaMedio(x.medio), debe: x.monto, haber: 0 } : { cta: cuentaMedio(x.medio), debe: 0, haber: -x.monto }));
     det.push({ cta: "4-01-01-001", debe: 0, haber: doc.grav + doc.exe });
     det.push({ cta: doc.condicion === "Crédito" ? "2-01-02-002" : "2-01-02-001", debe: 0, haber: doc.iva });
     det.push({ cta: "5-01-01-001", debe: doc.costo, haber: 0 });
@@ -996,6 +1033,8 @@
       id: "BT" + i, fecha: new Date(HOY.getTime() - ri(1, 5000) * 60000),
       usuario: u.nom, rol: roles.find(r => r.id === u.rolId).nom, locId: u.locId,
       accion: a[0], detalle: a[1], sev: a[2], antes: a[3], despues: a[4],
+      /* lo que requiere autorización guarda quién la dio; nunca es quien lo hizo */
+      autorizo: /límite de crédito|margen|Anuló|archivo de pago/.test(a[0]) ? (u.nom === "Adrián Vindas Mora" ? "Sonia Calderón Ruiz" : "Adrián Vindas Mora") : "",
       ip: `10.${ri(1, 9)}.${ri(1, 250)}.${ri(2, 250)}`
     });
   });
@@ -1138,7 +1177,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

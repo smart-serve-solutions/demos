@@ -276,6 +276,9 @@
     });
   }
   cierres.reverse();
+  /* lo cerrado ya no admite asientos: el último día del último mes cerrado */
+  const ultCerrado = cierres.find(c => c.bloqueado);
+  if (ultCerrado) D.bloquearHasta(new Date(2026, ultCerrado.mes + 1, 0, 23, 59, 59));
 
   /* ═══ 9 · IMPUESTOS Y CALENDARIO ═══════════════════════════════════ */
   const RENTA = {

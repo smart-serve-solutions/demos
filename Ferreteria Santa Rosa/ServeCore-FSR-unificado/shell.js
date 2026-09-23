@@ -92,14 +92,32 @@
         ${icon("chevd", 'style="width:15px;height:15px;color:var(--ink-4)"')}</button>
       <div class="tb-sep"></div>
       <button class="netstatus ${S.offline ? "off" : ""}" id="btnNet" data-tip="${S.offline ? "Enlace caído — el nodo local sigue facturando" : "En línea · réplica hace 4 s"}" aria-label="Estado del enlace">${icon(S.offline ? "server" : "wifi")}</button>
-      <div class="userchip"><span class="avatar">AR</span><div><div class="un">Andrey Ramírez</div><div class="ur">Encargado de TI</div></div></div>`;
+      <button class="userchip" id="btnUser" aria-label="Cambiar de usuario de la demostración" data-tip="Cambiar de usuario (demostración)"><span class="avatar">${esc(D.sesion.ini)}</span><div style="text-align:left"><div class="un">${esc(D.sesion.corto)}</div><div class="ur">${esc(D.sesion.cargo)}</div></div></button>`;
     $("#btnMenu").addEventListener("click", () =>
       menuState.open ? closeMenu() : APP.abrirMenu(modDeAqui()),
     );
     $("#btnLocal").addEventListener("click", openLocalPop);
+    $("#btnUser").addEventListener("click", openUserPop);
     $("#btnNet").addEventListener("click", toggleEnlace);
   }
 
+  /* demostración: cambiar de persona para ver permisos y bitácora por rol */
+  function openUserPop() {
+    U.popover(
+      $("#btnUser"),
+      `<div class="pop-h">Usuario de la demostración</div>${D.PERSONAS.map((p) => `<button class="pop-item" data-per="${p.id}" aria-current="${p.id === D.sesion.id}"><span class="avatar">${esc(p.ini)}</span>
+        <div style="flex:1;min-width:0"><div class="pl-nom">${esc(p.nom)}</div><div class="dim" style="font-size:11.5px">${esc(p.cargo)}</div></div></button>`).join("")}`,
+      (root) =>
+        $$("[data-per]", root).forEach((b) =>
+          b.addEventListener("click", () => {
+            const p = D.cambiarSesion(b.dataset.per);
+            closeOverlays();
+            render();
+            toast("Sesión de " + p.nom, p.cargo + " · lo que haga queda en la bitácora con su usuario y su rol.", "in");
+          }),
+        ),
+    );
+  }
   function openLocalPop() {
     const btn = $("#btnLocal");
     const fila = (

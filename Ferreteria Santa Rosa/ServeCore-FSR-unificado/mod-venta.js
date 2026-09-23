@@ -734,7 +734,9 @@
     }
     return { aviso: bq ? bq.d : "" };
   }
-  const ALT_MEDIOS = [["cash", "Efectivo"], ["card", "Tarjeta"], ["phone", "SINPE móvil"], ["bank", "Transferencia"], ["file", "Cheque"], ["wallet", "Anticipo"]];
+  const ALT_MEDIOS = [["cash", "Efectivo"], ["card", "Tarjeta"], ["phone", "SINPE móvil"], ["bank", "Transferencia"], ["file", "Cheque"], ["wallet", "Anticipo"], ["cash", "Dólares"]];
+  /* efectivo: puede pasar del total y da vuelto (siempre en colones) */
+  const EFECTIVO_M = { "Efectivo": true, "Dólares": true };
   function cobrar() {
     if (!D.puedeEmitir(S.locId, S.term)) return toast(
       "Esta terminal no emite comprobantes",
@@ -771,7 +773,7 @@
           ${ALT_MEDIOS.map((m, i) => `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px" data-medio="${m[1]}" aria-pressed="${i === 0}">${icon(m[0])}${m[1]}<kbd style="font-size:10px">Alt+${i + 1}</kbd></button>`).join("")}
         </div>
         <div class="grid g2" style="gap:12px;margin-top:14px">
-          <div class="field" style="margin:0"><label for="monto">Monto</label><input id="monto" class="num" style="font-size:20px;font-weight:600;text-align:right;padding:10px 12px" value="${grp(t.total)}"></div>
+          <div class="field" style="margin:0"><label for="monto" id="montoLbl">Monto</label><input id="monto" class="num" style="font-size:20px;font-weight:600;text-align:right;padding:10px 12px" value="${grp(t.total)}"><div class="sx-hint" id="usdHint"></div></div>
           <div class="field" style="margin:0"><label for="pRef">Referencia</label><input id="pRef" placeholder="Autorización, SINPE o n.º de cheque"></div></div>
         <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm" id="addPago">${icon("plus")}Agregar este pago y seguir con otro medio</button></div>
         <div id="pagosLista" style="margin-top:10px"></div>
@@ -785,45 +787,56 @@
         let medio = "Efectivo";
         $$("[data-cerrar]", el).forEach(b => b.addEventListener("click", closeSheet));
         const mo = $("#monto", el), okB = $("#okPay", el);
-        const leer = () => (mo ? parseInt(mo.value.replace(/\D/g, ""), 10) || 0 : 0);
-        /* lo que se aplicaría si se presiona Aplicar ahora: los pagos agregados más el que está en pantalla */
-        const propuesta = () => {
-          const m = leer();
-          return m > 0 && pagos.length < 4 ? pagos.concat([{ medio, monto: m, ref: $("#pRef", el).value.trim() }]) : pagos.slice();
+        /* en dólares el monto se digita en US$ y se recibe al tipo de cambio de compra */
+        const tc = D.tcDe(D.ahora());
+        const leerUsd = () => (mo ? parseFloat(mo.value.replace(/\s/g, "").replace(",", ".")) || 0 : 0);
+        const leer = () => (!mo ? 0 : medio === "Dólares" ? Math.round(leerUsd() * tc.compra) : parseInt(mo.value.replace(/\D/g, ""), 10) || 0);
+        const pagoActual = () => {
+          const x = { medio, monto: leer(), ref: $("#pRef", el).value.trim() };
+          if (medio === "Dólares") { x.usd = leerUsd(); x.tc = tc.compra; }
+          return x;
         };
+        /* lo que se aplicaría si se presiona Aplicar ahora: los pagos agregados más el que está en pantalla */
+        const propuesta = () => (leer() > 0 && pagos.length < 4 ? pagos.concat([pagoActual()]) : pagos.slice());
+        const ponerMonto = col => { mo.value = medio === "Dólares" ? dec(Math.ceil(col / tc.compra * 100) / 100, 2) : grp(col); };
         const pintar = () => {
           if (credito) return;
           $("#pagosLista", el).innerHTML = pagos.map((x, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--hair-2)">
-            <span>${esc(x.medio)}${x.ref ? ` <span class="dim">· ${esc(x.ref)}</span>` : ""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num b">${c(x.monto)}</span><button class="btn sm" data-quitar="${i}" aria-label="Quitar pago">✕</button></span></div>`).join("");
-          $$("[data-quitar]", el).forEach(b => b.addEventListener("click", () => { pagos.splice(+b.dataset.quitar, 1); mo.value = grp(pendiente()); pintar(); }));
+            <span>${esc(x.medio)}${x.usd ? ` <span class="dim">· US$ ${dec(x.usd, 2)}</span>` : ""}${x.ref ? ` <span class="dim">· ${esc(x.ref)}</span>` : ""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num b">${c(x.monto)}</span><button class="btn sm" data-quitar="${i}" aria-label="Quitar pago">✕</button></span></div>`).join("");
+          $$("[data-quitar]", el).forEach(b => b.addEventListener("click", () => { pagos.splice(+b.dataset.quitar, 1); ponerMonto(pendiente()); pintar(); }));
+          $("#montoLbl", el).textContent = medio === "Dólares" ? "Monto en US$" : "Monto";
+          $("#usdHint", el).textContent = medio === "Dólares" ? "US$ " + dec(leerUsd(), 2) + " × ₡" + dec(tc.compra, 2) + " (compra) = " + c(leer()) : "";
           const pr = propuesta(), suma = pr.reduce((s, x) => s + x.monto, 0), dif = suma - t.total;
-          const noEfectivo = pr.filter(x => x.medio !== "Efectivo").reduce((s, x) => s + x.monto, 0);
+          const noEfectivo = pr.filter(x => !EFECTIVO_M[x.medio]).reduce((s, x) => s + x.monto, 0);
           const e = $("#vuelto", el), lbl = $("#vueltoLbl", el);
           lbl.textContent = dif < 0 ? "Falta por cobrar" : "Vuelto";
           e.textContent = c(Math.abs(dif));
           e.style.color = dif < 0 ? "var(--crit)" : "var(--ok)";
           /* solo el efectivo da vuelto; los demás medios no pueden pasar el total */
-          okB.disabled = dif < 0 || noEfectivo > t.total || (dif > 0 && !pr.some(x => x.medio === "Efectivo"));
+          okB.disabled = dif < 0 || noEfectivo > t.total || (dif > 0 && !pr.some(x => EFECTIVO_M[x.medio]));
           $("#addPago", el).disabled = pagos.length >= 3 || leer() <= 0 || leer() >= pendiente();
         };
         const elegir = b => {
           $$("[data-medio]", el).forEach(x => x.setAttribute("aria-pressed", "false"));
+          const antes = medio, col = leer();
           b.setAttribute("aria-pressed", "true"); medio = b.dataset.medio;
-          if (medio !== "Efectivo" && leer() > pendiente()) mo.value = grp(pendiente());
+          /* al cambiar de medio el monto se conserva en colones (o se convierte a dólares) */
+          if (antes !== medio) ponerMonto(!EFECTIVO_M[medio] ? Math.min(col, pendiente()) : col);
           pintar();
         };
         $$("[data-medio]", el).forEach(b => b.addEventListener("click", () => elegir(b)));
         if (mo) {
           mo.addEventListener("input", pintar);
           $("#addPago", el).addEventListener("click", () => {
-            const m = Math.min(leer(), pendiente());
-            if (m <= 0) return;
-            pagos.push({ medio, monto: m, ref: $("#pRef", el).value.trim() });
-            mo.value = grp(pendiente()); $("#pRef", el).value = "";
+            const x = pagoActual();
+            if (x.monto <= 0) return;
+            if (!EFECTIVO_M[medio]) x.monto = Math.min(x.monto, pendiente());
+            pagos.push(x);
+            ponerMonto(pendiente()); $("#pRef", el).value = "";
             pintar(); mo.focus(); mo.select();
           });
           el.addEventListener("keydown", e => {
-            if (e.altKey && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); const b = $$("[data-medio]", el)[+e.code.slice(5) - 1]; if (b) elegir(b); }
+            if (e.altKey && /^Digit[1-7]$/.test(e.code)) { e.preventDefault(); const b = $$("[data-medio]", el)[+e.code.slice(5) - 1]; if (b) elegir(b); }
           });
           setTimeout(() => { mo.focus(); mo.select(); }, 40);
         }
@@ -832,19 +845,24 @@
           let aplicados = [];
           if (!credito) {
             const pr = propuesta();
-            /* el efectivo que sobra es vuelto: se registra solo lo que queda en la caja */
-            const noEf = pr.filter(x => x.medio !== "Efectivo").reduce((s, x) => s + x.monto, 0);
-            let restoEf = t.total - noEf;
+            /* el vuelto se da en colones: el efectivo en colones se registra solo por lo
+               que queda en la caja; los dólares entran completos y, si pasan del total,
+               el vuelto sale como un pago negativo de la caja en colones */
+            const noEf = pr.filter(x => !EFECTIVO_M[x.medio]).reduce((s, x) => s + x.monto, 0);
+            const usdCol = pr.filter(x => x.medio === "Dólares").reduce((s, x) => s + x.monto, 0);
+            let restoEf = Math.max(0, t.total - noEf - usdCol);
             aplicados = pr.map(x => ({ ...x })).filter(x => {
               if (x.medio !== "Efectivo") return true;
               x.monto = Math.min(x.monto, restoEf); restoEf -= x.monto; return x.monto > 0;
             });
+            const vueltoUsd = noEf + usdCol - t.total;
+            if (usdCol && vueltoUsd > 0) aplicados.push({ medio: "Efectivo", monto: -vueltoUsd, vuelto: true });
             const anticipo = aplicados.filter(x => x.medio === "Anticipo").reduce((s, x) => s + x.monto, 0);
             const favor = cli ? cli.saldoFavor || 0 : 0;
             if (anticipo > favor)
               return toast("El anticipo no alcanza", (cli ? cli.nom + " tiene " + c(favor) + " a favor" : "Consumidor final no tiene anticipos") + "; se intentó aplicar " + c(anticipo) + ".", "cr");
           }
-          const principal = aplicados.slice().sort((a, b) => b.monto - a.monto)[0];
+          const principal = aplicados.filter(x => !x.vuelto).sort((a, b) => b.monto - a.monto)[0];
           const doc = D.emitir({
             tipo: cli ? "FE" : "TE", locId: S.locId, term: S.term,
             clienteId: S.cart.cliId, vendedor: S.vendedor,

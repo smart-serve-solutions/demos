@@ -237,7 +237,7 @@
     const hasta = t.cierre ? t.cierre.hora : new Date(8640000000000000);
     const docs = D.documentos.filter(d => d.locId === t.locId && d.term === t.n && d.fecha >= t.abre && d.fecha < hasta);
     const por = {}; MEDIOS.forEach(m => { por[m] = { medio: m, n: 0, monto: 0 }; });
-    let ventas = 0, devol = 0;
+    let ventas = 0, devol = 0, usd = 0;
     docs.forEach(d => {
       if (d.tipo === "NC") { if (d.reintegro === "Efectivo") devol += d.total; return; }
       ventas += d.total;
@@ -245,12 +245,15 @@
       /* una venta con pago mixto suma a cada medio lo que entró por él */
       (d.pagos && d.pagos.length ? d.pagos : [{ medio: d.medio, monto: d.total }]).forEach(x => {
         const m = por[x.medio] ? x.medio : "Efectivo";
-        por[m].n++; por[m].monto += x.monto;
+        if (!x.vuelto) por[m].n++;
+        por[m].monto += x.monto;
+        if (x.usd) usd += x.usd;
       });
     });
     const retiros = t.retiros.reduce((s, r) => s + r.monto, 0);
-    const efectivo = t.fondo + por["Efectivo"].monto + por["Dólares"].monto - retiros - devol;
-    return { docs, porMedio: MEDIOS.map(m => por[m]), ventas, devol, retiros, efectivo, n: docs.filter(d => d.tipo !== "NC").length };
+    /* los dólares se cuentan aparte, en dólares: no se mezclan con los colones de la gaveta */
+    const efectivo = t.fondo + por["Efectivo"].monto - retiros - devol;
+    return { docs, porMedio: MEDIOS.map(m => por[m]), ventas, devol, retiros, efectivo, dolares: +usd.toFixed(2), dolaresCol: por["Dólares"].monto, n: docs.filter(d => d.tipo !== "NC").length };
   }
   function abrir(locId, n, cajero, fondo) {
     const t = nuevoTurno(locId, n, cajero, ahora(), fondo);
@@ -261,10 +264,17 @@
     t.retiros.push({ hora: ahora(), monto, motivo, recibe });
     anotar("Retiró efectivo de caja", locDe(t.locId).nom + " · caja " + t.n + " · ₡" + monto + " · " + motivo, t.cajero, t.locId, "Media", "", recibe);
   }
-  function cerrar(t, contado, justificacion, por) {
+  function cerrar(t, contado, justificacion, por, contadoUsd) {
     const r = resumen(t);
     const dif = Math.round(contado - r.efectivo);
-    t.cierre = { hora: ahora(), contado, diferencia: dif, justificacion: justificacion || "", por: por || t.cajero };
+    /* diferencia en dólares: se valora al tipo de compra del día contra «Diferencias de caja» */
+    const difUsd = contadoUsd == null ? 0 : +(contadoUsd - r.dolares).toFixed(2);
+    if (difUsd) {
+      const tc = D.tcDe(ahora()), m = Math.round(Math.abs(difUsd) * tc.compra);
+      D.asentar(ahora(), "CJ-" + t.id + "-USD", (difUsd < 0 ? "Faltante" : "Sobrante") + " de dólares · " + locDe(t.locId).nom + " caja " + t.n + " · US$ " + Math.abs(difUsd).toFixed(2) + " × " + tc.compra,
+        difUsd < 0 ? [{ cta: "6-01-06-002", debe: m, haber: 0 }, { cta: "1-01-01-002", debe: 0, haber: m }] : [{ cta: "1-01-01-002", debe: m, haber: 0 }, { cta: "6-01-06-002", debe: 0, haber: m }]);
+    }
+    t.cierre = { hora: ahora(), contado, diferencia: dif, contadoUsd: contadoUsd == null ? null : contadoUsd, diferenciaUsd: difUsd, justificacion: justificacion || "", por: por || t.cajero };
     t.estado = "Cerrada";
     CIERRES.unshift({ fecha: t.cierre.hora, locId: t.locId, n: t.n, cajero: t.cajero, ventas: r.ventas, diferencia: dif, justificacion: justificacion || "" });
     /* la diferencia llega a la contabilidad: dentro de la tolerancia es gasto

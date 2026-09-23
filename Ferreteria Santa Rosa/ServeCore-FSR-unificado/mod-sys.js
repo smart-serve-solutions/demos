@@ -37,7 +37,8 @@
   const I = w.INVX,
     V = w.VENX,
     N = w.NOM;
-  const YO = "Andrey Ramírez";
+  /* quien usa el sistema ahora (se cambia desde el encabezado en la demo) */
+  const yo = () => D.sesion.corto;
   const nota = (html, ic) =>
     `<div style="display:flex;gap:10px;padding:11px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);font-size:12.5px;color:var(--ink-2);line-height:1.55">${icon(ic || "info", 'style="flex:none;color:var(--accent)"')}<div>${html}</div></div>`;
   const cerrar = (el) =>
@@ -55,20 +56,29 @@
     return d;
   };
   const minAntes = (m) => new Date(D.HOY.getTime() - m * 60000);
-  const anotar = (accion, detalle, sev, antes, despues) =>
+  /* la bitácora firma con la persona de la sesión, su rol y su equipo;
+     si alguien más autorizó, queda con su nombre (nunca se deduce) */
+  const anotar = (accion, detalle, sev, antes, despues, autorizo) =>
     D.bitacora.unshift({
       id: "BTS" + Date.now() + Math.random(),
       fecha: D.ahora(),
-      usuario: YO,
-      rol: "TI",
+      usuario: D.sesion.nom,
+      rol: D.sesion.cargo,
       locId: S.locId,
       accion,
       detalle,
       sev: sev || "Media",
       antes: antes || "",
       despues: despues || "",
-      ip: "10.2.14.8",
+      autorizo: autorizo || "",
+      ip: D.sesion.ip,
     });
+  /* permiso por rol: si no alcanza, avisa y devuelve false */
+  const exige = (roles, que) => {
+    if (D.puede(...roles)) return true;
+    toast("Su rol no tiene este permiso", que + " lo hace " + roles.map((r) => r.toLowerCase()).join(" o ") + ". Usted entró como " + D.sesion.cargo.toLowerCase() + " (" + D.sesion.corto + "); puede cambiar de usuario en el encabezado.", "cr");
+    return false;
+  };
   const tiendas = D.locales.filter((l) => l.tipo === "tienda");
 
   /* estilos propios de estas pantallas (solo clases sx-*, no tocan el resto) */
@@ -318,12 +328,19 @@
           return false;
         }
         o.set(v.nv);
+        /* se anota lo que de verdad quedó; si el valor no se aceptó, no hay cambio que anotar */
+        const quedo = o.get ? String(o.get()) : v.nv;
+        if (quedo === String(o.v)) {
+          toast("El valor no se aceptó", "«" + v.nv + "» no es válido para " + o.title.toLowerCase() + "; sigue en " + o.v + ".", "cr");
+          return false;
+        }
+        v.nv = quedo;
         anotar(
           "Cambió " + o.title.toLowerCase(),
           v.mot,
           o.sev || "Media",
           String(o.v),
-          v.nv,
+          quedo,
         );
         return {
           t: "Cambio guardado",
@@ -967,7 +984,7 @@
               ic: "lock",
               fn: () => {
                 u.estado = "Inactivado";
-                u.inact = "Inactivado por " + YO;
+                u.inact = "Inactivado por " + yo();
                 anotar(
                   "Inactivó usuario",
                   u.login,
@@ -1166,7 +1183,7 @@
       b.addEventListener("click", () => {
         const s = SOL.find((x) => x.id === b.dataset.sok);
         s.estado = "Aprobada";
-        s.por = YO;
+        s.por = yo();
         anotar(
           "Aplicó solicitud de acceso",
           s.id + " · " + s.que + " · pidió " + s.pide,
@@ -1200,7 +1217,7 @@
           ok: "Rechazar",
           guardar(x) {
             s.estado = "Rechazada";
-            s.por = YO;
+            s.por = yo();
             s.rech = x.m;
             anotar(
               "Rechazó solicitud de acceso",
@@ -1267,7 +1284,7 @@
           SOL.unshift({
             id,
             f: new Date(D.HOY),
-            pide: YO,
+            pide: yo(),
             cargo: "TI",
             para: x.para,
             que: x.que + " · " + x.rol + " en " + x.loc,
@@ -2163,7 +2180,7 @@
                 desc: x.desc,
                 alc: x.alc,
                 de: r.nom,
-                por: YO,
+                por: yo(),
                 f: new Date(D.HOY),
                 tfa: r.tfa,
               });
@@ -2287,7 +2304,7 @@
                 desc: x.desc || "—",
                 alc: x.alc,
                 de: x.base ? rolById(x.base).nom : null,
-                por: YO,
+                por: yo(),
                 f: new Date(D.HOY),
               });
               if (x.base) {
@@ -2386,6 +2403,25 @@
       a: "Ajustar inventario",
       b: "Contar ese mismo inventario",
       d: "El conteo lo hace alguien distinto de quien ajusta.",
+      on: true,
+    },
+    {
+      a: "Crear un proveedor o cambiar su cuenta bancaria",
+      b: "Pagarle",
+      d: "Quien da de alta la cuenta del proveedor no arma ni autoriza su pago: es el fraude más común en cuentas por pagar.",
+      on: true,
+      lock: true,
+    },
+    {
+      a: "Registrar asientos",
+      b: "Aprobar el cierre del período",
+      d: "Contabilidad registra; el cierre lo aprueba otra persona.",
+      on: true,
+    },
+    {
+      a: "Anular una factura o aplicar una nota de crédito",
+      b: "Cobrar esa misma venta",
+      d: "La caja que cobró no anula ni devuelve su propia venta sin aprobación.",
       on: true,
     },
   ];
@@ -2491,21 +2527,28 @@
     $$("[data-sod]", v).forEach((b) =>
       b.addEventListener("click", () => {
         const x = SOD[+b.dataset.sod];
-        x.on = !x.on;
-        anotar(
-          x.on
-            ? "Activó regla de segregación"
-            : "Desactivó regla de segregación",
-          x.a + " ↔ " + x.b,
-          "Alta",
-        );
-        toast(
-          x.on ? "Regla activa" : "Regla desactivada",
-          x.on
-            ? "Se revisa en cada asignación de roles."
-            : "Gerencia recibe el aviso de este cambio.",
-          x.on ? "ok" : "wa",
-        );
+        if (x.lock) return toast("Esta regla no se desactiva", "Es un control básico del sistema.", "in");
+        if (x.on) {
+          /* apagar un control lo decide gerencia, con motivo; queda en la bitácora */
+          if (!exige(["Gerencia"], "Desactivar una regla de segregación")) return;
+          return ficha({
+            title: "Desactivar regla de segregación",
+            sub: x.a + " ↔ " + x.b,
+            campos: [{ id: "mot", l: "Motivo", tipo: "area", rows: 3, req: true, ph: "Por qué se permite que una misma persona tenga las dos funciones" }],
+            nota: "Mientras esté desactivada, el sistema deja de avisar al asignar roles. Contabilidad recibe el aviso.",
+            notaIc: "shield",
+            ok: "Desactivar",
+            guardar(v2) {
+              if (v2.mot.length < 10) { toast("Escriba un motivo que se entienda", "Queda en la bitácora.", "cr"); return false; }
+              x.on = false;
+              anotar("Desactivó regla de segregación", x.a + " ↔ " + x.b + " · motivo: " + v2.mot, "Alta", "Activa", "Desactivada");
+              return { t: "Regla desactivada", s: "Contabilidad recibió el aviso.", k: "wa" };
+            },
+          });
+        }
+        x.on = true;
+        anotar("Activó regla de segregación", x.a + " ↔ " + x.b, "Alta", "Desactivada", "Activa");
+        toast("Regla activa", "Se revisa en cada asignación de roles.", "ok");
         A.refresh();
       }),
     );
@@ -3421,11 +3464,7 @@
       ip: "servidor",
     },
   ];
-  const autorizoDe = (b) =>
-    b.autorizo ||
-    (/límite de crédito|margen mínimo|Anuló|archivo de pago/.test(b.accion)
-      ? "Adrián Vindas"
-      : "");
+  const autorizoDe = (b) => b.autorizo || "";
   let btF = "Todas",
     btQ = "";
   function bitacoraTab(el) {
@@ -4880,7 +4919,7 @@
             cat: "Categoría",
             antes: o.nom,
             despues: v.nom,
-            por: YO,
+            por: yo(),
             ej: "Lo emitido antes de hoy sigue diciendo «" + o.nom + "»",
           });
           anotar(
@@ -5088,7 +5127,7 @@
             cat: "Marca",
             antes: nombre("m:" + m, m),
             despues: v.nom,
-            por: YO,
+            por: yo(),
             ej: "Lo emitido antes de hoy conserva el nombre anterior",
           });
           NOMBRES["m:" + m] = v.nom;
@@ -5249,7 +5288,7 @@
             cat: "Departamento",
             antes: act,
             despues: v.nom,
-            por: YO,
+            por: yo(),
             ej: "Las planillas anteriores siguen diciendo «" + act + "»",
           });
         }
@@ -6323,7 +6362,7 @@
               cat: "Motivo de " + g.g.toLowerCase(),
               antes: act,
               despues: x.m,
-              por: YO,
+              por: yo(),
               ej: "Lo aplicado antes de hoy conserva «" + act + "»",
             });
             anotar("Renombró motivo", act + " → " + x.m, "Media", act, x.m);
@@ -6855,6 +6894,73 @@
       ],
     },
     {
+      /* los parámetros contables mandan de verdad: la tolerancia la usa el cierre
+         de caja, el umbral los ajustes de costo, la comisión los lotes del datáfono */
+      g: "Contabilidad e impuestos",
+      ic: "file",
+      items: [
+        {
+          t: "Método de valuación del inventario",
+          d: "Cómo se calcula el costo de lo que se vende. UEPS no lo admiten las NIIF.",
+          get: () => PC.valuacion,
+          set: (v) => { PC.valuacion = v; },
+          opts: ["Costo promedio ponderado", "PEPS · primero en entrar, primero en salir"],
+          ult: [dia(400), "Sonia Calderón"],
+        },
+        {
+          t: "Alcance del costo promedio",
+          d: "Si cada bodega lleva su propio costo o hay uno solo para la empresa.",
+          get: () => PC.alcance,
+          set: (v) => { PC.alcance = v; },
+          opts: ["Uno para toda la empresa", "Uno por bodega"],
+          ult: [dia(400), "Sonia Calderón"],
+        },
+        {
+          t: "Período fiscal",
+          d: "Impuesto sobre las utilidades: el ordinario es de enero a diciembre.",
+          v: "1 de enero al 31 de diciembre",
+          opts: ["1 de enero al 31 de diciembre"],
+          ult: [dia(400), "Sonia Calderón"],
+        },
+        {
+          t: "Registrar hasta",
+          d: "Lo que tenga fecha de un período cerrado se rechaza en todos los módulos.",
+          get: () => (D.cerradoHasta ? "Cerrado hasta el " + fecha(D.cerradoHasta) + " " + D.cerradoHasta.getFullYear() : "Sin períodos cerrados"),
+          v: "",
+          ult: [dia(10), "Sonia Calderón"],
+          soloLectura: "Se cierra desde Contabilidad › Cierres",
+        },
+        {
+          t: "Tolerancia de diferencias de caja",
+          d: "Hasta este monto el faltante va a «Diferencias de caja»; más, se le carga al cajero.",
+          get: () => "₡" + grp(AU().POLITICA.toleranciaCaja),
+          set: (v) => { const n = parseInt(String(v).replace(/\D/g, ""), 10); if (n >= 0 && n <= 20000) AU().POLITICA.toleranciaCaja = n; },
+          ult: [dia(90), "Sonia Calderón"],
+        },
+        {
+          t: "Ajuste de costo que se registra solo",
+          d: "Por venta sin existencia; por encima de este monto lo revisa contabilidad.",
+          get: () => "₡" + grp(AU().POLITICA.umbralCosto),
+          set: (v) => { const n = parseInt(String(v).replace(/\D/g, ""), 10); if (n > 0) AU().POLITICA.umbralCosto = n; },
+          ult: [dia(90), "Sonia Calderón"],
+        },
+        {
+          t: "Comisión del datáfono",
+          d: "La del contrato con el adquirente; se registra como gasto financiero al liquidar cada lote.",
+          get: () => dec(AU().POLITICA.comisionDatafono, 2) + " %",
+          set: (v) => { const n = parseFloat(String(v).replace(",", ".")); if (n > 0 && n < 10) AU().POLITICA.comisionDatafono = n; },
+          ult: [dia(120), "Sonia Calderón"],
+        },
+        {
+          t: "Cuentas del diferencial cambiario",
+          d: "La revaluación de los saldos en dólares al cierre del mes.",
+          v: "4-02-03-001 ganado · 6-01-06-003 perdido",
+          opts: ["4-02-03-001 ganado · 6-01-06-003 perdido"],
+          ult: [dia(400), "Sonia Calderón"],
+        },
+      ],
+    },
+    {
       g: "Consultas y reportes",
       ic: "chart",
       items: [
@@ -6875,6 +6981,9 @@
     },
   ];
   const valP = (x) => (x.get ? x.get() : x.v);
+  /* parámetros contables propios de Configuración y la política de Contabilidad */
+  const PC = { valuacion: "Costo promedio ponderado", alcance: "Uno para toda la empresa" };
+  const AU = () => w.AUTO || { POLITICA: { toleranciaCaja: 2000, umbralCosto: 25000, comisionDatafono: 2.75 } };
   let parQ = "";
   A.screen("sis-parametros", {
     title: "Parámetros generales",
@@ -6937,14 +7046,17 @@
         b.addEventListener("click", () => {
           const [g, i] = b.dataset.par.split("|").map(Number),
             x = PARAMS[g].items[i];
+          if (x.soloLectura) return toast(x.t, x.soloLectura + ".", "in");
+          if (PARAMS[g].g === "Contabilidad e impuestos" && !exige(["Contabilidad", "Gerencia"], "Cambiar un parámetro contable")) return;
           cambiarValor({
             title: x.t,
             v: valP(x),
+            get: () => valP(x),
             opts: x.opts,
             set: (nv) => {
               if (x.set) x.set(nv);
               else x.v = nv;
-              x.ult = [new Date(D.HOY), YO];
+              x.ult = [new Date(D.HOY), yo()];
             },
           });
         }),
@@ -6967,7 +7079,7 @@
       m: "Efectivo en dólares",
       ic: "cash",
       cod: "01 · Efectivo",
-      pide: "Monto en dólares; convierte al tipo de cambio de venta del día",
+      pide: "Monto en dólares; se recibe al tipo de cambio de compra del día y el vuelto se da en colones",
       pos: "Dólares",
       locs: "Todos",
       on: true,
@@ -7208,102 +7320,63 @@
       }),
     );
   }
-  const TC = {
-    compra: 503.12,
-    venta: 509.4,
-    hora: "08:00",
-    fuente: "BCCR · automático",
-    hist: [
-      [1, 502.9, 508.9],
-      [2, 503.4, 509.6],
-      [3, 503.8, 510.1],
-      [4, 504.1, 510.3],
-      [5, 503.6, 509.8],
-      [6, 503.0, 509.2],
-    ],
-  };
+  /* el tipo de cambio vive en data.js, uno por fecha (D.tipoCambio) */
+  const tcHoy = () => D.tcDe(D.ahora());
   function monedasTab(el) {
+    const tc = tcHoy();
     el.innerHTML = `<div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);align-items:start">
       <div style="display:flex;flex-direction:column;gap:14px">
       ${card({ title: "Monedas", body: prefRow("Colón costarricense (₡)", "Moneda base: contabilidad, inventario y reportes.", tag("Base", "acc")) + prefRow("Dólar estadounidense ($)", "Se cobra en caja y se compra a proveedores que facturan en dólares.", tag("Activa", "ok")) })}
       ${card({
         title: "Tipo de cambio de hoy",
-        hint: TC.fuente,
+        hint: tc.fuente,
         actions: `<button class="btn sm" id="tcMan">Registrar a mano</button>`,
-        body: `<div class="ficha" style="margin:-12px -17px 0">${fichaCell("Compra", "₡" + dec(TC.compra, 2))}${fichaCell("Venta", "₡" + dec(TC.venta, 2))}${fichaCell("Actualizado", TC.hora)}</div>
-        <div style="margin-top:12px">${nota("Se trae del Banco Central todos los días a las 8:00. La caja usa el de <b>venta</b> para cobrar en dólares; contabilidad revalúa los saldos en dólares al cierre del mes.", "bank")}</div>`,
+        body: `<div class="ficha" style="margin:-12px -17px 0">${fichaCell("Compra", "₡" + dec(tc.compra, 2))}${fichaCell("Venta", "₡" + dec(tc.venta, 2))}${fichaCell("Vigente desde", fh(tc.fecha))}</div>
+        <div style="margin-top:12px">${nota("Se trae del Banco Central todos los días a las 8:00 y queda guardado por fecha. La caja <b>recibe</b> dólares al tipo de <b>compra</b> (la ferretería le compra los dólares al cliente); los pagos a proveedores en dólares usan el de venta. Contabilidad revalúa los saldos en dólares al cierre del mes con el de la fecha de cierre, contra «Diferencial cambiario».", "bank")}</div>`,
       })}
       </div>
       ${card({
-        title: "Últimos días",
-        hint: "Banco Central de Costa Rica",
+        title: "Historial",
+        hint: "uno por fecha · Banco Central de Costa Rica",
         body: table({
           cols: [
-            { t: "Fecha", cls: "mono", fmt: (r) => fecha(dia(r[0])) },
-            {
-              t: "Compra",
-              r: true,
-              cls: "mono",
-              fmt: (r) => "₡" + dec(r[1], 2),
-            },
-            {
-              t: "Venta",
-              r: true,
-              cls: "mono",
-              fmt: (r) => "₡" + dec(r[2], 2),
-            },
-            { t: "Origen", fmt: () => tag("Automático", "mu") },
+            { t: "Vigente desde", cls: "mono", fmt: (r) => fh(r.fecha) },
+            { t: "Compra", r: true, cls: "mono", fmt: (r) => "₡" + dec(r.compra, 2) },
+            { t: "Venta", r: true, cls: "mono", fmt: (r) => "₡" + dec(r.venta, 2) },
+            { t: "Origen", fmt: (r) => (/Manual/.test(r.fuente) ? tag("Manual · " + r.usuario, "wa") : tag("Automático", "mu")) },
           ],
-          rows: TC.hist,
+          rows: D.tipoCambio.slice().reverse(),
         }),
       })}
     </div>`;
   }
   function monedasWire(v) {
-    $("#tcMan", v).addEventListener("click", () =>
+    $("#tcMan", v).addEventListener("click", () => {
+      if (!exige(["Contabilidad", "Gerencia"], "Registrar el tipo de cambio a mano")) return;
+      const tc = tcHoy();
       ficha({
         title: "Registrar tipo de cambio a mano",
-        sub: "Solo si el Banco Central no respondió; queda marcado como manual",
+        sub: "Solo si el Banco Central no respondió; queda marcado como manual y con su vigencia",
         campos: [
-          {
-            id: "c",
-            l: "Compra",
-            tipo: "num",
-            v: dec(TC.compra, 2),
-            corto: true,
-            req: true,
-          },
-          {
-            id: "vv",
-            l: "Venta",
-            tipo: "num",
-            v: dec(TC.venta, 2),
-            corto: true,
-            req: true,
-          },
+          { id: "c", l: "Compra", tipo: "num", v: dec(tc.compra, 2), corto: true, req: true },
+          { id: "vv", l: "Venta", tipo: "num", v: dec(tc.venta, 2), corto: true, req: true },
           { id: "m", l: "Motivo", tipo: "area", rows: 2, req: true },
         ],
-        nota: "Es un permiso sensible: lo tienen contabilidad y gerencia.",
+        nota: "Es un permiso sensible: lo tienen contabilidad y gerencia. Rige desde ahora; lo facturado antes conserva su tipo de cambio.",
         notaIc: "lock",
         guardar(x) {
-          const a = TC.venta;
-          TC.compra = parseFloat(x.c.replace(",", ".")) || TC.compra;
-          TC.venta = parseFloat(x.vv.replace(",", ".")) || TC.venta;
-          TC.fuente = "Manual · " + YO;
-          anotar(
-            "Registró tipo de cambio a mano",
-            x.m,
-            "Alta",
-            "₡" + dec(a, 2),
-            "₡" + dec(TC.venta, 2),
-          );
-          return {
-            t: "Tipo de cambio registrado",
-            s: "Rige hasta la próxima actualización del Banco Central.",
-          };
+          const compra = parseFloat(String(x.c).replace(/\s/g, "").replace(",", "."));
+          const venta = parseFloat(String(x.vv).replace(/\s/g, "").replace(",", "."));
+          if (!(compra > 0) || !(venta > 0)) { toast("Número no válido", "Escriba la compra y la venta con dos decimales, por ejemplo 503,12.", "cr"); return false; }
+          if (compra >= venta) { toast("La compra tiene que ser menor que la venta", "Compra ₡" + dec(compra, 2) + " · venta ₡" + dec(venta, 2) + ".", "cr"); return false; }
+          const vari = Math.abs(venta - tc.venta) / tc.venta * 100;
+          if (vari > 2) { toast("Variación fuera de lo normal", "La venta cambia " + dec(vari, 1) + " % contra el vigente (₡" + dec(tc.venta, 2) + "). Más de 2 % en un día casi siempre es un error de digitación.", "cr"); return false; }
+          D.tipoCambio.push({ fecha: D.ahora(), compra, venta, fuente: "Manual · " + D.sesion.corto, usuario: D.sesion.corto, motivo: x.m });
+          anotar("Registró tipo de cambio a mano", x.m, "Alta", "₡" + dec(tc.compra, 2) + " / ₡" + dec(tc.venta, 2), "₡" + dec(compra, 2) + " / ₡" + dec(venta, 2));
+          return { t: "Tipo de cambio registrado", s: "Rige desde ahora hasta la próxima actualización del Banco Central." };
         },
-      }),
-    );
+      });
+    });
   }
   const CUENTAS = [
     {
@@ -7579,7 +7652,7 @@
       <div style="border-top:1px dashed #9aa1b1;margin:8px 0"></div>
       <div class="sx-dl" style="border:0"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>
       ${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl" style="border:0"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}
-      <div class="sx-dl" style="border:0"><b>TOTAL</b><b>${c(d.total)}</b></div>${(d.pagos || []).map((x) => `<div class="sx-dl" style="border:0"><span>${esc(x.medio)}</span><span>${c(x.monto)}</span></div>`).join("")}
+      <div class="sx-dl" style="border:0"><b>TOTAL</b><b>${c(d.total)}</b></div>${(d.pagos || []).map((x) => `<div class="sx-dl" style="border:0"><span>${x.vuelto ? "Vuelto" : esc(x.medio)}${x.usd ? " US$ " + dec(x.usd, 2) + " × " + dec(x.tc, 2) : ""}</span><span>${x.vuelto ? c(-x.monto) : c(x.monto)}</span></div>`).join("")}
       <div style="margin-top:8px;word-break:break-all" class="sx-dm">${bloqueFiscal(d)}</div>
       <div style="text-align:center;margin-top:8px" class="sx-dm">${esc(PL_CFG.pie)}<br>Consulte su comprobante: consulta.santarosa.cr/c/8F3K2Q<br>(no abre el sistema · vence en 30 días)</div></div>`;
     }
@@ -8047,7 +8120,7 @@
       $("#alPrueba", v).addEventListener("click", () =>
         toast(
           "Alerta de prueba",
-          "Le llegó a " + YO + " en el sistema y al correo.",
+          "Le llegó a " + yo() + " en el sistema y al correo.",
           "in",
         ),
       );
@@ -8161,7 +8234,7 @@
       est: "ok",
       estT: "Actualizado hoy 8:00",
       meta: () =>
-        "Compra ₡" + dec(TC.compra, 2) + " · venta ₡" + dec(TC.venta, 2),
+        "Compra ₡" + dec(tcHoy().compra, 2) + " · venta ₡" + dec(tcHoy().venta, 2),
       ir: "sis-pagos|monedas",
       irT: "Tipo de cambio",
       cfg: [
