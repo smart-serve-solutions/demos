@@ -13,7 +13,7 @@
   const S_TERM = () => (w.S && w.S.term) || 1;
   /* n días antes del «hoy» del demo, a la hora que se indique */
   const dia = (n, h, m) => { const d = new Date(HOY); d.setDate(d.getDate() - n); if (h != null) d.setHours(h, m || 0, 0, 0); return d; };
-  const ahora = () => { const d = new Date(HOY), n = new Date(); d.setHours(n.getHours(), n.getMinutes(), n.getSeconds(), 0); return d; };
+  const ahora = D.ahora;
   const byCod = cod => D.articulos.find(a => a.cod === cod);
   const esHoy = d => d && d.toDateString() === HOY.toDateString();
   const diasEntre = (a, b) => Math.round((b - a) / 86400000);
@@ -415,11 +415,16 @@
     const d = o.doc;
     const lineas = o.lineas.filter(l => l.cant > 0).map(l => ({ artId: l.artId, cant: l.cant, precio: l.precio, desc: l.desc || 0, nota: l.nota }));
     const t = D.totalizar(lineas);
-    const cons = D.consecutivo("NC", o.locId || d.locId, o.term || d.term);
+    /* la NC sale de la caja que la aplica; si es otro local, de su primera terminal */
+    const locId = o.locId || d.locId;
+    const term = o.term || (locId === d.locId ? d.term : 1);
+    const cons = D.consecutivo("NC", locId, term);
+    const fecha = ahora(), situacion = o.offline ? "3" : "1";
     const nc = {
-      id: "NC-" + cons.slice(-6), tipo: "NC", cons, clave: D.clave(cons), fecha: ahora(), locId: o.locId || d.locId, term: o.term || d.term,
+      id: "NC-" + cons, tipo: "NC", cons, clave: D.clave(cons, fecha, situacion), situacion, fecha, locId, term,
       clienteId: d.clienteId, vendedor: d.vendedor, lineas, ...t, condicion: "Contado", medio: "Devolución",
-      hacienda: o.offline ? "En cola" : "Aceptado", costo: D.costoLineas(lineas), saldo: 0, refiere: d.cons,
+      hacienda: o.offline ? "En cola" : "Aceptado", costo: D.costoLineas(lineas), saldo: 0,
+      refiere: d.cons, refiereClave: d.clave, refiereTipo: d.tipo, refiereFecha: d.fecha,
       concepto: o.concepto, reintegro: o.reintegro, destino: o.destino, firma: !!o.firma, margen: 0
     };
     D.documentos.unshift(nc);
@@ -433,7 +438,7 @@
     return nc;
   }
   function aprobarBoleta(b, quien) {
-    const nc = emitirNC({ doc: b.doc, lineas: b.lineas, concepto: b.concepto, destino: b.destino, reintegro: b.reintegro, firma: b.firma, locId: b.locId, usuario: quien });
+    const nc = emitirNC({ doc: b.doc, lineas: b.lineas, concepto: b.concepto, destino: b.destino, reintegro: b.reintegro, firma: b.firma, locId: b.locId, term: b.term, usuario: quien });
     b.estado = "Aprobada"; b.nc = nc.cons; b.aprobo = quien;
     return nc;
   }
@@ -466,12 +471,6 @@
       sobregiros: i === 0 ? [{ fecha: dia(21), monto: 380000, autorizo: "Adrián Vindas", motivo: "Colado de losa; el pago entra el viernes" }] : []
     };
   });
-  /* el cliente de la demostración en la caja está al día: se cobraron sus facturas más atrasadas */
-  (function () {
-    const c = D.cliById.C1; if (!c) return;
-    D.documentos.filter(d => d.clienteId === "C1" && d.saldo > 0 && diasEntre(d.fecha, HOY) > c.plazo + 20)
-      .forEach(d => { c.saldo -= d.saldo; d.saldo = 0; });
-  })();
   const vencidas = cliId => { const c = D.cliById[cliId]; return D.documentos.filter(d => d.clienteId === cliId && d.saldo > 0 && diasEntre(d.fecha, HOY) > (c ? c.plazo : 30)); };
   function bloqueo(cliId) {
     const c = D.cliById[cliId]; if (!c || !c.limite) return null;

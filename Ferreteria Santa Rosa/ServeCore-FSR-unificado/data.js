@@ -16,6 +16,10 @@
 
   const HOY = new Date(2026, 8, 13, 11, 40); // sábado 13 de setiembre de 2026
   const dayAgo = n => new Date(HOY.getTime() - n * 86400000);
+  /* reloj de la demo: arranca en HOY al abrir la página y avanza con el
+     tiempo real, así lo que se emite en la sesión queda después del histórico */
+  const CARGA = Date.now();
+  const ahora = () => new Date(HOY.getTime() + (Date.now() - CARGA));
 
   /* ── locales ────────────────────────────────────────────────── */
   const locales = [
@@ -280,17 +284,51 @@
   const ctaByCod = {}; cuentas.forEach(c => ctaByCod[c.cod] = c);
 
   /* ── secuencias y documentos ────────────────────────────────── */
-  const seq = { FE: 34800, TE: 12400, NC: 2110, ND: 340, REP: 8800, PROF: 5600, PED: 2400, OC: 4400, TR: 900, AJ: 300, AS: 12000 };
+  /* el emisor vive aquí porque data.js carga primero; Facturación lo lee */
+  const emisor = { nombre: "Ferretería Santa Rosa S.A.", comercial: "Ferretería Santa Rosa", cedula: "3-101-118844", tipoCed: "Jurídica" };
+
+  const seq = { PROF: 5600, PED: 2400, OC: 4400, TR: 900, AJ: 300, AS: 12000 };
   const pad = (n, l) => String(n).padStart(l, "0");
-  function consecutivo(tipo, locId, term) {
-    const l = locales.find(x => x.id === locId) || locales[0];
-    const codTipo = { FE: "01", ND: "02", NC: "03", TE: "04", REP: "05" }[tipo] || "01";
-    seq[tipo] = (seq[tipo] || 1) + 1;
-    return `${l.cod}-${pad(term || 1, 5)}-${codTipo}-${pad(seq[tipo], 10)}`;
+
+  /* numeración fiscal: Hacienda exige una serie correlativa por sucursal,
+     terminal y tipo de comprobante; cada caja arrastra su propia historia */
+  const TIPO_COD = { FE: "01", ND: "02", NC: "03", TE: "04", FEC: "08", REP: "10" };
+  const SERIE_BASE = { FE: 34800, TE: 12400, NC: 2110, ND: 340, FEC: 120, REP: 4180 };
+  const series = {}, serieInicio = {};
+  /* ¿puede esta terminal emitir comprobantes? solo tiendas, y dentro de sus cajas */
+  const puedeEmitir = (locId, term) => {
+    const l = locales.find(x => x.id === locId);
+    return !!l && l.tipo === "tienda" && (term || 1) >= 1 && (term || 1) <= l.terminales;
+  };
+  function serieKey(tipo, locId, term) {
+    if (!TIPO_COD[tipo]) throw new Error("Tipo de comprobante sin código de Hacienda: " + tipo);
+    if (!puedeEmitir(locId, term)) throw new Error(`La terminal ${term || 1} de ${locId} no emite comprobantes`);
+    const k = `${locId}|${term || 1}|${tipo}`;
+    if (!(k in series)) {
+      const i = Math.max(0, locales.findIndex(x => x.id === locId));
+      series[k] = serieInicio[k] = Math.round(SERIE_BASE[tipo] * (1 - i * 0.09) / (term || 1));
+    }
+    return k;
   }
-  function clave(cons) {
-    const d = HOY;
-    return `506${pad(d.getDate(), 2)}${pad(d.getMonth() + 1, 2)}${String(d.getFullYear()).slice(2)}3102946797${cons.replace(/-/g, "")}1${pad(ri(10000000, 99999999), 8)}`;
+  /* números consumidos que no llegaron a ser comprobante: pista de auditoría del salto */
+  const sinDocumento = [];
+  /* números ya asignados de una serie, desde que la demo la abrió */
+  const rangoSerie = (tipo, locId, term) => { const k = serieKey(tipo, locId, term); return { desde: serieInicio[k] + 1, hasta: series[k] }; };
+  const ultimoConsec = (tipo, locId, term) => series[serieKey(tipo, locId, term)];
+  function armarConsec(tipo, locId, term, n) {
+    const l = locales.find(x => x.id === locId) || locales[0];
+    return `${l.cod}-${pad(term || 1, 5)}-${TIPO_COD[tipo]}-${pad(n, 10)}`;
+  }
+  const proximoConsec = (tipo, locId, term) => armarConsec(tipo, locId, term, ultimoConsec(tipo, locId, term) + 1);
+  function consecutivo(tipo, locId, term) {
+    const k = serieKey(tipo, locId, term);
+    return armarConsec(tipo, locId, term, ++series[k]);
+  }
+  /* clave de 50 dígitos: país(3) fecha(6) cédula(12) consecutivo(20) situación(1) seguridad(8) */
+  function clave(cons, fecha, situacion) {
+    const d = fecha || HOY;
+    const ced = emisor.cedula.replace(/\D/g, "").padStart(12, "0");
+    return `506${pad(d.getDate(), 2)}${pad(d.getMonth() + 1, 2)}${String(d.getFullYear()).slice(2)}${ced}${cons.replace(/-/g, "")}${situacion || "1"}${pad(ri(10000000, 99999999), 8)}`;
   }
 
   const IVA = 0.13;
@@ -347,9 +385,10 @@
     const t = totalizar(opts.lineas);
     const tipo = opts.tipo || "FE";
     const cons = consecutivo(tipo, opts.locId, opts.term || 1);
+    const fecha = opts.fecha || HOY, situacion = opts.situacion || "1";
     const doc = {
-      id: tipo + "-" + cons.slice(-6), tipo, cons, clave: clave(cons),
-      fecha: opts.fecha || HOY, locId: opts.locId, term: opts.term || 1,
+      id: tipo + "-" + cons, tipo, cons, clave: clave(cons, fecha, situacion), situacion,
+      fecha, locId: opts.locId, term: opts.term || 1,
       clienteId: opts.clienteId, vendedor: opts.vendedor || pick(VENDEDORES),
       lineas: opts.lineas, ...t,
       condicion: opts.condicion || "Contado", medio: opts.medio || "Efectivo",
@@ -382,6 +421,9 @@
      la antigüedad de saldos tenga los cinco tramos con algo adentro */
   const artVenta = articulos.filter(a => a.tipo === "Producto" && a.precio < 30000);
   const conCredito = clientes.filter(c => c.limite > 0);
+  /* las ventas de ejemplo se arman primero y se emiten en orden de fecha,
+     para que cada serie quede correlativa también en el tiempo */
+  const porEmitir = [];
   for (let i = 0; i < 46; i++) {
     const cli = pick(conCredito);
     const dias = ri(12, 165);
@@ -394,14 +436,19 @@
     }
     if (!lineas.length) continue;
     const loc = pick(tiendas);
-    const doc = emitir({
-      tipo: "FE", locId: loc.id, term: ri(1, loc.terminales), clienteId: cli.id,
-      fecha: new Date(f.getFullYear(), f.getMonth(), f.getDate(), ri(7, 17), ri(0, 59)),
-      lineas, condicion: "Crédito", medio: "Crédito"
-    });
     /* la mayoría ya se cobró; lo que queda es la cartera que se gestiona */
-    if (chance(0.52)) { cli.saldo -= doc.saldo; doc.saldo = 0; }
-    else if (chance(0.35)) { const abono = Math.round(doc.saldo * 0.6); doc.saldo -= abono; cli.saldo -= abono; }
+    const cobro = chance(0.52) ? 1 : chance(0.35) ? 0.6 : 0;
+    porEmitir.push({
+      opts: {
+        tipo: "FE", locId: loc.id, term: ri(1, loc.terminales), clienteId: cli.id,
+        fecha: new Date(f.getFullYear(), f.getMonth(), f.getDate(), ri(7, 17), ri(0, 59)),
+        lineas, condicion: "Crédito", medio: "Crédito"
+      },
+      despues: doc => {
+        const abono = cobro === 1 ? doc.saldo : Math.round(doc.saldo * cobro);
+        doc.saldo -= abono; cli.saldo -= abono;
+      }
+    });
   }
 
   /* histórico: siete días de operación en los siete locales */
@@ -422,19 +469,48 @@
         if (!lineas.length) continue;
         const credito = chance(0.28);
         const cli = credito ? pick(clientes.filter(c => c.limite > 0)) : (chance(0.4) ? pick(clientes) : null);
-        emitir({
+        /* hoy solo hay ventas hasta la hora de la demo (11:40) */
+        const h = d === 0 ? ri(7, 11) : ri(7, 17), m = d === 0 && h === 11 ? ri(0, 39) : ri(0, 59);
+        porEmitir.push({ opts: {
           tipo: chance(0.14) ? "TE" : "FE",
           locId: loc.id, term: ri(1, loc.terminales),
           clienteId: cli ? cli.id : null,
-          fecha: new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), ri(7, 17), ri(0, 59)),
+          fecha: new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), h, m),
           lineas,
           condicion: credito ? "Crédito" : "Contado",
           medio: credito ? "Crédito" : pick(MEDIOS),
-          hacienda: d === 0 && chance(0.04) ? "En cola" : "Aceptado"
-        });
+          hacienda: d === 0 && chance(0.04) ? "En cola" : "Aceptado",
+          /* caída de enlace: de 9:00 a 11:00 los locales emitieron contra su nodo;
+             aparte, algún documento salió en contingencia porque Hacienda no respondió */
+          situacion: caida && h >= 9 && h < 11 ? "3" : chance(0.03) ? "2" : "1"
+        } });
       }
     });
   }
+  /* un salto real, que es justamente lo que Facturación tiene que poder
+     señalar: tres números de tiquete de Turrialba caja 2 que se asignaron,
+     la firma falló y nunca llegaron a Hacienda */
+  let saltoHecho = false;
+  porEmitir.sort((a, b) => a.opts.fecha - b.opts.fecha).forEach(p => {
+    const o = p.opts;
+    if (!saltoHecho && o.tipo === "TE" && o.locId === "L2" && o.term === 2 && o.fecha >= dayAgo(3)) {
+      saltoHecho = true;
+      for (let i = 0; i < 3; i++) sinDocumento.push({
+        cons: consecutivo("TE", "L2", 2), tipo: "TE", locId: "L2", term: 2,
+        fecha: new Date(o.fecha.getTime() - (3 - i) * 60000), estado: "No transmitido",
+        motivo: "Se asignó el número y falló la firma; el tiquete se reemitió con el número siguiente"
+      });
+    }
+    const doc = emitir(o);
+    if (p.despues) p.despues(doc);
+  });
+  /* el cliente de la demostración en la caja está al día: se cobraron sus
+     facturas más atrasadas (antes de Facturación, para que tengan su REP) */
+  (function () {
+    const c = cliById.C1; if (!c) return;
+    documentos.filter(d => d.clienteId === "C1" && d.saldo > 0 && Math.round((HOY - d.fecha) / 86400000) > c.plazo + 20)
+      .forEach(d => { c.saldo -= d.saldo; d.saldo = 0; });
+  })();
   documentos.sort((a, b) => b.fecha - a.fecha);
 
   /* casos que la demo necesita mostrar */
@@ -458,24 +534,31 @@
   forz("FER-02201", "L5", 0, 0, 12);
 
 
-  /* notas de crédito */
+  /* notas de crédito: siempre posteriores a su factura, numeradas en orden */
+  const ncBases = [];
   for (let i = 0; i < 6; i++) {
     const base = documentos[ri(3, 40)];
-    if (!base || base.tipo === "NC") continue;
+    if (!base || base.tipo === "NC" || ncBases.some(x => x.base === base)) continue;
+    const f = dayAgo(ri(0, 5));
+    const despues = Math.min(base.fecha.getTime() + 3600000, (base.fecha.getTime() + HOY.getTime()) / 2);
+    ncBases.push({ base, fecha: f <= base.fecha ? new Date(despues) : f });
+  }
+  ncBases.sort((a, b) => a.fecha - b.fecha).forEach(({ base, fecha }) => {
     const l = base.lineas[0];
     const lineas = [{ artId: l.artId, cant: Math.max(1, Math.round(l.cant / 2)), precio: l.precio, desc: 0 }];
     const t = totalizar(lineas);
     const cons = consecutivo("NC", base.locId, base.term);
     documentos.push({
-      id: "NC-" + cons.slice(-6), tipo: "NC", cons, clave: clave(cons), fecha: dayAgo(ri(0, 5)),
+      id: "NC-" + cons, tipo: "NC", cons, clave: clave(cons, fecha), situacion: "1", fecha,
       locId: base.locId, term: base.term, clienteId: base.clienteId, vendedor: base.vendedor,
       lineas, ...t, condicion: "Contado", medio: "Devolución", hacienda: "Aceptado",
-      costo: costoLineas(lineas), saldo: 0, refiere: base.cons,
+      costo: costoLineas(lineas), saldo: 0,
+      refiere: base.cons, refiereClave: base.clave, refiereTipo: base.tipo, refiereFecha: base.fecha,
       concepto: pick(["Devolución de mercadería", "Descuento posterior", "Garantía", "Error de facturación"]),
       margen: 0
     });
-    lineas.forEach(x => mover(x.artId, base.locId, x.cant, "Devolución", cons, HOY));
-  }
+    lineas.forEach(x => mover(x.artId, base.locId, x.cant, "Devolución", cons, fecha));
+  });
 
   /* ── proformas y pedidos pendientes ─────────────────────────── */
   const proformas = [];
@@ -885,6 +968,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
+    ahora, emisor, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

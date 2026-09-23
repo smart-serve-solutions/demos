@@ -667,7 +667,7 @@
     D.seq.PROF++;
     const cons = "PROF-" + String(D.seq.PROF).padStart(6, "0");
     D.proformas.unshift({
-      id: "PF-" + D.seq.PROF, cons, tipo: "Proforma", fecha: new Date(), clienteId: S.cart.cliId,
+      id: "PF-" + D.seq.PROF, cons, tipo: "Proforma", fecha: D.ahora(), clienteId: S.cart.cliId,
       locId: S.locId, lineas, ...t, vence: new Date(D.HOY.getTime() + 15 * 86400000),
       estado: "Vigente", origen: "Mostrador", vendedor: S.vendedor
     });
@@ -676,6 +676,9 @@
   }
 
   function cobrar() {
+    if (!D.puedeEmitir(S.locId, S.term)) return toast(
+      "Esta terminal no emite comprobantes",
+      "Solo las cajas de las tiendas facturan. Cambie a una tienda y a una de sus terminales en la barra superior.", "cr");
     const sinAutorizar = pendientes().length;
     if (sinAutorizar) return toast(
       sinAutorizar === 1 ? "Falta una autorización de margen" : "Faltan " + sinAutorizar + " autorizaciones de margen",
@@ -720,7 +723,7 @@
             clienteId: S.cart.cliId, vendedor: S.vendedor,
             lineas: lineasFiscales(),
             condicion: S.cart.condicion, medio: S.cart.condicion === "Crédito" ? "Crédito" : medio,
-            hacienda: S.offline ? "En cola" : "Aceptado", fecha: new Date()
+            hacienda: S.offline ? "En cola" : "Aceptado", situacion: S.offline ? "3" : "1", fecha: D.ahora()
           });
           if (w.VENX) w.VENX.consumir(doc.cons);
           closeSheet();
@@ -842,7 +845,7 @@
       title: "Aplicar pago", sub: `${d.cons} · ${cliNom(d.clienteId)} · saldo ${c(d.saldo)}`,
       body: `<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px">
           ${[["bank", "Transferencia"], ["phone", "SINPE móvil"], ["cash", "Efectivo"]].map((m, i) =>
-        `<button class="btn" style="flex-direction:column;padding:15px 8px;gap:6px" data-m aria-pressed="${i === 0}">${icon(m[0])}${m[1]}</button>`).join("")}
+        `<button class="btn" style="flex-direction:column;padding:15px 8px;gap:6px" data-m="${m[1]}" aria-pressed="${i === 0}">${icon(m[0])}${m[1]}</button>`).join("")}
         </div>
         <div class="field" style="margin-top:16px"><label for="pm">Monto a aplicar</label>
           <input id="pm" class="num" style="font-size:20px;text-align:right;font-weight:600;padding:10px 12px" value="${grp(d.saldo)}"></div>
@@ -850,24 +853,19 @@
           <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Al aplicar el pago el sistema emite el <strong>Recibo Electrónico de Pago</strong> del monto recibido y declara el IVA en el mes del REP. Es obligatorio desde el 1.º de setiembre de 2025 para las ventas a crédito con IVA diferido.</div></div>`,
       footer: `<button class="btn" id="cancPago">Cancelar</button><div class="gap"></div><button class="btn pri" id="okp">${icon("check")}Aplicar y emitir REP</button>`,
       after(el) {
+        let medio = "Transferencia";
         $$("[data-m]", el).forEach(b => b.addEventListener("click", () => {
           $$("[data-m]", el).forEach(x => x.setAttribute("aria-pressed", "false"));
-          b.setAttribute("aria-pressed", "true");
+          b.setAttribute("aria-pressed", "true"); medio = b.dataset.m;
         }));
         $("#cancPago", el).addEventListener("click", closeSheet);
         $("#okp", el).addEventListener("click", () => {
           const m = parseInt($("#pm", el).value.replace(/\D/g, ""), 10) || 0;
-          const rep = D.consecutivo("REP", d.locId, d.term);
-          d.saldo = Math.max(0, d.saldo - m);
-          if (D.cliById[d.clienteId]) D.cliById[d.clienteId].saldo -= m;
-          D.asentar(new Date(), rep, `Cobro de ${d.cons}`, [
-            { cta: "1-01-02-001", debe: m, haber: 0 },
-            { cta: "1-01-03-001", debe: 0, haber: m },
-            { cta: "2-01-02-002", debe: Math.round((m * 0.13) / 1.13), haber: 0 },
-            { cta: "2-01-02-001", debe: 0, haber: Math.round((m * 0.13) / 1.13) }
-          ]);
+          /* el REP sale de la caja que cobra, no de la que facturó */
+          const r = w.FIS.aplicarCobro(d, { monto: m, medio, locId: S.locId, term: S.term, offline: S.offline });
+          if (r.error) return toast("No se aplicó el cobro", r.error, "cr");
           closeSheet();
-          toast("REP " + rep + " emitido", "El pago quedó aplicado y el IVA diferido pasó a IVA por pagar de este mes.", "ok");
+          toast("REP " + r.rep.cons + " emitido", (S.offline ? "Queda en cola para Hacienda. " : "") + "El pago quedó aplicado y el IVA diferido pasó a IVA por pagar de este mes.", "ok");
           A.refresh();
         });
       }

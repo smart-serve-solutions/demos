@@ -10,7 +10,7 @@
   const { $, $$, esc, norm, grp, c, dec, fecha, fechaL, fh, hora, icon, tag, card, stat, table,
     seg, onSeg, bars, donut, openSheet, closeSheet, toast, locNom, cliNom, provNom, empty } = U;
 
-  const EST = { Aceptado: "ok", "En proceso": "wa", Rechazado: "cr" };
+  const EST = { Aceptado: "ok", "En proceso": "wa", "En cola": "wa", Rechazado: "cr" };
   const chip50 = s => `<span class="num" style="font-size:11.5px;word-break:break-all;line-height:1.5">${esc(s)}</span>`;
 
   /* ══ PANEL FISCAL ════════════════════════════════════════════ */
@@ -80,7 +80,7 @@
             { t: "Código", cls: "mono", fmt: r => `<b>${esc(r.cod)}</b>` },
             { t: "Comprobante", fmt: r => `${esc(r.t)}<span class="sub ui">${esc(r.sig)}</span>` },
             { t: "Lo emite FSR", fmt: r => r.emite ? tag("Sí", "ok", "check") : tag("No aplica", "mu") },
-            { t: "Del mes", r: true, cls: "mono", fmt: r => { const n = D.documentos.filter(d => d.tipo === r.sig).length; return r.sig === "REP" ? grp(F.reps.length) : n ? grp(n) : '<span class="dim">—</span>'; } }
+            { t: "Del mes", r: true, cls: "mono", fmt: r => { const mes = x => x.fecha.getMonth() === D.HOY.getMonth() && x.fecha.getFullYear() === D.HOY.getFullYear(); const n = (r.sig === "REP" ? F.reps : D.documentos.filter(d => d.tipo === r.sig)).filter(mes).length; return n ? grp(n) : '<span class="dim">—</span>'; } }
           ], rows: F.TIPOS
         })
       })}
@@ -334,8 +334,7 @@
         A._difRows = rows;
         v.innerHTML = `<div class="wrap">${kpis}
           ${card({
-          title: "Facturas a crédito con IVA diferido", hint: "el reloj de 90 días corre desde la fecha de la factura",
-          actions: `<button class="btn sm pri" id="repGen">${icon("file")}Emitir REP del cobro seleccionado</button>`,
+          title: "Facturas a crédito con IVA diferido", hint: "el reloj de 90 días corre desde la fecha de la factura · clic en una factura para aplicar el cobro",
           body: table({
             h: "calc(100dvh - 400px)", onRow: true,
             cols: [
@@ -367,8 +366,6 @@
     },
     wire(v) {
       onSeg(document, "reptab", val => { repTab = val; A.refresh(); });
-      const g = $("#repGen", v);
-      if (g) g.addEventListener("click", () => toast("REP emitido", "Referencia la factura, traslada el IVA proporcional al período actual y queda ligado al recibo de cuentas por cobrar.", "ok"));
       $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => {
         const r = A._difRows[+tr.dataset.i];
         openSheet({
@@ -382,16 +379,21 @@
               <dt>IVA diferido</dt><dd class="num">${c(r.ivaDiferido)}</dd>
               <dt>Estado del plazo</dt><dd>${r.vencido ? "vencido — el IVA ya se declaró" : "faltan " + r.faltan + " días"}</dd></dl>
             <div class="grid g2" style="margin-top:16px">
-              ${U.field("Monto cobrado", `<input class="inp" value="${r.saldo}">`)}
-              ${U.selectField("Medio de pago", ["Transferencia", "SINPE móvil", "Cheque", "Efectivo"])}</div>
+              ${U.field("Monto cobrado", `<input class="inp num" id="rpM" value="${grp(r.saldo)}">`)}
+              ${U.selectField("Medio de pago", ["Transferencia", "SINPE móvil", "Cheque", "Efectivo"], "rpMed")}</div>
             <div class="alert in" style="margin-top:14px;border:1px solid var(--hair);border-radius:11px">${icon("info")}
               <div>Al aplicar el cobro, el sistema emite el REP, traslada el IVA del diferido al IVA por pagar del mes y baja el saldo de cuentas por cobrar. Un solo acto.</div></div>`,
           footer: `<button class="btn" id="rpC">Cancelar</button><div style="flex:1"></div><button class="btn pri" id="rpOk">${icon("check")}Aplicar y emitir</button>`,
           after: root => {
             $("#rpC", root).addEventListener("click", closeSheet);
             $("#rpOk", root).addEventListener("click", () => {
-              F.emitirREP(r.doc); closeSheet();
-              toast("Cobro aplicado y REP emitido", "El IVA de " + c(r.ivaDiferido) + " pasó al período actual y la cuenta por cobrar quedó en cero.", "ok");
+              const monto = parseInt($("#rpM", root).value.replace(/\D/g, ""), 10) || 0;
+              const res = F.aplicarCobro(r.doc, { monto, medio: $("#rpMed", root).value, locId: S.locId, term: S.term, offline: S.offline });
+              if (res.error) return toast("No se aplicó el cobro", res.error, "cr");
+              closeSheet();
+              toast("Cobro aplicado y REP " + res.rep.cons + " emitido",
+                "El IVA de " + c(res.rep.iva) + " pasó al período actual. " +
+                (res.rep.saldoNuevo ? "La factura queda con saldo de " + c(res.rep.saldoNuevo) + "." : "La factura quedó cancelada."), "ok");
               A.refresh();
             });
           }

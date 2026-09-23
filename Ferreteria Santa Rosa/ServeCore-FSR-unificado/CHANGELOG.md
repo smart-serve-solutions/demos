@@ -1,5 +1,64 @@
 # Cambios
 
+## 2026-09-22 · Facturación · Estado ante Hacienda único y cobro con REP en una sola vía
+
+Segunda revisión de la auditoría contable sobre la numeración fiscal.
+
+- **Estado ante Hacienda en un solo lugar.** Vive en el documento (`doc.hacienda`) y la capa fiscal solo agrega
+  el historial del envío (`FIS.registrar`). Antes lo que se emitía en la sesión no tenía capa y aparecía en la
+  cola para siempre, aunque la caja lo anunciara como aceptado; y un 3.5 % del histórico decía «Rechazado» en
+  Facturación y «Aceptado» en Ventas. Ventas muestra ahora el estado real (en cola, en proceso, rechazado).
+- **Reconexión.** Al restablecer el enlace, lo que la caja encoló (comprobantes y REP) se transmite y queda
+  aceptado (`FIS.transmitirCola`).
+- **Contingencia decidida al emitir.** La situación 2 se asigna en la emisión, no después; las NC copian la
+  clave definitiva de su factura (antes podían apuntar a una clave que ya no existía, el rechazo 4120). En
+  contingencia o sin enlace, el envío a Hacienda sale después de la emisión y no en segundos.
+- **Cobro con REP, una sola vía** (`FIS.aplicarCobro`), la usen Cuentas por cobrar o Facturación: valida el
+  monto (entre ₡1 y el saldo), emite el REP desde la caja que cobra con el medio elegido, baja la cartera,
+  guarda saldo anterior y nuevo, y asienta (efectivo a Caja, lo demás a Banco; IVA del diferido al del mes).
+  Antes, en Facturación se ignoraban el monto y el medio, no bajaba el saldo ni asentaba, y se podía emitir
+  otro REP por el mismo saldo.
+- Se quitó el botón «Emitir REP del cobro seleccionado», que mostraba el aviso sin emitir nada; el cobro se
+  aplica con clic en la factura.
+- **REP del histórico = lo que la cartera cobró** (total − saldo), en uno o dos abonos entre la factura y hoy.
+  Antes se sorteaban aparte y había facturas con saldo completo con REP por hasta el 70 %.
+- «Del mes» en la tabla de tipos de comprobante cuenta solo setiembre.
+
+Archivos: `data.js`, `fis-data.js`, `mod-fiscal.js`, `mod-venta.js`, `mod-venta-gestion.js`, `ven-auto.js`,
+`shell.js`.
+
+## 2026-09-22 · Facturación · Consecutivo por sucursal y terminal, y clave numérica de 50 dígitos
+
+Hallazgos de la auditoría contable (POS C2 y C3, Configuración 1 y 2). Antes había un solo contador por
+tipo de comprobante para las 15 terminales, así que cada serie `002-00001-01-…` quedaba con saltos (el
+rechazo 4110 que el propio demo documenta), y la clave usaba la cédula de Smart Serve y medía 48 dígitos.
+
+- Cada serie es sucursal + terminal + tipo; cada caja arrastra su propia historia. `D.consecutivo()`,
+  `D.ultimoConsec()` y `D.proximoConsec()` son la única fuente; Facturación, la caja y «Este equipo» la leen.
+- El REP usa el código **10** (antes 05, que es la confirmación de aceptación) y sale de la misma serie
+  que la caja; se agregó FEC (08).
+- Clave numérica: cédula del emisor 3-101-118844 rellenada a 12, fecha del documento (no la de hoy) y
+  situación del comprobante (1 normal, 3 sin internet cuando la caja está sin enlace).
+- Los datos base del emisor viven en `D.emisor`; Facturación y la planilla del SICERE los leen de ahí.
+- Los datos de ejemplo se emiten en orden de fecha: las series quedan correlativas también en el tiempo,
+  las notas de crédito siempre son posteriores a su factura y los REP se numeran por fecha de cobro.
+- La tabla «Series por terminal» se calcula de las series reales y se actualiza con cada venta. Un salto
+  es cualquier número asignado sin comprobante; se indica si tiene registro de auditoría (`D.sinDocumento`).
+  El de demostración es real y queda a mitad de la serie: tres tiquetes de Turrialba caja 2 cuya firma falló.
+- Reloj de la demo (`D.ahora()`): arranca en HOY al abrir y avanza con el tiempo real. Lo que se emite en la
+  sesión queda después del histórico; las ventas del día llegan hasta las 11:40.
+- Situación del comprobante coherente entre la caja, la capa fiscal y la clave (dígito 42): contingencia (2)
+  cuando Hacienda no respondió, sin internet (3) en la caída de enlace del 11 de setiembre y con la caja offline.
+- Cobro de cuentas por cobrar: emite el REP completo (clave, medio elegido, monto del abono, parcial) desde la
+  caja que cobra; rechaza montos en cero o mayores al saldo. Antes gastaba un número de REP sin crear documento.
+- Solo las cajas de tienda emiten (`D.puedeEmitir`): la caja, las NC y los REP avisan si el local es el CEDI o
+  una bodega, y al cambiar de local la terminal se ajusta a una que exista.
+- La NC guarda la referencia completa al documento que corrige: consecutivo, clave, tipo y fecha.
+- El ejemplo de la clave y el archivo de la llave criptográfica salen de los datos reales del emisor.
+
+Archivos: `data.js`, `fis-data.js`, `ven-auto.js`, `mod-venta.js`, `mod-venta-gestion.js`, `shell.js`,
+`mod-planilla.js`.
+
 ## 2026-09-22 · Sistema · Seguridad y Auditoría pasa a Sistema / Configuración
 
 Usuarios, roles y permisos ya estaban en Sistema como accesos directos y repetidos en Seguridad y Auditoría.

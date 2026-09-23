@@ -784,7 +784,7 @@
     if (docF.q) rows = rows.filter(d => norm(d.cons + " " + cliNom(d.clienteId)).includes(norm(docF.q)));
     return rows.slice(0, 160);
   };
-  const hacTag = d => (d.hacienda === "Aceptado" ? tag("Aceptado", "ok", "check") : tag("En cola", "wa", "alert"));
+  const hacTag = d => (d.hacienda === "Aceptado" ? tag("Aceptado", "ok", "check") : tag(d.hacienda, d.hacienda === "Rechazado" ? "cr" : "wa", "alert"));
   function detalleDoc(d) {
     if (!d) return;
     const f = V.FICHA[d.clienteId];
@@ -941,11 +941,12 @@
     const ok = $("#devOk", p);
     if (ok) ok.addEventListener("click", () => {
       const d = dev.doc;
+      if (!D.puedeEmitir(S.locId, S.term)) return toast("Esta terminal no emite comprobantes", "La nota de crédito sale de una caja de tienda. Cambie de local o de terminal en la barra superior.", "cr");
       const lineas = d.lineas.filter(l => dev.cant[l.artId] > 0).map(l => ({ artId: l.artId, cant: dev.cant[l.artId], precio: l.precio, desc: l.desc || 0 }));
       const monto = D.totalizar(lineas).total;
       const o = { doc: d, lineas, concepto: dev.concepto, destino: V.CONCEPTOS.find(k => k.id === dev.concepto).inv ? dev.destino : "—", reintegro: dev.reintegro || reintegroDe(d), firma: true, locId: S.locId, term: S.term, offline: S.offline, usuario: S.vendedor };
       if (monto > V.PARAM.devolucionSinAprobacion) {
-        V.BOLETAS.unshift({ id: "BD-" + String(900 + V.BOLETAS.length).padStart(5, "0"), doc: d, lineas, total: monto, concepto: o.concepto, destino: o.destino, reintegro: o.reintegro, solicita: S.vendedor, locId: S.locId, fecha: V.ahora(), firma: true, estado: "Por aprobar", motivo: dev.motivo || "Sin motivo" });
+        V.BOLETAS.unshift({ id: "BD-" + String(900 + V.BOLETAS.length).padStart(5, "0"), doc: d, lineas, total: monto, concepto: o.concepto, destino: o.destino, reintegro: o.reintegro, solicita: S.vendedor, locId: S.locId, term: S.term, fecha: V.ahora(), firma: true, estado: "Por aprobar", motivo: dev.motivo || "Sin motivo" });
         toast("Enviada a aprobación", "El administrador la ve en Pendientes de ventas. Al aprobarla se emite la nota.", "wa");
       } else {
         const nc = V.emitirNC(o);

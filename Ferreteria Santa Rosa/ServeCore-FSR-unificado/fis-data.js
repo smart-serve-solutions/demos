@@ -51,22 +51,17 @@
     { cod: "3", t: "Sin internet", d: "El local perdió el enlace; el nodo emitió y encoló" }
   ];
 
-  const CLAVE_SEG = [
-    ["506", 3, "Código de país"],
-    ["17", 2, "Día de emisión"],
-    ["09", 2, "Mes de emisión"],
-    ["26", 2, "Año de emisión"],
-    ["003102946797", 12, "Cédula del emisor"],
-    ["00200001010000034812", 20, "Numeración consecutiva"],
-    ["1", 1, "Situación del comprobante"],
-    ["48201375", 8, "Código de seguridad"]
-  ];
-  const CONS_SEG = [
-    ["002", 3, "Casa matriz o sucursal"],
-    ["00001", 5, "Terminal o punto de venta"],
-    ["01", 2, "Tipo de comprobante"],
-    ["0000034812", 10, "Consecutivo del tipo, sin saltos"]
-  ];
+  /* el ejemplo se desarma de la última factura real, no de una clave escrita a mano */
+  const muestra = D.documentos.find(d => d.tipo === "FE") || D.documentos[0];
+  const corta = (s, partes) => { let i = 0; return partes.map(([n, t]) => [s.slice(i, i += n), n, t]); };
+  const CLAVE_SEG = corta(muestra.clave, [
+    [3, "Código de país"], [2, "Día de emisión"], [2, "Mes de emisión"], [2, "Año de emisión"],
+    [12, "Cédula del emisor"], [20, "Numeración consecutiva"], [1, "Situación del comprobante"], [8, "Código de seguridad"]
+  ]);
+  const CONS_SEG = corta(muestra.cons.replace(/-/g, ""), [
+    [3, "Casa matriz o sucursal"], [5, "Terminal o punto de venta"], [2, "Tipo de comprobante"],
+    [10, "Consecutivo de la serie (sucursal + terminal + tipo), sin saltos"]
+  ]);
 
   /* ═══ 2 · IMPUESTO AL VALOR AGREGADO ═══════════════════════════════ */
   const TARIFAS = [
@@ -102,10 +97,10 @@
 
   /* ═══ 4 · LLAVE CRIPTOGRÁFICA ══════════════════════════════════════ */
   const LLAVE = {
-    emisor: "Ferretería Santa Rosa S.A.",
-    cedula: "3-101-118844",
+    emisor: D.emisor.nombre,
+    cedula: D.emisor.cedula,
     ambiente: "Producción",
-    archivo: "0031011188440p.p12",
+    archivo: D.emisor.cedula.replace(/\D/g, "").padStart(12, "0") + "0p.p12",
     emitida: new Date(2024, 1, 14),
     vence: new Date(2028, 1, 14),
     custodia: "AWS Secrets Manager · solo la nube firma",
@@ -145,21 +140,35 @@
      No se duplica la base: se pone una capa fiscal encima de los
      documentos que ya generó la caja.                                   */
   const capa = {};
+  /* el estado ante Hacienda vive en el documento (doc.hacienda) y la situación
+     en doc.situacion; la capa solo agrega el historial del envío. Así la caja,
+     Ventas y Facturación nunca se contradicen, y lo que se emite en la sesión
+     entra solo, la primera vez que Facturación lo mira. */
+  function registrar(doc) {
+    if (capa[doc.id]) return capa[doc.id];
+    const enCola = doc.hacienda === "En cola";
+    /* en contingencia o sin enlace el envío sale cuando vuelve el servicio */
+    const espera = doc.situacion === "1" ? ri(2, 40) : ri(20, 120) * 60;
+    const c = {
+      err: null, intentos: doc.situacion === "1" ? 1 : ri(2, 4),
+      enviado: enCola ? null : new Date(doc.fecha.getTime() + espera * 1000),
+      respuesta: doc.hacienda === "Aceptado" ? new Date(doc.fecha.getTime() + (espera + ri(45, 900)) * 1000) : null,
+      correo: true
+    };
+    Object.defineProperty(c, "estado", { enumerable: true, get: () => doc.hacienda, set: v => { doc.hacienda = v; } });
+    Object.defineProperty(c, "sit", { enumerable: true, get: () => doc.situacion || "1" });
+    return (capa[doc.id] = c);
+  }
   D.documentos.forEach(doc => {
     const dias = Math.round((HOY - doc.fecha) / 86400000);
-    let estado = "Aceptado", err = null, sit = "1", intentos = 1;
-    if (dias === 0 && chance(0.10)) { estado = "En proceso"; intentos = 1; }
-    else if (chance(0.035)) { estado = "Rechazado"; err = pick(ERRORES.filter(e => e.cod !== "5010")); intentos = ri(1, 3); }
-    else if (chance(0.03)) { estado = "Aceptado"; sit = "2"; intentos = ri(2, 4); }
-    capa[doc.id] = {
-      estado, err, sit, intentos,
-      enviado: new Date(doc.fecha.getTime() + ri(2, 40) * 1000),
-      respuesta: estado === "En proceso" ? null : new Date(doc.fecha.getTime() + ri(45, 900) * 1000),
-      correo: chance(0.93)
-    };
+    const c = registrar(doc);
+    c.correo = chance(0.93);
+    if (doc.hacienda !== "Aceptado") return;
+    if (dias === 0 && chance(0.10)) { c.estado = "En proceso"; c.respuesta = null; }
+    else if (chance(0.035)) { c.estado = "Rechazado"; c.err = pick(ERRORES.filter(e => e.cod !== "5010")); c.intentos = ri(1, 3); }
   });
 
-  const emitidos = () => D.documentos.map(doc => Object.assign({ doc }, capa[doc.id] || {}));
+  const emitidos = () => D.documentos.map(doc => Object.assign({ doc }, registrar(doc)));
   const delDia = () => emitidos().filter(x => x.doc.fecha.toDateString() === HOY.toDateString());
   const cola = () => emitidos().filter(x => x.estado !== "Aceptado");
 
@@ -167,62 +176,84 @@
      Uno por cada abono de una venta a crédito con IVA diferido; el IVA
      se declara en el mes del REP, y a los 90 días se declara igual.     */
   const reps = [];
-  let repSeq = 4180;
-  const consREP = (locId, term, n) => {
-    const l = D.locales.find(x => x.id === locId) || D.locales[0];
-    return `${l.cod}-${pad(term, 5)}-10-${pad(n, 10)}`;
-  };
+  /* el REP sale de la misma serie que usa la caja: sucursal + terminal + tipo 10 */
+  const consREP = (locId, term) => D.consecutivo("REP", locId, term || 1);
   const creditos = D.documentos.filter(d => d.condicion === "Crédito" && d.total > 0);
-  const diferidas = [];
+  /* los REP del histórico salen de lo que la cartera efectivamente cobró
+     (total − saldo): uno por abono, entre la factura y hoy */
   creditos.forEach(doc => {
-    const dias = Math.round((HOY - doc.fecha) / 86400000);
-    const abonos = doc.saldo <= 0 ? ri(1, 2) : chance(0.45) ? 1 : 0;
-    let cobrado = 0;
-    for (let i = 0; i < abonos; i++) {
-      const monto = doc.saldo <= 0 && i === abonos - 1 ? doc.total - cobrado : r0(doc.total * (0.3 + rnd() * 0.4));
-      if (monto <= 0) continue;
-      cobrado += monto;
-      const f = new Date(doc.fecha.getTime() + ri(5, Math.max(6, dias)) * 86400000);
+    const cobrado = doc.total - doc.saldo;
+    if (cobrado <= 0) return;
+    const partes = doc.saldo === 0 && cobrado > 20000 && chance(0.4) ? [r0(cobrado * 0.5), cobrado - r0(cobrado * 0.5)] : [cobrado];
+    const lapso = HOY - doc.fecha;
+    const fechas = partes.map(() => new Date(doc.fecha.getTime() + lapso * (0.15 + rnd() * 0.8))).sort((a, b) => a - b);
+    let acumulado = 0;
+    partes.forEach((monto, i) => {
+      acumulado += monto;
       reps.push({
-        id: "REP-" + (++repSeq), cons: consREP(doc.locId, doc.term || 1, repSeq),
-        docCons: doc.cons, docClave: doc.clave, cliId: doc.clienteId, locId: doc.locId,
-        fecha: f > HOY ? HOY : f, monto,
-        iva: r0(monto * 0.13 / 1.13),
+        docCons: doc.cons, docClave: doc.clave, cliId: doc.clienteId, locId: doc.locId, term: doc.term || 1,
+        fecha: fechas[i], monto, iva: r0(monto * 0.13 / 1.13),
         medio: pick(["Transferencia", "SINPE móvil", "Cheque", "Efectivo"]),
         estado: chance(0.94) ? "Aceptado" : "En proceso",
-        parcial: cobrado < doc.total
+        saldoAnterior: doc.total - acumulado + monto, saldoNuevo: doc.total - acumulado,
+        parcial: acumulado < doc.total
       });
-    }
-    if (doc.saldo > 0) {
-      diferidas.push({
-        doc, dias, saldo: doc.saldo, cobrado,
-        ivaDiferido: r0(doc.saldo * 0.13 / 1.13),
-        vencido: dias > 90, faltan: 90 - dias
-      });
-    }
+    });
+  });
+  /* facturas a crédito con saldo: se calcula en cada vista, así un cobro
+     aplicado desde la caja o desde Facturación baja de inmediato */
+  const diferidas = () => creditos.filter(doc => doc.saldo > 0).map(doc => {
+    const dias = Math.round((HOY - doc.fecha) / 86400000);
+    return {
+      doc, dias, saldo: doc.saldo, cobrado: doc.total - doc.saldo,
+      ivaDiferido: r0(doc.saldo * 0.13 / 1.13),
+      vencido: dias > 90, faltan: 90 - dias
+    };
+  }).sort((a, b) => b.dias - a.dias);
+  /* se numeran en orden de fecha, como los habría emitido la caja */
+  reps.sort((a, b) => a.fecha - b.fecha).forEach(r => {
+    r.cons = consREP(r.locId, r.term); r.id = "REP-" + r.cons;
+    r.situacion = "1"; r.clave = D.clave(r.cons, r.fecha, r.situacion);
   });
   reps.sort((a, b) => b.fecha - a.fecha);
-  diferidas.sort((a, b) => b.dias - a.dias);
 
-  /* ═══ 8 · CONSECUTIVOS POR SUCURSAL Y TERMINAL ═════════════════════ */
-  const consecutivos = [];
-  D.locales.filter(l => l.tipo === "tienda").forEach(l => {
-    for (let t = 1; t <= l.terminales; t++) {
-      ["FE", "TE", "NC", "ND", "REP"].forEach(sig => {
-        const emitidosAqui = D.documentos.filter(d => d.locId === l.id && (d.term || 1) === t && d.tipo === sig).length;
-        const base = { FE: 34800, TE: 12400, NC: 2110, ND: 340, REP: 4180 }[sig];
-        consecutivos.push({
-          locId: l.id, cod: l.cod, term: t, sig, tipoCod: tipoDe(sig).cod,
-          ultimo: base + emitidosAqui * (t + 1) + ri(0, 40),
-          delDia: sig === "FE" ? ri(8, 60) : sig === "TE" ? ri(4, 30) : ri(0, 3),
-          salto: false
+  /* ═══ 8 · CONSECUTIVOS POR SUCURSAL Y TERMINAL ═════════════════════
+     Se leen de las series reales y se recalculan en cada vista. Un salto
+     es cualquier número asignado de la serie que no tiene comprobante. */
+  const SERIES_VISTAS = ["FE", "TE", "NC", "ND", "REP"];
+  const tramos = nums => {
+    const out = [];
+    nums.forEach(n => { const u = out[out.length - 1]; if (u && n === u[1] + 1) u[1] = n; else out.push([n, n]); });
+    return out.map(([a, b]) => a === b ? String(a) : a + " a " + b).join(", ");
+  };
+
+  function consecutivos() {
+    const hoy = HOY.toDateString();
+    const porSerie = {};
+    D.documentos.concat(reps).forEach(x => (porSerie[x.cons.slice(0, 12)] ||= []).push(x));
+    const filas = [];
+    D.locales.filter(l => l.tipo === "tienda").forEach(l => {
+      for (let t = 1; t <= l.terminales; t++) {
+        SERIES_VISTAS.forEach(sig => {
+          const docs = porSerie[`${l.cod}-${pad(t, 5)}-${D.TIPO_COD[sig]}`] || [];
+          const usados = new Set(docs.map(x => +x.cons.slice(-10)));
+          const { desde, hasta } = D.rangoSerie(sig, l.id, t);
+          const faltan = [];
+          for (let n = desde; n <= hasta; n++) if (!usados.has(n)) faltan.push(n);
+          const registrados = D.sinDocumento.filter(x => x.locId === l.id && x.term === t && x.tipo === sig).length;
+          filas.push({
+            locId: l.id, cod: l.cod, term: t, sig, tipoCod: tipoDe(sig).cod,
+            ultimo: usados.size ? Math.max(...usados) : desde - 1,
+            delDia: docs.filter(x => x.fecha.toDateString() === hoy).length,
+            salto: faltan.length > 0,
+            saltoDetalle: faltan.length ? "faltan " + tramos(faltan) +
+              (registrados === faltan.length ? " · con registro de auditoría" : " · sin justificar") : undefined
+          });
         });
-      });
-    }
-  });
-  /* un salto detectado, que es justamente lo que hay que poder ver */
-  const conSalto = consecutivos.find(x => x.sig === "TE" && x.term === 2);
-  if (conSalto) { conSalto.salto = true; conSalto.saltoDetalle = "faltan los números " + (conSalto.ultimo - 3) + " a " + (conSalto.ultimo - 1); }
+      }
+    });
+    return filas;
+  }
 
   /* ═══ 9 · COMPROBANTES RECIBIDOS ═══════════════════════════════════ */
   const recibidos = () => D.recibidos.map(r => Object.assign({}, r, {
@@ -241,8 +272,9 @@
     const recib = recibidos();
     const creditoFiscal = recib.filter(r => /Aceptado/.test(r.estado)).reduce((s, r) => s + r.iva, 0);
     const enRiesgo = recib.reduce((s, r) => s + r.creditoEnRiesgo, 0);
-    const diferidoPend = diferidas.filter(x => !x.vencido).reduce((s, x) => s + x.ivaDiferido, 0);
-    const diferidoVencido = diferidas.filter(x => x.vencido).reduce((s, x) => s + x.ivaDiferido, 0);
+    const dif = diferidas();
+    const diferidoPend = dif.filter(x => !x.vencido).reduce((s, x) => s + x.ivaDiferido, 0);
+    const diferidoVencido = dif.filter(x => x.vencido).reduce((s, x) => s + x.ivaDiferido, 0);
     const debito = debitoContado + debitoREP + diferidoVencido;
     return {
       debitoContado, debitoREP, diferidoVencido, diferidoPend,
@@ -257,11 +289,23 @@
   function reintentar() {
     let n = 0;
     D.documentos.forEach(doc => {
-      const c = capa[doc.id];
-      if (c && c.estado !== "Aceptado" && (!c.err || c.err.auto)) {
-        c.estado = "Aceptado"; c.err = null; c.intentos++; c.respuesta = HOY; n++;
+      const c = registrar(doc);
+      if (c.estado !== "Aceptado" && (!c.err || c.err.auto)) {
+        c.estado = "Aceptado"; c.err = null; c.intentos++; c.enviado = c.enviado || D.ahora(); c.respuesta = D.ahora(); n++;
       }
     });
+    reps.forEach(r => { if (r.estado !== "Aceptado") { r.estado = "Aceptado"; n++; } });
+    return n;
+  }
+  /* al volver el enlace sale lo que la caja encoló: comprobantes y REP */
+  function transmitirCola() {
+    let n = 0;
+    D.documentos.forEach(doc => {
+      if (doc.hacienda !== "En cola") return;
+      const c = registrar(doc);
+      c.estado = "Aceptado"; c.enviado = D.ahora(); c.respuesta = D.ahora(); n++;
+    });
+    reps.forEach(r => { if (r.estado === "En cola") { r.estado = "Aceptado"; n++; } });
     return n;
   }
   function aceptarRecibidos() {
@@ -269,24 +313,39 @@
     D.recibidos.forEach(r => { if (r.estado === "Sin aceptar" && r.ocLigada) { r.estado = "Aceptado"; n++; } });
     return n;
   }
-  function emitirREP(d) {
-    repSeq++;
+  /* cobro de una factura a crédito: la única vía, la usen la caja o Facturación.
+     Valida, emite el REP desde la caja que cobra, baja la cartera y asienta.
+     Devuelve { error } si no se puede aplicar. */
+  function aplicarCobro(d, o) {
+    const monto = Math.round(o.monto || 0);
+    if (monto <= 0 || monto > d.saldo) return { error: "El abono debe estar entre ₡1 y el saldo de ₡" + d.saldo.toLocaleString("es-CR") + "." };
+    if (!D.puedeEmitir(o.locId, o.term)) return { error: "El REP sale de una caja de tienda. Cambie de local o de terminal en la barra superior." };
+    const fecha = D.ahora(), situacion = o.offline ? "3" : "1";
+    const cons = consREP(o.locId, o.term);
     const rep = {
-      id: "REP-" + repSeq, cons: consREP(d.locId || "L1", 1, repSeq),
-      docCons: d.cons, docClave: d.clave, cliId: d.clienteId, locId: d.locId,
-      fecha: HOY, monto: d.saldo, iva: r0(d.saldo * 0.13 / 1.13),
-      medio: "Transferencia", estado: "En proceso", parcial: false
+      id: "REP-" + cons, cons, clave: D.clave(cons, fecha, situacion), situacion, locId: o.locId, term: o.term || 1,
+      docCons: d.cons, docClave: d.clave, cliId: d.clienteId,
+      fecha, monto, iva: r0(monto * 0.13 / 1.13), medio: o.medio || "Transferencia",
+      estado: o.offline ? "En cola" : "Aceptado",
+      saldoAnterior: d.saldo, saldoNuevo: d.saldo - monto, parcial: monto < d.saldo
     };
     reps.unshift(rep);
-    return rep;
+    d.saldo -= monto;
+    if (D.cliById[d.clienteId]) D.cliById[d.clienteId].saldo -= monto;
+    /* entra a caja si es efectivo; lo demás, al banco. El IVA del abono pasa
+       del diferido al IVA por pagar del mes del REP */
+    D.asentar(fecha, cons, `Cobro de ${d.cons} · REP`, [
+      { cta: rep.medio === "Efectivo" ? "1-01-01-001" : "1-01-02-001", debe: monto, haber: 0 },
+      { cta: "1-01-03-001", debe: 0, haber: monto },
+      { cta: "2-01-02-002", debe: rep.iva, haber: 0 },
+      { cta: "2-01-02-001", debe: 0, haber: rep.iva }
+    ]);
+    return { rep };
   }
 
   /* ═══ 12 · CONFIGURACIÓN DEL EMISOR ════════════════════════════════ */
   const EMISOR = {
-    nombre: "Ferretería Santa Rosa S.A.",
-    comercial: "Ferretería Santa Rosa",
-    cedula: "3-101-118844",
-    tipoCed: "Jurídica",
+    ...D.emisor,
     actividades: [
       { cod: "471100", t: "Venta al por menor en comercios no especializados", principal: false },
       { cod: "475200", t: "Venta al por menor de artículos de ferretería, pinturas y vidrio", principal: true },
@@ -302,7 +361,8 @@
   w.FIS = {
     NORMA, TIPOS, tipoDe, SITUACIONES, CLAVE_SEG, CONS_SEG, TARIFAS, PLAZOS,
     ERRORES, LLAVE, CABYS, EXONERACIONES, EMISOR,
-    capa, emitidos, delDia, cola, reps, diferidas, consecutivos, recibidos, ivaMes,
-    reintentar, aceptarRecibidos, emitirREP, consREP
+    capa, registrar, emitidos, delDia, cola, reps, get diferidas() { return diferidas(); },
+    get consecutivos() { return consecutivos(); }, recibidos, ivaMes,
+    reintentar, transmitirCola, aceptarRecibidos, aplicarCobro, consREP
   };
 })(window);

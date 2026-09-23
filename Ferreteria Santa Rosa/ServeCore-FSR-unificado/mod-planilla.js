@@ -630,7 +630,7 @@
       title: "Planilla de setiembre 2026", hint: "así se envía al SICERE",
       actions: `<button class="btn sm pri" id="ccGen">${icon("upload")}Generar y enviar</button>`,
       body: `<dl class="kv">
-          <dt>Patrono</dt><dd>Ferretería Santa Rosa · 3-102-946797</dd>
+          <dt>Patrono</dt><dd>${esc(D.emisor.comercial)} · ${esc(D.emisor.cedula)}</dd>
           <dt>Periodo</dt><dd>setiembre 2026</dd>
           <dt>Personas</dt><dd class="num">${act.length}</dd>
           <dt>Salarios</dt><dd class="num">${c(brutoMes)}</dd>

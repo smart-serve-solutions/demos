@@ -52,9 +52,10 @@
     nextConsec,
   };
 
+  /* lo que emitiría la caja ahora: factura si hay cliente, tiquete si no */
   function nextConsec() {
-    const l = D.locales.find((x) => x.id === S.locId) || D.locales[0];
-    return `${l.cod}-${String(S.term).padStart(5, "0")}-01-${String(D.seq.FE + 1).padStart(10, "0")}`;
+    if (!D.puedeEmitir(S.locId, S.term)) return "Esta terminal no emite comprobantes";
+    return D.proximoConsec(S.cart && S.cart.cliId ? "FE" : "TE", S.locId, S.term);
   }
 
   function go(id, arg) {
@@ -118,11 +119,15 @@
           b.addEventListener("click", () => {
             S.locId = b.dataset.loc;
             const l = D.locales.find((x) => x.id === S.locId);
+            /* la terminal tiene que existir en el local nuevo */
+            if (l.terminales && S.term > l.terminales) S.term = 1;
             closeOverlays();
             render();
             toast(
               "Local activo: " + l.nom,
-              "El consecutivo fiscal pasa a la serie " + l.cod,
+              l.tipo === "tienda"
+                ? "El consecutivo fiscal pasa a la serie " + l.cod + ", terminal " + S.term
+                : "Centro y bodegas no emiten comprobantes; la caja queda sin facturar aquí",
               "ok",
             );
           }),
@@ -148,9 +153,11 @@
         if (q) q.textContent = S.queue;
       }, 4200);
     } else {
+      /* lo que esta caja encoló sale de verdad; el contador suma el resto de la red */
+      const propios = w.FIS ? w.FIS.transmitirCola() : 0;
       toast(
         "Enlace restablecido",
-        S.queue + " documentos enviados a Hacienda y aceptados.",
+        S.queue + propios + " documentos enviados a Hacienda y aceptados.",
         "ok",
       );
       S.queue = 3;
