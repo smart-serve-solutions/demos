@@ -6815,10 +6815,10 @@
         },
         {
           t: "Precios en la caja",
-          d: "Cómo se muestran al cliente y en la pantalla del vendedor.",
+          d: "El precio de lista es el que paga el consumidor, con el IVA de su tarifa; el sistema separa la base y el IVA en cada línea.",
           v: "Con IVA incluido",
-          opts: ["Con IVA incluido", "Sin IVA"],
           ult: [dia(300), "Sonia Calderón"],
+          soloLectura: "El precio al consumidor se informa con los impuestos incluidos; todo el cálculo de la caja parte de ahí",
         },
       ],
     },
@@ -7632,11 +7632,13 @@
   const ejemploDoc = (tipo, credito) =>
     D.documentos.find((d) => d.tipo === tipo && d.lineas.length >= 3 && (credito == null || (d.condicion === "Crédito") === credito)) ||
     D.documentos.find((d) => d.tipo === tipo) || D.documentos[0];
+  /* en el comprobante cada línea va con su precio y su monto sin IVA, como en
+     el XML; el IVA se suma abajo por tarifa y así los montos cuadran */
   const lineasDoc = (d) =>
-    d.lineas.map((l) => {
+    d.lineas.map((l, i) => {
       const a = D.artById[l.artId] || {};
-      const neto = l.cant * l.precio * (1 - (l.desc || 0) / 100);
-      return { desc: a.desc || l.artId, cabys: (a.cabys || "") + " · " + D.pctTxt(D.tarifaDe(l)), cant: l.cant, precio: l.precio, desc_: l.desc || 0, total: Math.round(neto) };
+      const x = (d.detIva || [])[i] || { neto: Math.round(D.sinIva(l.cant * l.precio * (1 - (l.desc || 0) / 100), D.tarifaDe(l))), precioNeto: D.sinIva(l.precio, D.tarifaDe(l)) };
+      return { desc: a.desc || l.artId, cabys: (a.cabys || "") + " · " + D.pctTxt(D.tarifaDe(l)), cant: l.cant, precio: x.precioNeto, desc_: l.desc || 0, total: x.neto };
     });
   const bloqueFiscal = (d) => {
     const act = D.actividadPrincipal();
@@ -7666,8 +7668,8 @@
         <div style="display:flex;gap:10px;align-items:center">${PL_CFG.logo ? `<img src="mark.png" alt="" style="width:38px;height:38px;object-fit:contain">` : ""}<div><h4>${esc(EMP.comercial)}</h4><div class="sx-dm">${esc(EMP.nombre)} · ${esc(EMP.cedula)}<br>${esc(domicilio(EMP))} · ${esc(EMP.tel)}</div></div></div>
         <div style="text-align:right"><b>${esc(p.t.toUpperCase())}</b><div class="sx-dm">${esc(d.cons)}<br>${fecha(d.fecha)} ${d.fecha.getFullYear()} · ${d.condicion === "Crédito" ? "Crédito " + plazo + " días" : "Contado"}</div></div></div>
       <div style="margin:12px 0 6px"><b>Cliente:</b> ${cli ? esc(cli.nom) + " · " + esc(cli.ced || "") : "Consumidor final"}</div>
-      <div class="sx-dl" style="font-weight:700"><span style="flex:1">Descripción</span><span style="width:110px">CABYS</span><span style="width:40px;text-align:right">Cant.</span><span style="width:70px;text-align:right">Precio</span><span style="width:80px;text-align:right">Total</span></div>
-      ${lineasDoc(d).map((l) => `<div class="sx-dl"><span style="flex:1">${esc(l.desc)}${l.desc_ ? ` <span class="sx-dm">(desc. ${l.desc_} %)</span>` : ""}</span><span style="width:110px" class="sx-dm">${esc(l.cabys)}</span><span style="width:40px;text-align:right">${esc(String(l.cant))}</span><span style="width:70px;text-align:right">${c(l.precio)}</span><span style="width:80px;text-align:right">${c(l.total)}</span></div>`).join("")}
+      <div class="sx-dl" style="font-weight:700"><span style="flex:1">Descripción</span><span style="width:110px">CABYS</span><span style="width:40px;text-align:right">Cant.</span><span style="width:70px;text-align:right">Precio s/IVA</span><span style="width:80px;text-align:right">Monto</span></div>
+      ${lineasDoc(d).map((l) => `<div class="sx-dl"><span style="flex:1">${esc(l.desc)}${l.desc_ ? ` <span class="sx-dm">(desc. ${l.desc_} %)</span>` : ""}</span><span style="width:110px" class="sx-dm">${esc(l.cabys)}</span><span style="width:40px;text-align:right">${esc(String(l.cant))}</span><span style="width:70px;text-align:right">₡${dec(l.precio, 2)}</span><span style="width:80px;text-align:right">${c(l.total)}</span></div>`).join("")}
       <div style="display:flex;justify-content:space-between;gap:16px;margin-top:8px"><div class="sx-dm" style="word-break:break-all;max-width:60%">${bloqueFiscal(d)}</div><div style="min-width:200px"><div class="sx-dl"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}<div class="sx-dl" style="font-weight:800"><span>Total</span><span>${c(d.total)}</span></div></div></div>
       ${p.firma ? `<div style="display:flex;gap:30px;margin-top:26px"><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px" class="sx-dm">Firma del cliente</div><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px" class="sx-dm">Cédula</div></div><div class="sx-dm" style="margin-top:6px">ORIGINAL · se imprime también la COPIA</div>` : ""}
       <div class="sx-dm" style="margin-top:14px;border-top:1px solid #e6e8ee;padding-top:8px">${esc(PL_CFG.pie)}<br>Consulta pública del comprobante: consulta.santarosa.cr/c/8F3K2Q — no abre el sistema ni pide sesión; vence en 30 días.</div></div>`;

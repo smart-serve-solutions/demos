@@ -154,6 +154,14 @@
   /* código de tarifa del XML 4.4 para cada porcentaje */
   const TARIFA_COD = { 13: "08", 4: "04", 2: "03", 1: "02", 0.5: "09", 0: "01" };
   const tarifaDeCabys = cabys => (cabys in TARIFA_CABYS ? TARIFA_CABYS[cabys] : 13);
+  /* el precio de lista es el precio al consumidor: incluye el IVA de su tarifa
+     (así se le informa al cliente). La base, el margen y el costo van sin IVA */
+  const tasa = t => 1 + (t == null ? 13 : t) / 100;
+  const sinIva = (precio, tarifa) => precio / tasa(tarifa);
+  const conIva = (neto, tarifa) => neto * tasa(tarifa);
+  const margenDe = (precio, costo, tarifa) => { const n = sinIva(precio, tarifa); return n ? ((n - costo) / n) * 100 : null; };
+  /* el precio de lista más bajo que respeta un margen, redondeado a ₡5 */
+  const pisoConIva = (costo, min, tarifa) => Math.ceil(conIva(costo / (1 - min / 100), tarifa) / 5) * 5;
   /* la medida sale de la propia descripción: el catálogo no la repite a mano */
   const medidaDe = d => {
     const m = d.match(/×\s*([\d.,]+\s*(?:m|cm|mm|L|kg|ml|oz|W|")\b)/i)
@@ -191,9 +199,9 @@
   articulos.forEach(a => {
     if (a.tipo === "Servicio") return;
     const min = famById[a.fam].min + 3;
-    const piso = Math.ceil(a.costo / (1 - min / 100) / 5) * 5;
+    const piso = pisoConIva(a.costo, min, a.tarifa);
     if (a.precio < piso) a.precio = piso;
-    a.margen = +(((a.precio - a.costo) / a.precio) * 100).toFixed(1);
+    a.margen = +margenDe(a.precio, a.costo, a.tarifa).toFixed(1);
   });
   const artById = {}; articulos.forEach(a => artById[a.id] = a);
 
@@ -467,25 +475,29 @@
   /* IVA por línea, como lo arma el XML 4.4: cada línea lleva su tarifa y su
      exoneración, y el encabezado es la suma de las líneas ya redondeadas (así
      nunca aparece el rechazo 4001 por diferencia de redondeo).
+     El precio de la línea trae el IVA incluido: se separa la base y el IVA.
      grav = base de las líneas con tarifa (incluye lo exonerado); exe = tarifa 0;
-     exon = parte de la base cubierta por la exoneración. */
+     exon = parte de la base cubierta por la exoneración; desc = descuento sobre la base. */
   function totalizar(lineas, o) {
     const exo = o && o.exoneracion;
     let grav = 0, desc = 0, exe = 0, exon = 0, iva = 0, ivaExon = 0;
     const porTarifa = {};
     const det = lineas.map(l => {
+      const tarifa = tarifaDe(l);
       const bruto = Math.round(l.cant * l.precio);
       const d = Math.round(bruto * (l.desc || 0) / 100);
-      const neto = bruto - d, tarifa = tarifaDe(l);
-      desc += d;
-      if (!tarifa) { exe += neto; return { tarifa, cod: TARIFA_COD[0], neto, iva: 0, ivaExon: 0 }; }
+      const conI = bruto - d;                         /* lo que paga el cliente sin exoneración */
+      const neto = tarifa ? Math.round(sinIva(conI, tarifa)) : conI;
+      desc += Math.round(sinIva(d, tarifa));
+      const precioNeto = +sinIva(l.precio, tarifa).toFixed(5);
+      if (!tarifa) { exe += neto; return { tarifa, cod: TARIFA_COD[0], neto, iva: 0, ivaExon: 0, precioNeto }; }
       const frac = exo ? Math.min(exo.pct, tarifa) / tarifa : 0;
-      const ivaPleno = Math.round(neto * tarifa / 100);
+      const ivaPleno = conI - neto;
       const ivaL = Math.round(ivaPleno * (1 - frac)), ivaExL = ivaPleno - ivaL;
       grav += neto; exon += Math.round(neto * frac); iva += ivaL; ivaExon += ivaExL;
       const k = porTarifa[tarifa] || (porTarifa[tarifa] = { tarifa, cod: TARIFA_COD[tarifa], base: 0, iva: 0 });
       k.base += neto; k.iva += ivaL;
-      return { tarifa, cod: TARIFA_COD[tarifa], neto, iva: ivaL, ivaExon: ivaExL };
+      return { tarifa, cod: TARIFA_COD[tarifa], neto, iva: ivaL, ivaExon: ivaExL, precioNeto };
     });
     return {
       grav, desc, exe, exon, iva, ivaExon, total: grav + exe + iva,
@@ -910,15 +922,18 @@
   });
 
   /* ── conversaciones del agente de WhatsApp ──────────────────── */
+  /* los precios que cita el agente salen del catálogo (con IVA incluido) */
+  const precioDe = cod => (articulos.find(a => a.cod === cod) || { precio: 0 }).precio;
+  const col = n => "₡" + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const waThreads = [
     {
       id: "W1", nom: "Marvin Céspedes", tel: "8845-1120", clienteId: "C2", estado: "Atendido por el agente", hora: "11:32",
       msgs: [
         { de: "cli", t: "Buenas, tienen cinta teflón de 1/2?", h: "11:28" },
-        { de: "bot", t: "Buenos días don Marvin. Sí. Cinta teflón ½\" × 10 m, código FER-01455, a ₡395 con IVA incluido.", h: "11:28" },
+        { de: "bot", t: "Buenos días don Marvin. Sí. Cinta teflón ½\" × 10 m, código FER-01455, a " + col(precioDe("FER-01455")) + " con IVA incluido.", h: "11:28" },
         { de: "bot", t: "Disponible ahora: Santa Rosa 74 · Turrialba 210 · Pacayas 40. En Pejibaye está agotada.", h: "11:28" },
         { de: "cli", t: "Perfecto, aparteme 50 en Santa Rosa", h: "11:30" },
-        { de: "bot", t: "Listo. Aparté 50 unidades en Santa Rosa a nombre suyo, reserva RS-00418, vence hoy a las 6:00 p.m. Total ₡19 750.", h: "11:31" },
+        { de: "bot", t: "Listo. Aparté 50 unidades en Santa Rosa a nombre suyo, reserva RS-00418, vence hoy a las 6:00 p.m. Total " + col(50 * precioDe("FER-01455")) + ".", h: "11:31" },
         { de: "bot", t: "¿Se lo dejo como pedido para pasar a caja, o le genero el enlace de pago SINPE?", h: "11:31" }
       ]
     },
@@ -926,7 +941,7 @@
       id: "W2", nom: "Desarrollos Reventazón", tel: "2556-3300", clienteId: "C3", estado: "Escalado a persona", hora: "10:54",
       msgs: [
         { de: "cli", t: "Necesito cotización de 400 varillas #4 y 120 sacos de cemento para entrega el lunes en Turrialba", h: "10:41" },
-        { de: "bot", t: "Con gusto. Varilla #4 × 6 m a ₡5 680 y cemento UG 50 kg a ₡8 450, precios con IVA.", h: "10:42" },
+        { de: "bot", t: "Con gusto. Varilla #4 × 6 m a " + col(precioDe("FER-02220")) + " y cemento UG 50 kg a " + col(precioDe("FER-01042")) + ", precios con IVA.", h: "10:42" },
         { de: "bot", t: "400 varillas: hay 180 en CEDI Isabel y 240 en Bodega 1. Alcanza. 120 sacos: hay 1 240 en el CEDI.", h: "10:42" },
         { de: "bot", t: "El monto pasa de ₡3 200 000 y su categoría tiene precio negociado. Le paso con proveeduría para confirmar el precio y el transporte.", h: "10:43" },
         { de: "sys", t: "Escalado a Óscar Jiménez (Jefe de proveeduría) · esperando respuesta hace 11 min", h: "10:43" }
@@ -956,7 +971,7 @@
       id: "W5", nom: "Carlos Ramírez", tel: "8877-0912", clienteId: "C9", estado: "Atendido por el agente", hora: "08:41",
       msgs: [
         { de: "cli", t: "cuanto vale la lamina de zinc esmaltada", h: "08:39" },
-        { de: "bot", t: "Lámina zinc esmaltada #26: de 3,66 m a ₡15 150 y de 4,88 m a ₡20 200, con IVA.", h: "08:40" },
+        { de: "bot", t: "Lámina zinc esmaltada #26: de 3,66 m a " + col(precioDe("FER-03771")) + " y de 4,88 m a " + col(precioDe("FER-03774")) + ", con IVA.", h: "08:40" },
         { de: "bot", t: "En El Centro hay 12 de la de 3,66 m. Si necesita más, en el CEDI hay 520 y se las bajamos mañana.", h: "08:40" },
         { de: "cli", t: "y me hacen precio por 30?", h: "08:41" },
         { de: "bot", t: "Por 30 unidades aplica el descuento por volumen de la familia Techos. Le confirmo con un vendedor porque el margen mínimo de esa familia está en 18 %.", h: "08:41" }
@@ -966,7 +981,7 @@
       id: "W6", nom: "Finca La Esperanza", tel: "8700-4488", clienteId: "C12", estado: "Pedido creado", hora: "07:55",
       msgs: [
         { de: "cli", t: "Buenos días, mandeme 6 rollos de manguera de 15m y 20 aspersores", h: "07:52" },
-        { de: "bot", t: "Manguera ½\" × 15 m a ₡8 200 y aspersor giratorio a ₡2 950. Total ₡108 200 con IVA.", h: "07:53" },
+        { de: "bot", t: "Manguera ½\" × 15 m a " + col(precioDe("FER-08010")) + " y aspersor giratorio a " + col(precioDe("FER-08040")) + ". Total " + col(6 * precioDe("FER-08010") + 20 * precioDe("FER-08040")) + " con IVA.", h: "07:53" },
         { de: "bot", t: "Su cuenta tiene crédito a 30 días con ₡1 840 000 disponibles. ¿Lo cargo a crédito?", h: "07:53" },
         { de: "cli", t: "Si por favor, y que salga en la ruta de Pejibaye", h: "07:54" },
         { de: "bot", t: "Listo. Pedido PED-002401 creado, cargado a crédito y asignado a la ruta de Pejibaye del lunes. Le aviso cuando salga el camión.", h: "07:55" }
@@ -1139,7 +1154,7 @@
         d.lineas.forEach(l => {
           const a = artById[l.artId];
           if (!a || a.fam !== f.id) return;
-          ing += l.cant * l.precio * (1 - (l.desc || 0) / 100);
+          ing += sinIva(l.cant * l.precio * (1 - (l.desc || 0) / 100), tarifaDe(l));
           cos += l.cant * a.costo;
         });
       });
@@ -1152,7 +1167,7 @@
       if (d.tipo !== "FE" && d.tipo !== "TE") return;
       d.lineas.forEach(l => {
         const a = artById[l.artId]; if (!a) return;
-        const pv = l.precio * (1 - (l.desc || 0) / 100);
+        const pv = sinIva(l.precio * (1 - (l.desc || 0) / 100), tarifaDe(l));
         const m = ((pv - a.costo) / pv) * 100;
         if (m < famById[a.fam].min) out.push({ doc: d, art: a, margen: +m.toFixed(1), min: famById[a.fam].min, perdida: Math.round((a.costo / (1 - famById[a.fam].min / 100) - pv) * l.cant) });
       });
@@ -1177,7 +1192,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

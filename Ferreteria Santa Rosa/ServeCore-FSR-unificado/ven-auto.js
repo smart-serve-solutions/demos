@@ -71,13 +71,14 @@
     const ps = prodsFam(fam);
     if (!ps.length) return null;
     const k = 1 - (desc || 0) / 100;
-    return ps.reduce((s, a) => s + ((a.precio * k - a.costo) / (a.precio * k)) * 100, 0) / ps.length;
+    return ps.reduce((s, a) => s + D.margenDe(a.precio * k, a.costo, a.tarifa), 0) / ps.length;
   }
   /* cuánto descuento aguanta un artículo sin bajar del mínimo de su familia */
   function descMax(a) {
     const min = (D.famById[a.fam] || {}).min || 0;
     if (!a.precio || !a.costo) return 0;
-    const m = (1 - a.costo / (a.precio * (1 - min / 100))) * 100;
+    /* el precio de lista trae IVA: el descuento máximo se mide sobre la base */
+    const m = (1 - a.costo / (D.sinIva(a.precio, a.tarifa) * (1 - min / 100))) * 100;
     return Math.max(0, Math.floor(m * 2) / 2);
   }
 
@@ -130,7 +131,7 @@
       if (d.tipo !== "FE" && d.tipo !== "TE") return;
       d.lineas.forEach(l => {
         const a = D.artById[l.artId]; if (!a || a.fam !== fam || !a.costo) return;
-        const pv = l.precio * (1 - (l.desc || 0) / 100);
+        const pv = D.sinIva(l.precio * (1 - (l.desc || 0) / 100), a.tarifa);
         const m = ((pv - a.costo) / pv) * 100, min = D.famById[fam].min;
         if (m < min) { n++; cedido += (a.costo / (1 - min / 100) - pv) * l.cant; }
       });
@@ -448,7 +449,7 @@
 
   const BOLETAS = [];
   (function () {
-    const grande = d => d.lineas.find(l => l.cant * l.precio * 1.13 * 0.6 > PARAM.devolucionSinAprobacion);
+    const grande = d => d.lineas.find(l => l.cant * l.precio * 0.6 > PARAM.devolucionSinAprobacion);
     const fe = D.documentos.filter(d => d.tipo === "FE" && d.clienteId && grande(d));
     [fe[1], fe[4]].forEach((d, i) => {
       if (!d) return;
@@ -557,9 +558,10 @@
         const cobrado = d.tipo === "NC" || !d.saldo;
         d.lineas.forEach(l => {
           const a = D.artById[l.artId]; if (!a) return;
-          const neto = l.cant * l.precio * (1 - (l.desc || 0) / 100);
-          bruto += s * l.cant * l.precio;
-          const m = a.costo ? ((l.precio * (1 - (l.desc || 0) / 100) - a.costo) / (l.precio * (1 - (l.desc || 0) / 100))) * 100 : 100;
+          /* la comisión se paga sobre la venta sin IVA */
+          const neto = D.sinIva(l.cant * l.precio * (1 - (l.desc || 0) / 100), a.tarifa);
+          bruto += s * D.sinIva(l.cant * l.precio, a.tarifa);
+          const m = a.costo ? D.margenDe(l.precio * (1 - (l.desc || 0) / 100), a.costo, a.tarifa) : 100;
           if ((!REGLAS.soloCobrado || cobrado) && (!REGLAS.sinBajoMargen || m >= (D.famById[a.fam].min || 0))) com += s * neto * (COMISION[a.fam] || 0) / 100;
         });
       });

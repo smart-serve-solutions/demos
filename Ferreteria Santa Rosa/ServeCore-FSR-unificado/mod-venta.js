@@ -46,7 +46,8 @@
   const lineTotal = l => lineBruto(l) - lineDescMonto(l);
   function lineMargen(l) {
     const a = artOf(l.artId);
-    const pv = l.cant ? lineTotal(l) / l.cant : l.precio;
+    /* el precio de la línea trae IVA: el margen y la utilidad se miden sin IVA */
+    const pv = D.sinIva(l.cant ? lineTotal(l) / l.cant : l.precio, a.tarifa);
     return { m: a.costo ? ((pv - a.costo) / pv) * 100 : null, min: D.famById[a.fam].min, pv };
   }
   /* para el motor fiscal el descuento viaja en porcentaje: se convierte aquí */
@@ -60,7 +61,7 @@
   const cartPeso = () => S.cart.lineas.reduce((s, l) => s + (artOf(l.artId).peso || 0) * l.cant, 0);
   function cartMargen() {
     let ing = 0, cos = 0;
-    S.cart.lineas.forEach(l => { ing += lineTotal(l); cos += l.cant * artOf(l.artId).costo; });
+    S.cart.lineas.forEach(l => { ing += D.sinIva(lineTotal(l), artOf(l.artId).tarifa); cos += l.cant * artOf(l.artId).costo; });
     return ing ? ((ing - cos) / ing) * 100 : 0;
   }
   const pendientes = () => S.cart.lineas.filter(l => { const x = lineMargen(l); return x.m != null && x.m < x.min && !l.auth; });
@@ -90,7 +91,7 @@
 
   function itemPanel(l, idx) {
     const a = artOf(l.artId);
-    const bruto = lineBruto(l), descMonto = lineDescMonto(l), neto = bruto - descMonto;
+    const bruto = lineBruto(l), descMonto = lineDescMonto(l);
     /* la línea lleva la tarifa de su CABYS y la exoneración del cliente */
     const tl = D.totalizar([lineasFiscales()[idx]], { exoneracion: cartExo() });
     const iva = tl.iva, tarifa = D.tarifaDe(l);
@@ -120,12 +121,13 @@
         : l.authReq ? `<div style="font-weight:500;margin-top:4px">Solicitud pendiente · la pidió ${esc(l.authReq.solicita)}</div><button class="btn sm" data-auth="${idx}" style="margin-top:8px">${icon("shield")}Aprobar con PIN</button>`
         : `<button class="btn sm" data-auth="${idx}" style="margin-top:8px">${icon("shield")}Solicitar autorización</button>`}</div>` : ""}
       <div style="padding:12px 14px;border-radius:11px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;flex-direction:column;gap:4px">
-        ${posRow("Mercadería", c(neto))}
+        ${posRow("Precio de lista (con IVA)", c(bruto))}
         ${descMonto ? posRow("Descuento aplicado", "−" + c(descMonto), "var(--warn)") : ""}
+        <div style="height:1px;background:var(--accent-line);margin:2px 0"></div>
+        ${posRow("Base sin IVA", c(tl.grav + tl.exe))}
         ${posRow("IVA " + D.pctTxt(tarifa) + " · CABYS " + a.cabys, c(iva))}
         ${tl.ivaExon ? posRow("IVA exonerado", "−" + c(tl.ivaExon), "var(--ok)") : ""}
-        <div style="height:1px;background:var(--accent-line);margin:2px 0"></div>
-        <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:750"><span>Línea</span><span class="num">${c(neto + iva)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:750"><span>Línea</span><span class="num">${c(tl.total)}</span></div>
       </div>`;
   }
 
@@ -229,7 +231,7 @@
             <input class="qi num" data-qi="${i}" value="${cantEdit(l.cant, a)}" inputmode="decimal" autocomplete="off" aria-label="Cantidad de la línea ${i + 1}">
             <button type="button" class="qb" data-qd="${i}" data-q="1" tabindex="-1" aria-label="Sumar uno a la línea ${i + 1}">+</button></div></td>
           <td class="r">${puedePrecio
-            ? `<input class="celed num" data-pi="${i}" value="${grp(l.precio)}" inputmode="numeric" autocomplete="off" aria-label="Precio unitario sin IVA de la línea ${i + 1}" data-tip="Precio sin IVA · clic para cambiarlo">`
+            ? `<input class="celed num" data-pi="${i}" value="${grp(l.precio)}" inputmode="numeric" autocomplete="off" aria-label="Precio unitario con IVA de la línea ${i + 1}" data-tip="Precio con IVA incluido · clic para cambiarlo">`
             : `<span class="num" data-tip="Cambiar el precio requiere permiso de gerencia">${grp(l.precio)}</span>`}</td>
           <td class="r">${descCell}</td>
           <td class="r num b">${grp(lineTotal(l))}</td>
@@ -286,8 +288,8 @@
               </div>${icon("chev")}</button>
             <div class="pdet">${panelDet}</div>
             <div style="padding:13px 18px 14px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:7px;flex:none">
-              ${posRow("Mercadería", c(t.grav + t.exe))}
-              ${t.desc ? posRow("Descuentos", "−" + c(t.desc), "var(--warn)") : ""}
+              ${posRow("Subtotal sin IVA", c(t.grav + t.exe))}
+              ${t.desc ? posRow("Incluye descuentos por", c(t.desc), "var(--warn)") : ""}
               ${D.desgloseIva(t).map(([k, v]) => posRow(k, v < 0 ? "−" + c(-v) : c(v), v < 0 ? "var(--ok)" : "")).join("")}
               <div style="display:flex;justify-content:space-between;font-size:19.5px;font-weight:700;padding-top:5px;border-top:1px solid var(--hair-2)"><span>Total</span><span class="num">${c(t.total)}</span></div>
               <button class="bigbtn ${falta ? "bloq" : ""}" id="btnCobrar" ${nLin ? "" : "disabled"}>${icon(falta ? "shield" : "cash")}Cobrar<kbd>⏎</kbd></button>

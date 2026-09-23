@@ -824,16 +824,16 @@
           { t: "Descripción", fmt: r => esc(artOf(r.artId).desc) + (r.nota ? `<span class="sub ui" style="color:var(--accent)">${icon("file", 'style="width:12px;height:12px"')} ${esc(r.nota)} · sale impreso</span>` : "") },
           { t: "CABYS", cls: "mono", fmt: r => esc(artOf(r.artId).cabys) },
           { t: "Cant.", r: true, cls: "mono", fmt: r => grp(r.cant) },
-          { t: "Precio", r: true, cls: "mono", fmt: r => grp(r.precio) },
+          { t: "Precio con IVA", r: true, cls: "mono", fmt: r => grp(r.precio) },
           { t: "Desc.", r: true, cls: "mono", fmt: r => (r.desc ? dec(r.desc) + " %" : "—") },
-          { t: "Total", r: true, cls: "mono", fmt: r => `<b>${grp(Math.round(r.cant * r.precio * (1 - (r.desc || 0) / 100)))}</b>` }
+          { t: "Total con IVA", r: true, cls: "mono", fmt: r => `<b>${grp(Math.round(r.cant * r.precio * (1 - (r.desc || 0) / 100)))}</b>` }
         ], rows: d.lineas
       })}
         <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;margin-top:16px">
           <div class="mut" style="font-size:12.5px;line-height:1.6">El XML firmado y la respuesta de Hacienda se guardan cinco años en el archivo de la empresa. El PDF no lleva ningún enlace que abra el sistema.${f ? " Los comprobantes salen a " + esc(f.correoFE) + "." : ""}</div>
           <div>
-            <div class="totline s"><span class="tl">Gravado</span><span class="tv">${grp(d.grav)}</span></div>
-            <div class="totline s"><span class="tl">Descuentos</span><span class="tv">−${grp(d.desc)}</span></div>
+            <div class="totline s"><span class="tl">Subtotal sin IVA</span><span class="tv">${grp(d.grav + d.exe)}</span></div>
+            ${d.desc ? `<div class="totline s"><span class="tl">Incluye descuentos por</span><span class="tv">${grp(d.desc)}</span></div>` : ""}
             ${D.desgloseIva(d).map(([k, v]) => `<div class="totline"><span class="tl">${esc(k)}</span><span class="tv">${v < 0 ? "−" : ""}${grp(v)}</span></div>`).join("")}
             <div class="totrule"></div>
             <div class="totline"><span class="tl b">Total</span><span class="tv" style="font-size:17px">${c(d.total)}</span></div>
@@ -890,7 +890,7 @@
     const res = !d ? D.documentos.filter(x => x.tipo !== "NC" && (!dev.q || norm(x.cons + " " + cliNom(x.clienteId)).includes(norm(dev.q)))).slice(0, 12) : [];
     const lineas = d ? d.lineas.map(l => ({ l, ya: V.devuelto(d, l.artId), n: dev.cant[l.artId] || 0 })) : [];
     const sel = lineas.filter(x => x.n > 0);
-    const monto = sel.reduce((s, x) => s + x.n * x.l.precio * (1 - (x.l.desc || 0) / 100), 0) * 1.13;
+    const monto = sel.reduce((s, x) => s + x.n * x.l.precio * (1 - (x.l.desc || 0) / 100), 0);
     const conc = V.CONCEPTOS.find(k => k.id === dev.concepto);
     const tope = monto > V.PARAM.devolucionSinAprobacion;
     const paso = (n, t, body) => card({ title: n + " · " + t, body });
@@ -907,7 +907,7 @@
           { t: "Facturado", r: true, cls: "mono", fmt: x => grp(x.l.cant) },
           { t: "Ya devuelto", r: true, cls: "mono", fmt: x => (x.ya ? grp(x.ya) : '<span class="dim">0</span>') },
           { t: "Devolver", c: true, fmt: x => `<div class="qstep"><button type="button" class="qb" data-dq="${x.l.artId}" data-d="-1">−</button><input class="qi num" data-dqi="${x.l.artId}" value="${x.n}" inputmode="numeric" aria-label="Cantidad a devolver"><button type="button" class="qb" data-dq="${x.l.artId}" data-d="1">+</button></div>` },
-          { t: "Monto", r: true, cls: "mono", fmt: x => (x.n ? grp(x.n * x.l.precio * (1 - (x.l.desc || 0) / 100) * 1.13) : '<span class="dim">—</span>') }
+          { t: "Monto", r: true, cls: "mono", fmt: x => (x.n ? grp(x.n * x.l.precio * (1 - (x.l.desc || 0) / 100)) : '<span class="dim">—</span>') }
         ], rows: lineas
       })) : ""}
         ${d ? paso(3, "Concepto y reintegro", `<div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">

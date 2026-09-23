@@ -222,8 +222,9 @@
     const n = Math.max.apply(null, D.articulos.map(a => +(/\d+$/.exec(a.cod) || [0])[0]).filter(x => x < 50000));
     return "FER-" + pad(n + 1, 5);
   }
-  const precioSugerido = (costo, fam) => r5((+costo || 0) / (1 - ((D.famById[fam] || { min: 25 }).min + POL.objetivoSobreMinimo) / 100));
-  const pisoPrecio = (costo, fam) => r5((+costo || 0) / (1 - ((D.famById[fam] || { min: 0 }).min) / 100));
+  /* precios de lista al consumidor: con el IVA de la tarifa del artículo */
+  const precioSugerido = (costo, fam, tarifa) => r5(D.conIva((+costo || 0) / (1 - ((D.famById[fam] || { min: 25 }).min + POL.objetivoSobreMinimo) / 100), tarifa));
+  const pisoPrecio = (costo, fam, tarifa) => r5(D.conIva((+costo || 0) / (1 - ((D.famById[fam] || { min: 0 }).min) / 100), tarifa));
   let nseq = 0;
   function crear(d) {
     const err = [];
@@ -232,7 +233,8 @@
     if (!D.famById[d.fam]) err.push("Falta la familia");
     if (!/^\d{13}$/.test(d.cabys || "")) err.push("Falta el código CABYS");
     if (d.tipo !== "Servicio" && !(+d.costo > 0)) err.push("Falta el costo");
-    if (d.tipo !== "Servicio" && +d.precio < pisoPrecio(d.costo, d.fam)) err.push("El precio queda por debajo del margen mínimo de la familia");
+    const tarifa = D.tarifaDeCabys(d.cabys);
+    if (d.tipo !== "Servicio" && +d.precio < pisoPrecio(d.costo, d.fam, tarifa)) err.push("El precio queda por debajo del margen mínimo de la familia");
     if (d.tipo !== "Servicio" && !(d.locales || []).length) err.push("Marque al menos un local donde existe");
     if (err.length) return { ok: false, err };
     nseq++;
@@ -240,9 +242,9 @@
     const a = {
       id: "N" + nseq, cod: d.cod.trim().toUpperCase(), desc: d.desc.trim(), nom: d.desc.trim(), fam: d.fam,
       sub: d.sub || (D.subcats[d.fam] || [""])[0], marca: d.marca || "—", unidad: d.unidad || "Unid",
-      costo: Math.round(+d.costo || 0), precio: Math.round(+d.precio || 0), cabys: d.cabys, ean: d.ean || "",
+      costo: Math.round(+d.costo || 0), precio: Math.round(+d.precio || 0), cabys: d.cabys, tarifa, ean: d.ean || "",
       ubic: d.ubic || "", tipo: d.tipo || "Producto", peso: +d.peso || 0, medida: d.medida || "",
-      margen: +d.precio ? +(((+d.precio - (+d.costo || 0)) / +d.precio) * 100).toFixed(1) : null,
+      margen: +d.precio ? +D.margenDe(+d.precio, +d.costo || 0, tarifa).toFixed(1) : null,
       decimales: !!d.decimales, contraPedido: !!d.contraPedido, fotos: d.fotos || 0,
       pres: [{ u: d.unidad || "Unid", f: 1, base: true, venta: true, compra: !(d.presCompra && d.presCompra.f > 1), desc: 0 }]
         .concat(d.presCompra && d.presCompra.f > 1 ? [{ u: d.presCompra.u, f: +d.presCompra.f, compra: true, venta: false, desc: 0 }] : []),
@@ -292,7 +294,7 @@
     if (!D.famById[r.fam]) p.push("La familia «" + r.fam + "» no existe");
     if (!/^\d{13}$/.test(r.cabys || "")) p.push("Falta el CABYS");
     else if (!CABYS.some(c => c.cod === r.cabys)) p.push("CABYS no vigente");
-    if (D.famById[r.fam] && r.precio < pisoPrecio(r.costo, r.fam)) p.push("Precio por debajo del margen mínimo (" + D.famById[r.fam].min + " %)");
+    if (D.famById[r.fam] && r.precio < pisoPrecio(r.costo, r.fam, D.tarifaDeCabys(r.cabys))) p.push("Precio por debajo del margen mínimo (" + D.famById[r.fam].min + " %)");
     return p;
   }
   function habilitarCarga(por) { CARGA.habilitada = true; CARGA.por = por || GENTE.gerente; anotar("Habilitó la carga masiva", "Hasta las 18:00 de hoy", CARGA.por); }
@@ -320,7 +322,7 @@
     const a = D.artById[l.artId];
     if (!a || Math.abs(l.var) < 2.8 || Math.abs(l.var) > 15 || PRECIOS.length >= 7 || PRECIOS.some(p => p.artId === a.id)) return;
     const costoNuevo = Math.round(a.costo * (1 + l.var / 100));
-    const precioNuevo = r5(costoNuevo / (1 - a.margen / 100));
+    const precioNuevo = r5(D.conIva(costoNuevo / (1 - a.margen / 100), a.tarifa));
     if (precioNuevo === a.precio) return;
     PRECIOS.push({ id: "PC" + (PRECIOS.length + 1), artId: a.id, oc: o.cons, provId: o.provId, var: l.var, costoAntes: a.costo, costoNuevo, precioAntes: a.precio, precioNuevo, estado: "Por aprobar" });
   }));
@@ -330,7 +332,7 @@
     const a = D.artById[p.artId];
     if (precio) p.precioNuevo = r5(precio);
     a.costo = p.costoNuevo; a.precio = p.precioNuevo;
-    a.margen = +(((a.precio - a.costo) / a.precio) * 100).toFixed(1);
+    a.margen = +D.margenDe(a.precio, a.costo, a.tarifa).toFixed(1);
     Object.keys(D.existencias[a.id] || {}).filter(l => loc(l).tipo === "tienda").forEach(l => etiqueta(a.id, l, "Precio nuevo"));
     p.estado = "Aprobado"; p.por = (por || GENTE.compras).nom;
     anotar("Aprobó precio nuevo", a.cod + " · " + a.desc + " · ₡" + p.precioAntes + " → ₡" + p.precioNuevo, por || GENTE.compras);
@@ -346,7 +348,7 @@
   function previaMasivo(fam, pct) {
     return prods().filter(a => a.fam === fam).map(a => {
       const nuevo = r5(a.precio * (1 + pct / 100));
-      return { a, antes: a.precio, nuevo, margen: +(((nuevo - a.costo) / nuevo) * 100).toFixed(1), bajo: nuevo < pisoPrecio(a.costo, a.fam) };
+      return { a, antes: a.precio, nuevo, margen: +D.margenDe(nuevo, a.costo, a.tarifa).toFixed(1), bajo: nuevo < pisoPrecio(a.costo, a.fam, a.tarifa) };
     });
   }
   function aplicarMasivo(fam, pct, por) {
@@ -411,7 +413,7 @@
   }
 
   /* ═══ 11 · PRODUCTO DE SEGUNDA Y DEVOLUCIONES (INV-009, INV-010) ══ */
-  const precioSegunda = a => r5(a.costo / (1 - POL.margenSegunda / 100));
+  const precioSegunda = a => r5(D.conIva(a.costo / (1 - POL.margenSegunda / 100), a.tarifa));
   const SEGUNDA = [
     { id: "SG1", cod: "FER-03771", locId: "L1", cant: 4, motivo: "Rayadas en la descarga del camión", fotos: 2, fecha: dia(1), estado: "Por aprobar", por: "Randall Mata Brenes" },
     { id: "SG2", cod: "FER-04225", locId: "L2", cant: 1, motivo: "Le falta la tornillería de montaje", fotos: 1, fecha: dia(0), estado: "Por aprobar", por: "Katherine Vargas Soto" },

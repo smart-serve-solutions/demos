@@ -1,5 +1,28 @@
 # Cambios
 
+## 2026-09-23 · Ventas · Precios de lista con IVA incluido
+
+Decisión pendiente de la auditoría: la caja trataba el precio de lista como si no tuviera IVA y lo sumaba
+encima, mientras el propio demo decía «Precios en la caja: con IVA incluido» y el agente de WhatsApp cotizaba
+«con IVA». Ahora el precio de lista es el precio al consumidor.
+
+- `D.totalizar` separa la base y el IVA de cada línea a partir del precio con IVA (según su tarifa). Lo que paga
+  el cliente es la suma de los precios de las líneas; si está exonerado, paga la base más el IVA que no cubre la
+  exoneración. El encabezado sigue siendo la suma de las líneas redondeadas.
+- Márgenes, piso de precio, descuento máximo, comisiones de vendedores, precio sugerido, precio de segunda,
+  actualización de precios por costo nuevo y ventas bajo margen se calculan sobre el precio **sin** IVA
+  (`D.sinIva`, `D.margenDe`, `D.pisoConIva`). Con el IVA adentro, algunos precios del catálogo subieron para
+  seguir respetando el margen mínimo de su familia.
+- La caja muestra el precio de lista con IVA, la base sin IVA, el IVA por tarifa y el total; el detalle del
+  comprobante rotula los montos con IVA y el subtotal sin IVA. Las plantillas llevan cada línea con su precio y
+  monto sin IVA (como el XML) y el IVA se suma abajo.
+- El parámetro «Precios en la caja» queda fijo en «Con IVA incluido».
+- Los precios que cita el agente de WhatsApp salen del catálogo.
+- La devolución ya no multiplica por 1,13 un monto que trae el IVA incluido.
+
+Archivos: `data.js`, `ven-auto.js`, `inv-auto.js`, `mod-inv.js`, `mod-venta.js`, `mod-venta-gestion.js`,
+`mod-sys.js`.
+
 ## 2026-09-23 · Sistema / Configuración · Sesión, bitácora fiel, tipo de cambio y controles contables
 
 Hallazgos 6, 7, 8 y 11 de la auditoría de Configuración y la parte de F4 sobre los dólares en la caja.

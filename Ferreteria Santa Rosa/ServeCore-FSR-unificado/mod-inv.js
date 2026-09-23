@@ -383,12 +383,14 @@
         };
         const pintarMargen = () => {
           const costo = +g("naCosto").value || 0, precio = +g("naPrecio").value || 0, fam = g("naFam").value, f = D.famById[fam];
-          const m = precio ? (precio - costo) / precio * 100 : 0;
-          const bajo = tipo !== "Servicio" && precio < I.pisoPrecio(costo, fam);
+          /* el precio de lista trae IVA: el margen se mide sobre la base */
+          const tar = D.tarifaDeCabys(g("naCabysCod").value);
+          const m = precio ? D.margenDe(precio, costo, tar) : 0;
+          const bajo = tipo !== "Servicio" && precio < I.pisoPrecio(costo, fam, tar);
           g("naMargen").innerHTML = costo && precio ? `<div style="font-size:12.5px;padding:8px 11px;border-radius:9px;border:1px solid ${bajo ? "var(--crit-line)" : "var(--ok-line)"};background:${bajo ? "var(--crit-soft)" : "var(--ok-soft)"};color:${bajo ? "var(--crit)" : "var(--ok)"};font-weight:600">
-              Margen ${dec(m, 1)} % · mínimo de ${esc(f.nom)}: ${f.min} %${bajo ? " · por debajo del mínimo" : ""}</div>` : "";
+              Margen ${dec(m, 1)} % sobre el precio sin IVA · mínimo de ${esc(f.nom)}: ${f.min} %${bajo ? " · por debajo del mínimo" : ""}</div>` : "";
         };
-        const sugerirPrecio = () => { const costo = +g("naCosto").value || 0; if (costo) g("naPrecio").value = I.precioSugerido(costo, g("naFam").value); pintarMargen(); };
+        const sugerirPrecio = () => { const costo = +g("naCosto").value || 0; if (costo) g("naPrecio").value = I.precioSugerido(costo, g("naFam").value, D.tarifaDeCabys(g("naCabysCod").value)); pintarMargen(); };
         g("naCod").addEventListener("input", pintarCod);
         g("naDesc").addEventListener("input", () => { pintarCabys(); });
         g("naCabysCod").addEventListener("input", pintarCabys);
@@ -780,7 +782,7 @@
           { t: "Local", fmt: s => esc(locNom(s.locId)) },
           { t: "Cant.", r: true, cls: "mono", fmt: s => cant(s.cant, s.a) },
           { t: "Precio de lista", r: true, cls: "mono", fmt: s => grp(s.a.precio) },
-          { t: "Precio de segunda", r: true, cls: "mono", fmt: s => `<b>${grp(s.precio)}</b><span class="sub">margen ${dec((s.precio - s.a.costo) / s.precio * 100, 1)} %</span>` },
+          { t: "Precio de segunda", r: true, cls: "mono", fmt: s => `<b>${grp(s.precio)}</b><span class="sub">margen ${dec(D.margenDe(s.precio, s.a.costo, s.a.tarifa), 1)} %</span>` },
           { t: "Marcó", fmt: s => `${esc(nombre(s.por))}${s.aprobo ? `<span class="sub ui">aprobó ${esc(nombre(s.aprobo))}</span>` : ""}` },
           { t: "", r: true, fmt: s => s.estado === "Por aprobar" ? `<button class="btn sm pri" data-sga="${s.id}">Aprobar precio</button>` : tag(s.estado, s.estado === "A la venta" ? "ok" : "mu", "check") }
         ], rows: SG, rowCls: s => s.estado === "Por aprobar" ? "wa" : ""
