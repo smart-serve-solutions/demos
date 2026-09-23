@@ -49,13 +49,14 @@
 
   /* ═══ 3 · BITÁCORA DE LA REVISIÓN ══════════════════════════════════ */
   const resueltos = [];
+  /* firma la persona de la sesión, con su cargo, su local y su equipo */
   function anotar(accion, detalle, por) {
-    const p = por || REVISOR;
-    const reg = { fecha: ahora(), por: p.nom, rol: p.rol, accion, detalle };
+    const p = por || { nom: D.sesion.nom, rol: D.sesion.cargo };
+    const reg = { fecha: D.cargando ? ahora() : D.ahora(), por: p.nom, rol: p.rol, accion, detalle };
     resueltos.unshift(reg);
     if (D.bitacora) D.bitacora.unshift({
-      id: "BT-C" + resueltos.length, fecha: reg.fecha, usuario: p.nom, rol: p.rol, locId: "L2",
-      accion, detalle, sev: "Media", antes: "", despues: "", ip: "10.2.14.31"
+      id: "BT-C" + resueltos.length, fecha: reg.fecha, usuario: p.nom, rol: p.rol, locId: (w.S && w.S.locId) || "L2",
+      accion, detalle, sev: "Media", antes: "", despues: "", ip: p.nom === D.sesion.nom ? D.sesion.ip : "10.2.14.31"
     });
   }
 
@@ -72,7 +73,7 @@
     { id: "RG9", t: "Electricidad por medidor", cond: "Proveedor ICE y número de medidor", accion: "Servicios públicos del local de ese medidor", origen: "Aprendida · 2 set · Sonia Calderón Ruiz", aciertos: 14, activa: true }
   ];
   function nuevaRegla(t, cond, accion) {
-    const r = { id: "RG" + (REGLAS.length + 1), t, cond, accion, origen: "Aprendida · hoy · " + REVISOR.nom, aciertos: 0, activa: true, nueva: true };
+    const r = { id: "RG" + (REGLAS.length + 1), t, cond, accion, origen: "Aprendida · hoy · " + D.sesion.nom, aciertos: 0, activa: true, nueva: true };
     REGLAS.push(r);
     return r;
   }
@@ -241,16 +242,26 @@
   AJUSTES.filter(a => a.estado === "Registrado solo" && a.ajuste).forEach(a => asentarAjuste(a));
 
   /* ═══ 9 · INVENTARIO POR LOCAL ═════════════════════════════════════ */
-  const INV = D.locales.map(l => {
+  /* movimientos del kardex cuyo asiento está retenido: por eso el libro de ese local
+     queda arriba del kardex hasta que alguien los aprueba */
+  const PEND_INV = [];
+  const esmalte = D.articulos.find(a => a.cod === "FER-05210");
+  const eL3 = esmalte && (D.existencias[esmalte.id] || {}).L3;
+  if (eL3 && eL3.cant >= 3) {
+    D.mover(esmalte.id, "L3", -3, "Merma", "MER-0041", dia(1), "3 unidades golpeadas en el descargue");
+    PEND_INV.push({ id: "MER-0041", locId: "L3", art: esmalte, cant: 3, monto: 3 * esmalte.costo, estado: "Retenido",
+      causa: "Merma de 3 esmaltes anticorrosivos registrada en el kardex; el asiento quedó retenido porque la foto de evidencia no se adjuntó." });
+  }
+  const pendienteInventario = () => PEND_INV.filter(x => x.estado === "Retenido").reduce((s, x) => s + x.monto, 0);
+  /* el cruce se calcula en vivo: el kardex de cada local contra lo que el libro tiene de él */
+  const INVf = () => D.locales.map(l => {
     let kardex = 0;
     D.articulos.forEach(a => { const e = (D.existencias[a.id] || {})[l.id]; if (e && e.cant > 0) kardex += e.cant * a.costo; });
-    return { loc: l, kardex: r0(kardex), libro: r0(kardex), causa: null, estado: "Cuadra" };
+    const p = PEND_INV.filter(x => x.locId === l.id);
+    const ret = p.filter(x => x.estado === "Retenido").reduce((s, x) => s + x.monto, 0);
+    return { loc: l, kardex: r0(kardex), libro: r0(kardex + ret), causa: ret ? p[0].causa : null,
+      estado: ret ? "Diferencia" : p.length ? "Ajustado" : "Cuadra" };
   });
-  const inv = id => INV.find(x => x.loc.id === id);
-  if (inv("L3")) Object.assign(inv("L3"), { libro: inv("L3").kardex + 84300, estado: "Diferencia",
-    causa: "Merma de 3 esmaltes anticorrosivos registrada en el kardex; el asiento quedó retenido porque la foto de evidencia no se adjuntó." });
-  if (inv("B1")) Object.assign(inv("B1"), { libro: inv("B1").kardex - 27900, estado: "Diferencia",
-    causa: "Traslado recibido del CEDI con el flete incluido en el costo del kardex pero no en el asiento del traslado." });
 
   /* ═══ 10 · CARTERA Y PROVEEDORES ═══════════════════════════════════ */
   function cartera() {
@@ -312,10 +323,12 @@
       lineas: [["Ventas del trimestre de " + nombres, base], ["Tarifa de ejemplo 0,3 % — la real la fija cada municipalidad", null], ["Patente del trimestre", r0(base * 0.003)]] };
   };
   const IMPUESTOS = [
+    /* el borrador del IVA se calcula cada vez que se mira: es el mismo número que Facturación */
     { id: "TX1", t: "Declaración del IVA · formulario 150", ent: "Hacienda · TRIBU-CR", periodo: "setiembre 2026", vence: "15 oct 2026",
-      monto: iva.aPagar, estado: "Borrador listo", origen: iva.docs + " comprobantes emitidos y los recibidos del mes",
-      lineas: [["IVA de ventas de contado", iva.debitoContado], ["IVA de ventas a crédito cobradas (REP)", iva.debitoREP], ["IVA diferido que cumplió 90 días", iva.diferidoVencido],
-        ["Menos: crédito fiscal de compras aceptadas", -iva.creditoFiscal], ["IVA a pagar", iva.aPagar]] },
+      get monto() { return F ? F.ivaMes().aPagar : 0; }, estado: "Borrador listo",
+      get origen() { return (F ? F.ivaMes().docs : 0) + " comprobantes emitidos y los recibidos del mes"; },
+      get lineas() { const i = F ? F.ivaMes() : iva; return [["IVA de ventas de contado", i.debitoVentas], ["Menos: IVA de notas de crédito", -i.ivaNC], ["IVA de ventas a crédito cobradas (REP)", i.debitoREP], ["IVA diferido que cumplió 90 días", i.diferidoVencido],
+        ["Menos: crédito fiscal de compras aceptadas", -i.creditoFiscal], ["IVA a pagar", i.aPagar]]; } },
     { id: "TX2", t: "Retenciones del impuesto al salario · formulario 138", ent: "Hacienda · TRIBU-CR", periodo: "setiembre 2026", vence: "15 oct 2026",
       monto: ret.reduce((a, b) => a + b, 0), estado: "Borrador listo", origen: "Planillas pagadas en el mes",
       lineas: [["Colaboradores en planilla", ret.length], ["Colaboradores con retención", ret.filter(x => x > 0).length], ["Impuesto retenido en el mes", ret.reduce((a, b) => a + b, 0)]] },
@@ -398,21 +411,19 @@
   [["L2", 0, 48500, "Coopeagri R.L.", 94], ["L5", 1, 126000, "Finca La Esperanza S.R.L.", 89]].forEach((x, i) => add({
     id: "SP-" + i, grupo: "caja", k: "wa", ic: "phone", t: "SINPE de ₡" + String(x[2]).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " sin identificar en " + locNom(x[0]),
     d: fechaCorta(dia(x[1])) + " · sin descripción · teléfono no registrado", monto: x[2],
-    sugerencia: "Coincide en monto con la factura de contado de ruta de " + x[3] + " de ese día.", conf: x[4],
-    acciones: ["aceptar", "regla", "consultar"], aceptarTexto: "Aplicar a esa factura", resp: "Encargado de " + locNom(x[0]),
+    sugerencia: "Coincide en monto con el pago de la factura de contado de ruta de " + x[3] + " de ese día, que ya está registrada; solo falta ligarlo.", conf: x[4],
+    acciones: ["aceptar", "regla", "consultar"], aceptarTexto: "Marcar como identificado", resp: "Encargado de " + locNom(x[0]),
     reglaNueva: ["SINPE de " + x[3], "Teléfono del SINPE de hoy, registrado a " + x[3], "Aplica el cobro a su factura abierta"],
     hacer: () => { const s = sinpe.find(y => y.locId === x[0] && y.fecha.toDateString() === dia(x[1]).toDateString()); if (s) s.identificados = s.n; }
   }));
-  INV.filter(x => x.estado === "Diferencia").forEach(x => add({
-    id: "INV-" + x.loc.id, grupo: "inventario", k: "wa", ic: "box", t: "Inventario de " + x.loc.nom + ": el kardex y el libro difieren en ₡" + String(Math.abs(x.libro - x.kardex)).replace(/\B(?=(\d{3})+(?!\d))/g, " "),
-    d: "Cruce de anoche · kardex valorizado contra la cuenta de inventario del local", monto: Math.abs(x.libro - x.kardex),
-    sugerencia: x.causa, conf: null, aceptarTexto: x.loc.id === "L3" ? "Aprobar la merma" : "Aceptar el ajuste", resp: "Encargado de bodega de " + x.loc.nom,
+  PEND_INV.forEach(x => add({
+    id: "INV-" + x.locId, grupo: "inventario", k: "wa", ic: "box", t: "Inventario de " + locNom(x.locId) + ": el kardex y el libro difieren en ₡" + String(x.monto).replace(/\B(?=(\d{3})+(?!\d))/g, " "),
+    d: "Cruce de anoche · " + x.cant + " × " + x.art.desc + " salieron del kardex (" + x.id + ") y el asiento está retenido", monto: x.monto,
+    sugerencia: x.causa, conf: null, aceptarTexto: "Aprobar la merma", resp: "Encargado de bodega de " + locNom(x.locId),
     hacer: () => {
-      const m = Math.abs(x.libro - x.kardex), merma = x.libro > x.kardex;
-      asiento(HOY, "INV-" + x.loc.id, (merma ? "Merma aprobada · " : "Flete capitalizado al inventario · ") + x.loc.nom,
-        merma ? [{ cta: "6-01-03-001", debe: m, haber: 0 }, { cta: INVENT, debe: 0, haber: m }] : [{ cta: INVENT, debe: m, haber: 0 }, { cta: "6-01-02-001", debe: 0, haber: m }],
-        "Cruce diario de inventario", REVISOR.nom);
-      x.libro = x.kardex; x.estado = "Ajustado";
+      asiento(D.ahora(), "INV-" + x.id, "Merma aprobada · " + locNom(x.locId) + " · " + x.cant + " × " + x.art.desc,
+        [{ cta: "6-01-03-001", debe: x.monto, haber: 0 }, { cta: INVENT, debe: 0, haber: x.monto }], "Cruce diario de inventario", D.sesion.nom);
+      x.estado = "Aprobada";
     }
   }));
   AJUSTES.filter(a => a.estado === "Por revisar").forEach(a => add({
@@ -420,7 +431,7 @@
     d: a.unidades + " unidades vendidas sin existencia en " + locNom(a.locId) + " · costo usado ₡" + a.costoUsado + ", costo real de la compra ₡" + a.costoReal, monto: Math.abs(a.ajuste),
     sugerencia: "El costo promedio se recalculó con la compra que entró, con la existencia negativa en cero como pide Santa Rosa. Pasa del umbral de ₡25 000, por eso pide revisión.", conf: null,
     aceptarTexto: "Aprobar el ajuste", resp: "Compras",
-    hacer: () => { a.estado = "Aprobado"; asentarAjuste(a, REVISOR.nom); }
+    hacer: () => { a.estado = "Aprobado"; asentarAjuste(a, D.sesion.nom); }
   }));
   const sinAceptar = () => D.recibidos.filter(r => r.estado === "Sin aceptar");
   add({
@@ -429,7 +440,7 @@
     cuenta: () => sinAceptar().filter(r => r.ocLigada).length,
     sugerencia: "Cruzan en proveedor, monto y líneas contra la orden y la recepción. Aceptarlos todos.", conf: 99,
     acciones: ["aceptar"], aceptarTexto: "Aceptar ante Hacienda",
-    hacer: () => { if (F) F.aceptarRecibidos(); else sinAceptar().filter(r => r.ocLigada).forEach(r => (r.estado = "Aceptado")); }
+    hacer: () => { sinAceptar().filter(r => r.ocLigada).forEach(r => D.aceptarRecibido(r, "Aceptado")); }
   });
   add({
     id: "CO-SIN", grupo: "compras", k: "wa", ic: "file", t: "Comprobantes de proveedor sin orden de compra",
@@ -437,7 +448,7 @@
     cuenta: () => sinAceptar().filter(r => !r.ocLigada).length,
     sugerencia: "El sistema los cruzó con las recepciones de bodega y todos tienen entrada registrada. Se pueden aceptar.", conf: 84,
     aceptarTexto: "Aceptar ante Hacienda", resp: "Encargado de compras",
-    hacer: () => { sinAceptar().forEach(r => (r.estado = "Aceptado")); }
+    hacer: () => { sinAceptar().filter(r => !r.ocLigada).forEach(r => D.aceptarRecibido(r, "Aceptado")); }
   });
   const oc = D.compras.find(x => x.estado === "Registrada");
   if (oc) add({
@@ -564,6 +575,8 @@
     if (!m || CIERRE.estado !== "Enviado a aprobación") return { error: "El cierre no está enviado a aprobación." };
     if (!D.puede("Gerencia")) return { error: "Aprobar el cierre lo hace gerencia. Usted entró como " + D.sesion.cargo + "; cambie de usuario en el encabezado." };
     if (D.sesion.nom === CIERRE.enviadoPor) return { error: "Quien envió el cierre no puede aprobarlo (registrar asientos ↔ aprobar el cierre)." };
+    const finMes = new Date(2026, m.mes + 1, 0, 23, 59, 59);
+    if (D.ahora() < finMes) return { error: m.nom[0].toUpperCase() + m.nom.slice(1) + " termina el " + finMes.getDate() + ": el cierre se puede preparar y revisar, pero no aprobar antes de que termine el mes (si se aprobara, ya no se podría facturar)." };
     m.asientos = D.asientos.filter(a => a.fecha.getMonth() === m.mes && a.fecha.getFullYear() === 2026).length;
     Object.assign(m, { estado: "Cerrado", bloqueado: true, cerrado: D.ahora(), por: D.sesion.nom, rol: D.sesion.cargo, nota: nota || "", revisado: CIERRE.enviadoPor });
     D.bloquearHasta(new Date(2026, m.mes + 1, 0, 23, 59, 59));
@@ -610,7 +623,7 @@
   function revisarImpuesto(id) {
     const x = IMPUESTOS.find(t => t.id === id);
     if (!x || x.estado !== "Borrador listo") return null;
-    x.estado = "Revisado"; x.revisado = { por: REVISOR.nom, fecha: ahora() };
+    x.estado = "Revisado"; x.revisado = { por: D.sesion.nom, fecha: D.ahora() };
     anotar("Revisó el borrador", x.t + " · " + x.periodo);
     return x;
   }
@@ -624,7 +637,7 @@
 
   w.AUTO = {
     REVISOR, APROBADORES, POLITICA, REGLAS, nuevaRegla, GRUPOS, ACC,
-    get cierres() { return cierres(); }, lotes, sinpe, get depositos() { return depositos(); }, GASTOS, AJUSTES, INV, FINMES, IMPUESTOS,
+    get cierres() { return cierres(); }, lotes, sinpe, get depositos() { return depositos(); }, GASTOS, AJUSTES, get INV() { return INVf(); }, pendienteInventario, FINMES, IMPUESTOS,
     cartera, proveedores, bandeja, resolver, resolverGrupo, hechoSolo, listaCierre, resueltos, anotar,
     items, CIERRE, mesAbierto, enviarAprobacion, aprobarCierre, reabrirCierre, devolverCierre, revisarImpuesto, presentarImpuesto
   };

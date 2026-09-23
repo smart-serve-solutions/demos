@@ -390,9 +390,8 @@
         ], rows, rowCls: r => r.estado === "Diferencia" ? "wa" : "",
         foot: [{ v: "Total con detalle por local" }, { v: grp(kardex), r: true, cls: "mono" }, { v: grp(libro), r: true, cls: "mono" }, { v: c(libro - kardex), r: true, cls: "mono" }, { v: "", span: 2 }]
       }) + `<div class="mut" style="font-size:12.5px;padding:12px 16px;line-height:1.55;border-top:1px solid var(--hair-2)">
-        La cuenta 1-01-04-001 suma ${c(cuenta)} y el kardex valorizado de toda la empresa ${c(kardex)}${cuenta === kardex ? ": cuadran" : ": difieren en " + c(cuenta - kardex)}.
-        La migración del 31 de agosto trajo el inventario de cada local al costo; las diferencias por local de arriba son partidas
-        que todavía están en la bandeja.</div>`
+        La cuenta 1-01-04-001 suma ${c(cuenta)} y el kardex valorizado de toda la empresa ${c(kardex)}${cuenta === kardex ? ": cuadran." : ": difieren en " + c(cuenta - kardex) + (cuenta === libro ? ", que es justo lo que explican las diferencias por local de arriba (movimientos del kardex con el asiento retenido, en la bandeja)." : "; " + c(cuenta - libro) + " no tiene explicación todavía.")}
+        La migración del 31 de agosto trajo el inventario de cada local al costo.</div>`
     })}
         <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);align-items:start">
           ${card({
@@ -1162,8 +1161,12 @@
   function resumenMes() {
     const r = C.resultados();
     const m = mesCierre();
-    const delMes = D.asientos.filter(a => a.fecha.getMonth() === m.mes && a.fecha.getFullYear() === 2026);
-    const manuales = delMes.filter(a => a.origen === "APERTURA").length;
+    const delMes = D.asientos.filter(a => a.fecha.getMonth() === m.mes && a.fecha.getFullYear() === 2026 && a.origen !== "APERTURA");
+    const manuales = delMes.filter(a => a.manual).length;
+    /* el resumen es del mes que se cierra, no del acumulado del año */
+    const mov = pref => delMes.reduce((s, a) => s + a.detalle.filter(x => x.cta.indexOf(pref) === 0).reduce((k, x) => k + (x.debe || 0) - (x.haber || 0), 0), 0);
+    const ing = -mov("4"), cos = mov("5"), gas = mov("6");
+    r.mes = { ing, cos, gas, bruta: ing - cos, neta: ing - cos - gas, margenBruto: ing ? (ing - cos) / ing * 100 : 0 };
     const nuevas = AU.REGLAS.filter(x => x.nueva);
     const porPagar = AU.IMPUESTOS.filter(t => t.estado !== "Presentado").reduce((s, t) => s + t.monto, 0);
     const hechos = AU.items.filter(i => i.estado === "Resuelto");
@@ -1172,10 +1175,11 @@
   function resumenHtml() {
     const x = resumenMes(), r = x.r;
     return `<dl class="kv">
-        <dt>Ventas</dt><dd class="num">${c(r.ing)}</dd>
-        <dt>Utilidad bruta</dt><dd class="num">${c(r.bruta)} · ${pc(r.margenBruto)}</dd>
-        <dt>Gastos de operación</dt><dd class="num">−${c(r.gas)}</dd>
-        <dt>Utilidad neta</dt><dd class="num"><b>${c(r.neta)}</b></dd>
+        <dt>Ventas del mes</dt><dd class="num">${c(r.mes.ing)}</dd>
+        <dt>Utilidad bruta del mes</dt><dd class="num">${c(r.mes.bruta)} · ${pc(r.mes.margenBruto)}</dd>
+        <dt>Gastos del mes</dt><dd class="num">−${c(r.mes.gas)}</dd>
+        <dt>Resultado del mes</dt><dd class="num"><b>${c(r.mes.neta)}</b></dd>
+        <dt>Utilidad acumulada del año</dt><dd class="num">${c(r.neta)}</dd>
         <dt>Asientos del mes</dt><dd><span class="num">${grp(x.delMes.length)}</span> · ${x.manuales ? x.manuales + " manual" : "ninguno manual"}</dd>
         <dt>Resueltos en la bandeja</dt><dd><span class="num">${x.revisados}</span> por el contador${x.porRegla ? " · <span class=\"num\">" + x.porRegla + "</span> por reglas nuevas" : ""}</dd>
         <dt>Reglas nuevas</dt><dd>${x.nuevas.length ? "<span class=\"num\">" + x.nuevas.length + "</span> aprendidas de la bandeja" : "ninguna"}</dd>
@@ -1186,10 +1190,10 @@
     const est = AU.CIERRE.estado, L = AU.listaCierre(), faltan = L.filter(x => !x.ok).length, m = mesCorto();
     const ap = AU.CIERRE.aprobado;
     if (est === "Cerrado") return `<div class="stepbar ok"><div class="sbt"><b>${icon("lock")} ${esc(m[0].toUpperCase() + m.slice(1))} está cerrado</b>
-        <span>Lo revisó ${esc(AU.REVISOR.nom)} y lo aprobó ${esc(ap.por)} (${esc(ap.rol)}) el ${fechaL(ap.fecha)} a las ${hora(ap.fecha)}.
+        <span>Lo revisó ${esc(AU.CIERRE.enviadoPor || AU.REVISOR.nom)} y lo aprobó ${esc(ap.por)} (${esc(ap.rol)}) el ${fechaL(ap.fecha)} a las ${hora(ap.fecha)}.
         Ya no admite un asiento más sin reabrirlo con bitácora.</span></div><div class="sba">${tag("Aprobado", "ok", "check")}</div></div>`;
     if (est === "Enviado a aprobación") return `<div class="stepbar"><div class="sbt"><b>Esperando la aprobación final</b>
-        <span>${esc(AU.REVISOR.nom)} lo envió el ${fechaL(AU.CIERRE.enviado)} a las ${hora(AU.CIERRE.enviado)}. Falta que una persona revise el resumen y lo apruebe.</span></div>
+        <span>${esc(AU.CIERRE.enviadoPor || AU.REVISOR.nom)} lo envió el ${fechaL(AU.CIERRE.enviado)} a las ${hora(AU.CIERRE.enviado)}. Falta que una persona revise el resumen y lo apruebe.</span></div>
         <div class="sba"><button class="btn pri" data-ci="aprobar">${icon("check")}Revisar y aprobar</button></div></div>`;
     if (est === "Devuelto") { const h = AU.CIERRE.historial[0]; return `<div class="stepbar wa"><div class="sbt"><b>${esc(h.por)} devolvió el cierre</b>
         <span>«${esc(h.nota)}». La observación está en la bandeja del contador; al atenderla se vuelve a enviar.</span></div>
@@ -1459,12 +1463,12 @@
       body: table({
         cols: [
           { t: "Período", fmt: r => `<b>${esc(r.nom)}</b>` },
-          { t: "Asientos", r: true, cls: "mono", fmt: r => grp(r.asientos) },
+          { t: "Asientos", r: true, cls: "mono", fmt: r => (r.mes <= 7 ? '<span class="dim">migrado</span>' : grp(r.bloqueado ? r.asientos : D.asientos.filter(a => a.fecha.getMonth() === r.mes && a.origen !== "APERTURA").length)) },
           { t: "Estado", fmt: r => (r.bloqueado ? tag("Cerrado", "ok", "lock") : tag("Abierto", "wa")) },
           { t: "Revisó", fmt: r => r.bloqueado ? esc(r.revisado || AU.REVISOR.nom) : '<span class="dim">—</span>' },
           { t: "Aprobó", fmt: r => r.bloqueado ? `${esc(r.por)}${r.rol ? `<span class="sub ui">${esc(r.rol)}</span>` : ""}` : '<span class="dim">—</span>' },
           { t: "Cerrado el", cls: "mono", fmt: r => (r.cerrado ? fecha(r.cerrado) : '<span class="dim">—</span>') },
-          { t: "", r: true, fmt: (r, i) => (r.bloqueado ? `<button class="btn sm" data-reabrir="${i}">Reabrir</button>` : `<button class="btn sm" data-ir="con-cierre|lista">Ver la lista</button>`) }
+          { t: "", r: true, fmt: (r, i) => (r.mes <= 7 ? '<span class="dim" style="font-size:12px">sistema anterior</span>' : r.bloqueado ? `<button class="btn sm" data-reabrir="${i}">Reabrir</button>` : `<button class="btn sm" data-ir="con-cierre|lista">Ver la lista</button>`) }
         ], rows
       })
     })}</div>`;

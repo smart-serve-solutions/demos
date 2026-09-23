@@ -134,6 +134,7 @@
      su detalle. Los resultados de enero a agosto vienen a la escala real de
      la empresa (la planilla y los gastos fijos son los del levantamiento). */
   const FIN_AGO = new Date(2026, 7, 31, 23, 59);
+  const TASA_RENTA = 30;
   const MESES_MIGRADOS = 8;
   const VENTA_MES_REAL = 790000000;
   const COSTO_PCT = 0.78;
@@ -164,7 +165,8 @@
     const tarjetas = w.AUTO ? w.AUTO.lotes.filter(x => !x.acreditado).reduce((s, x) => s + x.bruto, 0) : 0;
 
     desdeAux("1-01-03-001", cxc, "facturas a crédito abiertas");
-    desdeAux("1-01-04-001", inv, "kardex valorizado al costo");
+    /* más lo que salió del kardex con el asiento retenido: el libro todavía lo tiene */
+    desdeAux("1-01-04-001", inv + (w.AUTO ? w.AUTO.pendienteInventario() : 0), "kardex valorizado al costo");
     desdeAux("1-01-03-004", tarjetas, "lotes del datáfono sin acreditar");
     desdeAux("2-01-02-002", -ivaDif, "IVA de la cartera a crédito");
     desdeAux("2-01-06-001", -favor, "saldos a favor de clientes");
@@ -215,6 +217,11 @@
     pone("6-01-05-001", depMensual * MESES_MIGRADOS); pone("6-01-06-001", vb * 0.35 * 0.0275);
     pone("6-01-06-002", 180000); pone("6-01-07-001", 231100 + 725000 * MESES_MIGRADOS);
 
+    /* renta de enero a agosto, registrada mes a mes en el sistema anterior */
+    const utilMigrada = -lineas.filter(x => /^[456]/.test(x.cta)).reduce((s, x) => s + x.debe - x.haber, 0);
+    const rentaMig = Math.max(0, utilMigrada * TASA_RENTA / 100);
+    pone("6-01-07-002", rentaMig, "renta estimada de enero a agosto");
+    pone("2-01-04-001", -rentaMig, "renta estimada del período por pagar");
     /* patrimonio: capital y utilidades de años anteriores; lo que falta para
        cuadrar son las inversiones a plazo que el sistema anterior traía */
     pone("3-01-01-001", -150000000); pone("3-02-01-001", -186400000);
@@ -248,7 +255,6 @@
 
   /* todo sale del mayor: acumulado del año (la migración trae enero a agosto) */
   const saldoCod = cod => (D.ctaByCod[cod] ? saldoDe(D.ctaByCod[cod]) : 0);
-  const TASA_RENTA = 30;
   function resultados() {
     const bruto = saldoCod("4-01-01-001"), devol = -saldoCod("4-01-03-001"), desc = -saldoCod("4-01-02-001");
     const netas = bruto - devol - desc;
@@ -357,8 +363,9 @@
     cierres.push({
       mes: m, nom: MESES[m] + " 2026", asientos,
       estado: abierto ? "Abierto" : "Cerrado",
+      /* los meses anteriores los revisó contabilidad y los aprobó gerencia, en el sistema anterior */
       cerrado: abierto ? null : new Date(2026, m + 1, ri(3, 9)),
-      por: abierto ? null : "Sonia Calderón Ruiz",
+      por: abierto ? null : "Adrián Vindas Mora", rol: abierto ? null : "Gerente general", revisado: abierto ? null : "Sonia Calderón Ruiz",
       bloqueado: !abierto
     });
   }

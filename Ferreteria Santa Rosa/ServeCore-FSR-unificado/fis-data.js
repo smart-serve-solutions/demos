@@ -275,7 +275,9 @@
     const delMes = D.documentos.filter(d => d.fecha.getMonth() === m && d.fecha.getFullYear() === y);
     /* la nota de crédito devuelve IVA: resta del débito del mes */
     const contado = delMes.filter(d => d.condicion !== "Crédito");
-    const debitoContado = contado.reduce((s, d) => s + (d.tipo === "NC" ? -d.iva : d.iva), 0);
+    const debitoVentas = contado.filter(d => d.tipo !== "NC").reduce((s, d) => s + d.iva, 0);
+    const ivaNC = contado.filter(d => d.tipo === "NC").reduce((s, d) => s + d.iva, 0);
+    const debitoContado = debitoVentas - ivaNC;
     const debitoREP = reps.filter(r => r.fecha.getMonth() === m && r.fecha.getFullYear() === y)
       .reduce((s, r) => s + r.iva, 0);
     const recib = recibidos();
@@ -287,7 +289,7 @@
     const diferidoVencido = dif.filter(x => x.vencido).reduce((s, x) => s + x.ivaDiferido, 0);
     const debito = debitoContado + debitoREP + diferidoVencido;
     return {
-      debitoContado, debitoREP, diferidoVencido, diferidoPend,
+      debitoContado, debitoVentas, ivaNC, debitoREP, diferidoVencido, diferidoPend,
       debito, creditoFiscal, enRiesgo,
       aPagar: Math.max(0, debito - creditoFiscal),
       saldoFavor: Math.max(0, creditoFiscal - debito),

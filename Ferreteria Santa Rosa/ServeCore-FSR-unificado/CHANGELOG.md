@@ -1,5 +1,27 @@
 # Cambios
 
+## 2026-09-23 · Contabilidad · Ajustes de la revisión final para la demo
+
+Hallazgos 1 a 6 y 10 de la revisión final de preparación para la demo.
+
+- **No se aprueba un mes que no terminó.** El cierre de setiembre se prepara, se revisa y se envía, pero aprobarlo el
+  13 de setiembre dejaría la caja sin poder facturar; ahora lo explica y no lo permite.
+- **Cruce de inventario real y en vivo.** La diferencia de Pacayas existe de verdad: 3 esmaltes salieron del kardex
+  con el asiento de la merma retenido, así que el libro queda arriba del kardex por ese monto hasta aprobarla en la
+  bandeja; al aprobarla, la cuenta y el kardex quedan iguales. Se quitó la diferencia inventada de la Bodega 1. La
+  tabla se recalcula con cada venta y la nota explica la diferencia con los datos.
+- **D-150 en vivo:** el borrador de Contabilidad es el mismo número que Facturación y muestra aparte «Menos: IVA de
+  notas de crédito». Aceptar comprobantes desde la bandeja crea la cuenta por pagar y el crédito fiscal, y el de
+  «sin orden» ya no acepta también los que tienen orden.
+- **Resumen del cierre del mes**, no del acumulado del año (este aparte), y cuenta los asientos manuales de verdad.
+  La migración trae la renta estimada de enero a agosto, así el ajuste de renta del cierre es solo del mes.
+- **Períodos:** enero a agosto muestran que los revisó contabilidad y los aprobó gerencia, «migrado» en lugar de
+  cero asientos y sin botón de reabrir. La banda del cierre muestra quién lo envió.
+- **Bitácora de Contabilidad** con la persona de la sesión, su cargo, su local y su equipo.
+- El SINPE sin identificar dice «Marcar como identificado», que es lo que hace.
+
+Archivos: `con-auto.js`, `con-data.js`, `fis-data.js`, `mod-conta.js`.
+
 ## 2026-09-23 · Contabilidad · Cierre de mes real, estados desde el mayor, balance y asiento manual
 
 Parte 3 de la auditoría de Contabilidad (C4, C7, U1 y U2) y el signo de las NC en el D-150 (parte de C5).
