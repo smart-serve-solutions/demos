@@ -58,7 +58,7 @@
   const anotar = (accion, detalle, sev, antes, despues) =>
     D.bitacora.unshift({
       id: "BTS" + Date.now() + Math.random(),
-      fecha: new Date(D.HOY.getTime() + (Date.now() % 600000)),
+      fecha: D.ahora(),
       usuario: YO,
       rol: "TI",
       locId: S.locId,
@@ -3991,7 +3991,7 @@
         },
       ],
       nota: nuevo
-        ? "La sucursal fiscal se asigna sola (la siguiente libre) y cada caja recibe su consecutivo ante Hacienda."
+        ? "La sucursal fiscal se asigna sola (la siguiente libre) y cada caja abre su propia serie de consecutivos (sucursal + terminal)."
         : "Cambiar el nombre no cambia cómo se leen los documentos ya emitidos.",
       notaIc: "file",
       peligro: nuevo
@@ -4086,7 +4086,7 @@
   function terminalesSis(v) {
     const TT = (V ? V.TERMINALES : []).filter((t) => t.locId === tmLoc);
     v.innerHTML = `<div class="wrap">
-      <div class="sx-bar" style="justify-content:space-between">${nota("Cada caja es una terminal con su numeración ante Hacienda (<b>sucursal + terminal</b>) y sus dispositivos. Quién puede usarla se define en Ventas › Caja y turnos.", "print")}
+      <div class="sx-bar" style="justify-content:space-between">${nota("Cada caja es una terminal con su propia serie fiscal (<b>sucursal + terminal</b>) y sus dispositivos. La numeración la administra el emisor; Hacienda no registra terminales, valida que la serie no tenga saltos ni repetidos. Quién puede usarla se define en Ventas › Caja y turnos.", "print")}
         <select class="sx-sel" id="tmLoc" aria-label="Local">${tiendas.map((l) => `<option value="${l.id}" ${l.id === tmLoc ? "selected" : ""}>${esc(l.nom)}</option>`).join("")}</select></div>
       ${card({
         title: "Terminales de " + locNom(tmLoc),
@@ -4149,11 +4149,10 @@
         ? "Nueva terminal en " + l.nom
         : "Caja " + t.n + " · " + l.nom,
       sub: nueva
-        ? "Consecutivo " +
+        ? "Abre la serie fiscal " +
           l.cod +
           "-" +
-          String(l.terminales + 1).padStart(5, "0") +
-          " ante Hacienda"
+          String(l.terminales + 1).padStart(5, "0")
         : "Consecutivo " + t.cons,
       campos: [
         { id: "eq", l: "Equipo", v: d.eq, ph: "Por ejemplo: Mini PC de caja" },
@@ -4223,10 +4222,17 @@
           },
       guardar(x) {
         if (nueva) {
-          anotar("Creó terminal", l.nom + " · " + (x.eq || "Caja nueva"));
+          /* la terminal nueva existe desde ya: la caja puede facturar con su serie */
+          l.terminales++;
+          const serie = l.cod + "-" + String(l.terminales).padStart(5, "0");
+          if (V) V.TERMINALES.push({ id: l.id + "-T" + l.terminales, locId: l.id, n: l.terminales, cons: serie, equipo: x.eq || "Caja " + l.terminales });
+          Object.assign(dispDe({ id: l.id + "-T" + l.terminales, locId: l.id, n: l.terminales }), {
+            eq: x.eq || "Mini PC de caja", imp: x.imp, lector: x.lec, datafono: x.dat, gaveta: x.gav, balanza: x.bal,
+          });
+          anotar("Creó terminal", l.nom + " · Caja " + l.terminales + " · serie " + serie + " · " + (x.eq || "Caja nueva"));
           return {
-            t: "Terminal creada",
-            s: "Se registró su consecutivo ante Hacienda. Habilite quién la usa en Caja y turnos.",
+            t: "Terminal creada · serie " + serie,
+            s: "Sus comprobantes empiezan en el número 1 de cada tipo. Habilite quién la usa en Caja y turnos.",
           };
         }
         Object.assign(d, {
@@ -4376,30 +4382,25 @@
       b.addEventListener("click", () => fichaArea(AREAS[+b.dataset.ared])),
     );
   }
-  const EMP = {
-    nom: "Ferretería Santa Rosa S.A.",
-    comercial: "Ferretería Santa Rosa",
-    ced: "3-101-XXXXXX",
-    act: "4752 · Venta al por menor de artículos de ferretería",
-    reg: "Tradicional · factura electrónica 4.4",
-    dom: "Santa Rosa de Turrialba, Cartago",
-    correo: "facturacion@ferreteriasantarosa.cr",
-    tel: "2556-0000",
-  };
+  /* la ficha del emisor es una sola (D.emisor): la leen la clave numérica,
+     Facturación, las plantillas y la planilla */
+  const EMP = D.emisor;
+  const domicilio = (e) => D.ubicacionTexto(e) + " · " + e.otrasSenas;
   function empresa(v) {
+    const act = D.actividadPrincipal();
     v.innerHTML = `<div class="grid g2" style="align-items:start">
       ${card({
         title: "Razón social",
         hint: "sale en todos los comprobantes",
         actions: `<button class="btn sm" id="empEd">Editar datos</button>`,
         body: `<dl class="kv">
-          <dt>Nombre</dt><dd>${esc(EMP.nom)}</dd>
+          <dt>Nombre</dt><dd>${esc(EMP.nombre)}</dd>
           <dt>Nombre comercial</dt><dd>${esc(EMP.comercial)}</dd>
-          <dt>Cédula jurídica</dt><dd class="num">${esc(EMP.ced)}</dd>
-          <dt>Actividad económica</dt><dd>${esc(EMP.act)}</dd>
-          <dt>Régimen</dt><dd>${esc(EMP.reg)}</dd>
-          <dt>Domicilio fiscal</dt><dd>${esc(EMP.dom)}</dd>
-          <dt>Correo de facturación</dt><dd>${esc(EMP.correo)}</dd>
+          <dt>Identificación</dt><dd><span class="num">${esc(EMP.cedula)}</span> · ${esc(EMP.tipoCedCod)} ${esc(EMP.tipoCed)}</dd>
+          <dt>Actividad principal</dt><dd><span class="num">${esc(act.cod)}</span> · ${esc(act.t)}${EMP.actividades.length > 1 ? `<br><span class="dim" style="font-size:12px">y ${EMP.actividades.length - 1} actividades más</span>` : ""}</dd>
+          <dt>Régimen</dt><dd>${esc(EMP.regimen)}</dd>
+          <dt>Domicilio fiscal</dt><dd>${esc(D.ubicacionTexto(EMP))} <span class="dim num">(${esc(EMP.provincia)}-${esc(EMP.canton)}-${esc(EMP.distrito)})</span><br><span style="font-size:12px">${esc(EMP.otrasSenas)}</span></dd>
+          <dt>Correo de facturación</dt><dd>${esc(EMP.correos[0])}</dd>
           <dt>Teléfono</dt><dd class="num">${esc(EMP.tel)}</dd>
           <dt>Moneda</dt><dd>Colones · tipo de cambio del BCCR para dólares</dd></dl>
           <div style="margin-top:12px">${nota("La llave criptográfica se administra en Facturación electrónica y es un permiso aparte: ni contabilidad ni TI la ven por tener acceso a esta pantalla.", "lock")}</div>
@@ -4434,45 +4435,78 @@
         title: "Datos de la razón social",
         sub: "Cambian los comprobantes desde hoy; lo emitido no cambia",
         campos: [
-          { id: "nom", l: "Razón social", v: EMP.nom, req: true },
+          { id: "nombre", l: "Razón social", v: EMP.nombre, req: true },
           { id: "comercial", l: "Nombre comercial", v: EMP.comercial },
           {
-            id: "ced",
+            id: "cedula",
             l: "Cédula jurídica",
-            v: EMP.ced,
+            v: EMP.cedula,
             dis: true,
             hint: "No se cambia: una cédula distinta es otra razón social.",
           },
-          { id: "dom", l: "Domicilio fiscal", v: EMP.dom },
+          {
+            id: "provincia", l: "Provincia", tipo: "select", corto: true, req: true, v: EMP.provincia,
+            opts: Object.entries(D.UBICACION.provincias).map(([v, t]) => ({ v, t: v + " · " + t })),
+          },
+          {
+            id: "canton", l: "Cantón", tipo: "select", corto: true, req: true, v: EMP.canton,
+            opts: Object.entries(D.UBICACION.cantones[EMP.provincia] || {}).map(([v, t]) => ({ v, t: v + " · " + t })),
+          },
+          {
+            id: "distrito", l: "Distrito", tipo: "select", req: true, v: EMP.distrito,
+            opts: Object.entries(D.UBICACION.distritos[EMP.provincia + "-" + EMP.canton] || {}).map(([v, t]) => ({ v, t: v + " · " + t })),
+          },
+          { id: "otrasSenas", l: "Otras señas", tipo: "area", rows: 2, v: EMP.otrasSenas, req: true, hint: "Obligatorio en el XML 4.4; máximo 250 caracteres." },
           {
             id: "correo",
             l: "Correo de facturación",
-            v: EMP.correo,
+            v: EMP.correos[0],
             corto: true,
+            req: true,
           },
           { id: "tel", l: "Teléfono", v: EMP.tel, corto: true },
+          { id: "motivo", l: "Motivo del cambio", tipo: "area", rows: 2, req: true, ph: "Queda en la bitácora de auditoría" },
         ],
-        nota: "Este cambio es sensible: pide doble factor y gerencia recibe el aviso.",
+        nota: "Este cambio es sensible: pide doble factor y gerencia recibe el aviso. Lo ya emitido no cambia.",
         notaIc: "shield",
         guardar(x) {
-          const antes = EMP.nom;
+          /* la ubicación tiene que existir: el XML la valida contra la división territorial */
+          const cantones = D.UBICACION.cantones[x.provincia] || {};
+          const distritos = D.UBICACION.distritos[x.provincia + "-" + x.canton] || {};
+          if (!cantones[x.canton] || !distritos[x.distrito]) {
+            toast("Ubicación incompleta", "El cantón y el distrito tienen que pertenecer a la provincia elegida.", "cr");
+            return false;
+          }
+          if (x.otrasSenas.length > 250) {
+            toast("Otras señas demasiado largas", "El XML 4.4 admite hasta 250 caracteres.", "cr");
+            return false;
+          }
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.correo)) {
+            toast("Correo no válido", "Revise el correo de facturación.", "cr");
+            return false;
+          }
+          const antes = [EMP.nombre, EMP.comercial, domicilio(EMP), EMP.correos[0], EMP.tel].join(" | ");
           Object.assign(EMP, {
-            nom: x.nom,
+            nombre: x.nombre,
             comercial: x.comercial,
-            dom: x.dom,
-            correo: x.correo,
+            provincia: x.provincia,
+            canton: x.canton,
+            distrito: x.distrito,
+            otrasSenas: x.otrasSenas,
             tel: x.tel,
           });
+          EMP.correos[0] = x.correo;
+          const despues = [EMP.nombre, EMP.comercial, domicilio(EMP), EMP.correos[0], EMP.tel].join(" | ");
           anotar(
             "Modificó datos de la empresa",
-            "Razón social",
+            "Razón social · motivo: " + x.motivo,
             "Alta",
             antes,
-            x.nom,
+            despues,
           );
           return {
             t: "Datos actualizados",
-            s: "Los próximos comprobantes salen con los datos nuevos.",
+            s: "Los comprobantes que se emitan desde ahora salen con los datos nuevos; lo ya emitido no cambia.",
           };
         },
       }),
@@ -5075,21 +5109,24 @@
   }
   const DEP_X = {};
   const NUEVOS_DEP = [];
+  /* el gasto de planilla va a las mismas cuentas para todos (Salarios
+     6-01-01-001 y Cargas sociales 6-01-01-002); lo que distingue al
+     departamento es su centro de costo */
   const CUENTAS_DEP = {
-    Ventas: "5-01-01 Gastos de ventas",
-    Bodega: "5-01-02 Gastos de bodega",
-    Administración: "5-02-01 Gastos administrativos",
-    Contabilidad: "5-02-01 Gastos administrativos",
-    Gerencia: "5-02-01 Gastos administrativos",
-    Proveeduría: "5-02-02 Gastos de proveeduría",
-    Transporte: "5-01-03 Gastos de distribución",
-    Taller: "5-03-01 Costo de servicios",
+    Ventas: "CC-10 Ventas",
+    Bodega: "CC-20 Bodega",
+    Transporte: "CC-21 Distribución",
+    Administración: "CC-30 Administración",
+    Contabilidad: "CC-31 Contabilidad",
+    Gerencia: "CC-32 Gerencia",
+    Proveeduría: "CC-40 Proveeduría",
+    Taller: "CC-50 Taller y servicios",
   };
   const depX = (a) =>
     DEP_X[a] ||
     (DEP_X[a] = {
       jefe: "",
-      cuenta: CUENTAS_DEP[a] || "5-02-01 Gastos administrativos",
+      cuenta: CUENTAS_DEP[a] || "CC-30 Administración",
       activo: true,
     });
   function departamentos(v) {
@@ -5131,7 +5168,7 @@
                   .join(" ") || '<span class="dim">—</span>',
             },
             {
-              t: "Cuenta de gasto",
+              t: "Centro de costo",
               cls: "mono",
               fmt: (r) =>
                 `<span class="mut" style="font-size:12.5px">${esc(depX(r.a).cuenta)}</span>`,
@@ -5150,7 +5187,7 @@
   function fichaDepartamento(a, n) {
     const nuevo = a == null,
       x = nuevo
-        ? { jefe: "", cuenta: "5-02-01 Gastos administrativos", activo: true }
+        ? { jefe: "", cuenta: "CC-30 Administración", activo: true }
         : depX(a);
     ficha({
       title: nuevo ? "Nuevo departamento" : nombre("d:" + a, a),
@@ -5171,13 +5208,13 @@
         },
         {
           id: "cuenta",
-          l: "Cuenta de gasto en la planilla",
+          l: "Centro de costo",
           tipo: "select",
           opts: Object.values(CUENTAS_DEP).filter(
             (c2, i, arr) => arr.indexOf(c2) === i,
           ),
           v: x.cuenta,
-          hint: "El asiento de planilla reparte el salario de cada persona a la cuenta de su departamento.",
+          hint: "La planilla se asienta en Salarios (6-01-01-001) y Cargas sociales patronales (6-01-01-002); el centro de costo identifica el departamento de cada persona.",
         },
       ],
       peligro: nuevo
@@ -5975,25 +6012,38 @@
       })}</div>`;
   }
   /* numeración interna de documentos (la fiscal vive en Facturación electrónica) */
-  const NUMS = [
-    {
-      doc: "Factura y tiquete electrónicos",
+  /* comprobantes fiscales: una serie por sucursal + terminal + tipo; el
+     próximo número es el de la caja activa, leído de la serie real */
+  const FISCALES = [
+    ["FE", "Factura electrónica"],
+    ["TE", "Tiquete electrónico"],
+    ["NC", "Nota de crédito electrónica"],
+    ["ND", "Nota de débito electrónica"],
+    ["REP", "Recibo electrónico de pago"],
+    ["FEC", "Factura electrónica de compra"],
+  ];
+  const filasNum = () =>
+    FISCALES.map(([tipo, doc]) => ({
+      doc: doc + " (" + D.TIPO_COD[tipo] + ")",
       fmt: "Sucursal · terminal · tipo · consecutivo",
-      ej: "002-00001-01-0000035201",
+      ej: D.puedeEmitir(S.locId, S.term)
+        ? D.proximoConsec(tipo, S.locId, S.term)
+        : "Esta terminal no emite",
       rein: "Nunca",
       fiscal: true,
-    },
+    })).concat(NUMS);
+  const pad6 = (n) => String(n).padStart(6, "0");
+  const NUMS = [
     {
-      doc: "Proforma",
-      fmt: "PRO-{local}-{año}-{n}",
-      ej: "PRO-003-2026-00413",
-      rein: "Cada año",
+      doc: "Proforma y pedido",
+      fmt: "PROF-{n}",
+      get ej() { return "PROF-" + pad6(D.seq.PROF + 1); },
+      rein: "Nunca",
     },
-    { doc: "Pedido", fmt: "PED-{n}", ej: "PED-002402", rein: "Nunca" },
     {
       doc: "Orden de compra",
       fmt: "OC-{año}-{n}",
-      ej: "OC-2026-004432",
+      get ej() { return "OC-" + D.HOY.getFullYear() + "-" + pad6(D.seq.OC + 1); },
       rein: "Cada año",
     },
     {
@@ -6002,7 +6052,7 @@
       ej: "CO-2026-018221",
       rein: "Cada año",
     },
-    { doc: "Traslado", fmt: "TR-{n}", ej: "TR-000915", rein: "Nunca" },
+    { doc: "Traslado", fmt: "TR-{n}", get ej() { return "TR-" + pad6(D.seq.TR + 1); }, rein: "Nunca" },
     {
       doc: "Despacho",
       fmt: "DES-{local}-{n}",
@@ -6017,9 +6067,15 @@
     },
     {
       doc: "Ajuste de inventario",
-      fmt: "AJ-{año}-{n}",
-      ej: "AJ-2026-000318",
-      rein: "Cada año",
+      fmt: "AJ-{n}",
+      get ej() { return "AJ-" + pad6(D.seq.AJ + 1); },
+      rein: "Nunca",
+    },
+    {
+      doc: "Asiento contable",
+      fmt: "AS-{n}",
+      get ej() { return "AS-" + (D.seq.AS + 1); },
+      rein: "Nunca",
     },
     {
       doc: "Solicitud de autorización",
@@ -6030,10 +6086,10 @@
   ];
   function numeracion(v) {
     v.innerHTML = `<div class="wrap">
-      ${nota("El número se asigna <b>al aplicar</b>, nunca al registrar: un borrador que se descarta no deja huecos. La numeración fiscal (sucursal + terminal) la controla Facturación electrónica.", "file")}
+      ${nota("El número se asigna <b>al aplicar</b>, nunca al registrar: un borrador que se descarta no deja huecos. La numeración fiscal (sucursal + terminal + tipo) la controla Facturación electrónica y no se edita aquí.", "file")}
       ${card({
         title: "Numeración de documentos",
-        hint: NUMS.length + " tipos",
+        hint: filasNum().length + " tipos · los fiscales, de la caja activa",
         body: table({
           cols: [
             {
@@ -6057,7 +6113,7 @@
                   : `<button class="btn sm" data-numed="${i}">Editar</button>`,
             },
           ],
-          rows: NUMS,
+          rows: filasNum(),
         }),
       })}</div>`;
   }
@@ -6065,7 +6121,7 @@
     A.wireIr(v);
     $$("[data-numed]", v).forEach((b) =>
       b.addEventListener("click", () => {
-        const r = NUMS[+b.dataset.numed];
+        const r = filasNum()[+b.dataset.numed];
         ficha({
           title: "Numeración · " + r.doc,
           sub: "Rige para los documentos que se apliquen desde ahora",
@@ -6903,7 +6959,7 @@
       ic: "cash",
       cod: "01 · Efectivo",
       pide: "Monto recibido; calcula el vuelto",
-      cta: "Caja del local → depósito al BN",
+      pos: "Efectivo",
       locs: "Todos",
       on: true,
     },
@@ -6912,7 +6968,7 @@
       ic: "cash",
       cod: "01 · Efectivo",
       pide: "Monto en dólares; convierte al tipo de cambio de venta del día",
-      cta: "Caja del local",
+      pos: "Dólares",
       locs: "Todos",
       on: true,
     },
@@ -6921,7 +6977,7 @@
       ic: "card",
       cod: "02 · Tarjeta",
       pide: "Autorización del datáfono y últimos 4 dígitos",
-      cta: "BN o BCR según el datáfono",
+      pos: "Tarjeta",
       locs: "Todos",
       on: true,
     },
@@ -6930,7 +6986,7 @@
       ic: "phone",
       cod: "06 · SINPE Móvil",
       pide: "Número de referencia; se valida contra el banco",
-      cta: "8712-0000 · Banco Nacional",
+      pos: "SINPE móvil",
       locs: "Todos",
       on: true,
     },
@@ -6939,7 +6995,7 @@
       ic: "bank",
       cod: "04 · Transferencia",
       pide: "Banco y referencia; contabilidad la confirma",
-      cta: "BN colones",
+      pos: "Transferencia",
       locs: "Todos",
       on: true,
     },
@@ -6948,7 +7004,7 @@
       ic: "file",
       cod: "03 · Cheque",
       pide: "Banco y número; solo clientes autorizados",
-      cta: "BN colones",
+      pos: "Cheque",
       locs: "Santa Rosa y Turrialba",
       on: true,
     },
@@ -6957,7 +7013,7 @@
       ic: "wallet",
       cod: "99 · Otros",
       pide: "Aplica el saldo a favor del cliente",
-      cta: "—",
+      pos: "Anticipo",
       locs: "Todos",
       on: true,
     },
@@ -6966,7 +7022,7 @@
       ic: "clip",
       cod: "99 · Otros",
       pide: "Número de la nota",
-      cta: "—",
+      pos: "Saldo a favor del cliente",
       locs: "Todos",
       on: true,
     },
@@ -6975,12 +7031,26 @@
       ic: "link",
       cod: "02 · Tarjeta",
       pide: "Se genera desde la proforma o el pedido",
-      cta: "BN · comercio electrónico",
+      pos: "Tarjeta",
       locs: "Tienda virtual",
       on: false,
       fase: "Fase 2",
     },
   ];
+  /* la cuenta de cada medio es la misma que usa la caja al asentar (D.CUENTA_MEDIO) */
+  MEDIOS_C.forEach((x) => {
+    Object.defineProperty(x, "cta", {
+      enumerable: true,
+      get: () => D.cuentaMedio(x.pos),
+      set: (v) => { D.CUENTA_MEDIO[x.pos] = v; },
+    });
+  });
+  const ctaTxt = (cod) => (D.ctaByCod[cod] ? cod + " · " + D.ctaByCod[cod].nom : cod);
+  /* cuentas de movimiento que pueden recibir un cobro */
+  const ctasCobro = () =>
+    D.cuentas
+      .filter((k) => /^1-01-0[1-3]-|^2-01-06-/.test(k.cod))
+      .map((k) => ({ v: k.cod, t: k.cod + " · " + k.nom }));
   function mediosTab(el) {
     el.innerHTML = `<div class="wrap">
       ${nota("Cada medio pide en la caja el dato que exige el comprobante electrónico 4.4. Una venta de contado no se aplica sin medio de pago, y el SINPE Móvil va separado de la transferencia.", "card")}
@@ -7006,9 +7076,9 @@
                 `<span style="font-size:12.5px">${esc(x.pide)}</span>`,
             },
             {
-              t: "Entra a",
+              t: "Cuenta contable",
               fmt: (x) =>
-                `<span class="mut" style="font-size:12.5px">${esc(x.cta)}</span>`,
+                `<span class="mut num" style="font-size:12.5px">${esc(ctaTxt(x.cta))}</span>`,
             },
             { t: "Locales", fmt: (x) => esc(x.locs) },
             {
@@ -7078,19 +7148,11 @@
         },
         {
           id: "cta",
-          l: "Cuenta que recibe",
+          l: "Cuenta contable que recibe",
           tipo: "select",
-          opts: [
-            "—",
-            "Caja del local → depósito al BN",
-            "BN colones",
-            "BN dólares",
-            "BCR colones",
-            "8712-0000 · Banco Nacional",
-            "BN o BCR según el datáfono",
-            "BN · comercio electrónico",
-          ],
+          opts: ctasCobro(),
           v: x.cta,
+          hint: "Del catálogo de cuentas. La tarjeta entra a «Tarjetas por liquidar» hasta que el datáfono deposita el lote.",
         },
         {
           id: "ref",
@@ -7101,21 +7163,17 @@
       ],
       guardar(v) {
         if (nuevo) {
-          MEDIOS_C.push({
-            m: v.m,
-            cod: v.cod,
-            pide: v.pide || "—",
-            cta: v.cta,
-            locs: v.locs,
-            on: true,
-            ic: "wallet",
-          });
+          const nuevoM = { m: v.m, cod: v.cod, pide: v.pide || "—", pos: v.m, locs: v.locs, on: true, ic: "wallet" };
+          Object.defineProperty(nuevoM, "cta", { enumerable: true, get: () => D.cuentaMedio(nuevoM.pos), set: (c2) => { D.CUENTA_MEDIO[nuevoM.pos] = c2; } });
+          nuevoM.cta = v.cta;
+          MEDIOS_C.push(nuevoM);
           anotar("Creó medio de pago", v.m);
           return {
             t: "Medio de pago creado",
             s: "Aparece en la caja desde el próximo cobro.",
           };
         }
+        const ctaAntes = x.cta;
         Object.assign(x, {
           m: v.m,
           cod: v.cod,
@@ -7123,7 +7181,7 @@
           cta: v.cta,
           locs: v.locs,
         });
-        anotar("Modificó medio de pago", v.m);
+        anotar("Modificó medio de pago", v.m, ctaAntes !== v.cta ? "Alta" : "Media", ctaTxt(ctaAntes), ctaTxt(v.cta));
         return { t: "Medio de pago actualizado" };
       },
     });
@@ -7254,6 +7312,7 @@
       mon: "Colones",
       uso: "Depósitos de caja, pagos a proveedores y planilla",
       plano: "Planilla y proveedores (TXT)",
+      cta: "1-01-02-001",
     },
     {
       b: "Banco Nacional",
@@ -7261,13 +7320,15 @@
       mon: "Dólares",
       uso: "Proveedores que facturan en dólares",
       plano: "Proveedores (TXT)",
+      cta: "1-01-02-005",
     },
     {
       b: "Banco Nacional · SINPE Móvil",
       n: "8712-0000",
       mon: "Colones",
-      uso: "Cobros en caja y tienda virtual",
+      uso: "Cobros en caja y tienda virtual (entra a la cuenta corriente del BN)",
       plano: "—",
+      cta: "1-01-02-001",
     },
     {
       b: "Banco de Costa Rica",
@@ -7275,6 +7336,15 @@
       mon: "Colones",
       uso: "Datáfonos BCR",
       plano: "—",
+      cta: "1-01-02-003",
+    },
+    {
+      b: "BAC San José",
+      n: "CR72 0102 •••• •••• 4410",
+      mon: "Colones",
+      uso: "Transferencias de clientes corporativos",
+      plano: "—",
+      cta: "1-01-02-002",
     },
     {
       b: "Banco Popular",
@@ -7282,6 +7352,7 @@
       mon: "Colones",
       uso: "Préstamos y ahorro",
       plano: "—",
+      cta: "1-01-02-004",
     },
   ];
   function cuentasTab(el) {
@@ -7301,6 +7372,11 @@
             {
               t: "Para qué se usa",
               fmt: (x) => `<span style="font-size:12.5px">${esc(x.uso)}</span>`,
+            },
+            {
+              t: "Cuenta contable",
+              cls: "mono",
+              fmt: (x) => `<span class="mut" style="font-size:12.5px">${esc(ctaTxt(x.cta))}</span>`,
             },
             {
               t: "Archivo plano",
@@ -7346,17 +7422,24 @@
         ],
         ok: "Verificar y guardar",
         guardar(x) {
+          /* cada cuenta bancaria es una cuenta de movimiento en el catálogo (1-01-02) */
+          const n = D.cuentas.filter((k) => k.cod.indexOf("1-01-02-") === 0).length + 1;
+          const cod = "1-01-02-" + String(n).padStart(3, "0");
+          const cta = { cod, nom: x.b + " cta. " + (x.mon === "Dólares" ? "dólares" : "corriente"), tipo: "Activo", debe: 0, haber: 0 };
+          D.cuentas.push(cta); D.ctaByCod[cod] = cta;
+          D.cuentas.sort((a, b) => (a.cod < b.cod ? -1 : 1));
           CUENTAS.push({
             b: x.b,
             n: x.n.slice(0, 9) + " •••• •••• " + x.n.slice(-4),
             mon: x.mon,
             uso: x.uso || "—",
             plano: "—",
+            cta: cod,
           });
-          anotar("Creó cuenta bancaria", x.b + " · " + x.mon, "Alta");
+          anotar("Creó cuenta bancaria", x.b + " · " + x.mon + " · cuenta contable " + cod, "Alta");
           return {
-            t: "Cuenta creada",
-            s: "Se verificó con doble factor. Contabilidad y gerencia recibieron el aviso.",
+            t: "Cuenta creada · " + cod,
+            s: "Se abrió su cuenta en el catálogo. Se verificó con doble factor; contabilidad y gerencia recibieron el aviso.",
           };
         },
       }),
@@ -7471,30 +7554,48 @@
     logo: true,
     igual: true,
   };
+  /* la vista previa usa un comprobante real del histórico: consecutivo,
+     clave, líneas y totales cuadran con lo que muestran Ventas y Facturación */
+  const ejemploDoc = (tipo, credito) =>
+    D.documentos.find((d) => d.tipo === tipo && d.lineas.length >= 3 && (credito == null || (d.condicion === "Crédito") === credito)) ||
+    D.documentos.find((d) => d.tipo === tipo) || D.documentos[0];
+  const lineasDoc = (d) =>
+    d.lineas.map((l) => {
+      const a = D.artById[l.artId] || {};
+      const neto = l.cant * l.precio * (1 - (l.desc || 0) / 100);
+      return { desc: a.desc || l.artId, cabys: (a.cabys || "") + " · " + D.pctTxt(D.tarifaDe(l)), cant: l.cant, precio: l.precio, desc_: l.desc || 0, total: Math.round(neto) };
+    });
+  const bloqueFiscal = (d) => {
+    const act = D.actividadPrincipal();
+    return `Clave ${esc(d.clave)}<br>Actividad ${esc(act.cod)} · ${d.condicion === "Crédito" ? "Condición 02 crédito" : "Condición 01 contado"} · ${esc(d.medio)}<br>Situación ${esc(d.situacion)} · factura electrónica 4.4${d.exoneracion ? `<br>Exoneración ${esc(d.exoneracion.numero)} · ${esc(d.exoneracion.institucion)} · ${d.exoneracion.pct} puntos de IVA` : ""}`;
+  };
   function vistaDoc(p) {
-    const lineas = [
-      ["Cemento gris 50 kg", "10", "₡7 950", "₡79 500"],
-      ["Varilla #3 corrugada", "40", "₡2 480", "₡99 200"],
-      ['Clavo de 2½" (kg)', "3,5", "₡1 650", "₡5 775"],
-    ];
-    if (p.tam.indexOf("80 mm") >= 0)
+    if (p.tam.indexOf("80 mm") >= 0) {
+      const d = ejemploDoc("TE", false);
       return `<div class="sx-doc sx-80">
-      <div style="text-align:center"><b>${esc(EMP.comercial)}</b><br>${esc(EMP.ced)} · ${esc(locNom("L1"))}<br>${esc(p.t.toUpperCase())}<br>002-00001-04-0000012450</div>
+      <div style="text-align:center"><b>${esc(EMP.comercial)}</b><br>${esc(EMP.nombre)}<br>${esc(EMP.cedula)} · ${esc(locNom(d.locId))}<br>${esc(p.t.toUpperCase())}<br>${esc(d.cons)}<br>${fecha(d.fecha)} ${d.fecha.getFullYear()}</div>
       <div style="border-top:1px dashed #9aa1b1;margin:8px 0"></div>
-      ${lineas.map((l) => `<div class="sx-dl" style="border:0;padding:1px 0"><span>${esc(l[1])} × ${esc(l[0])}</span><span>${esc(l[3])}</span></div>`).join("")}
+      ${lineasDoc(d).map((l) => `<div class="sx-dl" style="border:0;padding:1px 0"><span>${esc(String(l.cant))} × ${esc(l.desc)}<br><span class="sx-dm">CABYS ${esc(l.cabys)}${l.desc_ ? " · desc. " + l.desc_ + " %" : ""}</span></span><span>${c(l.total)}</span></div>`).join("")}
       <div style="border-top:1px dashed #9aa1b1;margin:8px 0"></div>
-      <div class="sx-dl" style="border:0"><b>TOTAL</b><b>₡184 475</b></div><div class="sx-dl" style="border:0"><span>Efectivo</span><span>₡184 475</span></div>
+      <div class="sx-dl" style="border:0"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>
+      ${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl" style="border:0"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}
+      <div class="sx-dl" style="border:0"><b>TOTAL</b><b>${c(d.total)}</b></div><div class="sx-dl" style="border:0"><span>${esc(d.medio)}</span><span>${c(d.total)}</span></div>
+      <div style="margin-top:8px;word-break:break-all" class="sx-dm">${bloqueFiscal(d)}</div>
       <div style="text-align:center;margin-top:8px" class="sx-dm">${esc(PL_CFG.pie)}<br>Consulte su comprobante: consulta.santarosa.cr/c/8F3K2Q<br>(no abre el sistema · vence en 30 días)</div></div>`;
+    }
     if (p.id === "et")
       return `<div class="sx-doc" style="max-width:260px;margin:0 auto;text-align:center"><b style="font-size:13px">Cemento gris 50 kg</b><div style="font-size:26px;font-weight:800;margin:4px 0">₡7 950</div><div style="font-family:var(--num);letter-spacing:2px">▌▌▍▌▎▌▌▍▎▌▍▌▌▎▍▌</div><div class="sx-dm">MAT-00012 · Pasillo C · anaquel 1 · cara A · estante 04</div></div>`;
+    const d = ejemploDoc("FE", !!p.firma);
+    const cli = D.cliById[d.clienteId];
+    const plazo = cli && cli.plazo ? cli.plazo : 30;
     return `<div class="sx-doc">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
-        <div style="display:flex;gap:10px;align-items:center">${PL_CFG.logo ? `<img src="mark.png" alt="" style="width:38px;height:38px;object-fit:contain">` : ""}<div><h4>${esc(EMP.comercial)}</h4><div class="sx-dm">${esc(EMP.nom)} · ${esc(EMP.ced)}<br>${esc(EMP.dom)} · ${esc(EMP.tel)}</div></div></div>
-        <div style="text-align:right"><b>${esc(p.t.toUpperCase())}</b><div class="sx-dm">002-00001-01-0000035201<br>${fecha(D.HOY)} ${D.HOY.getFullYear()} · ${p.firma ? "Crédito 30 días" : "Contado"}</div></div></div>
-      <div style="margin:12px 0 6px"><b>Cliente:</b> Constructora Montaña Azul S.A. · 3-101-XXXXXX</div>
-      <div class="sx-dl" style="font-weight:700"><span style="flex:1">Descripción</span><span style="width:40px;text-align:right">Cant.</span><span style="width:70px;text-align:right">Precio</span><span style="width:80px;text-align:right">Total</span></div>
-      ${lineas.map((l) => `<div class="sx-dl"><span style="flex:1">${esc(l[0])}</span><span style="width:40px;text-align:right">${esc(l[1])}</span><span style="width:70px;text-align:right">${esc(l[2])}</span><span style="width:80px;text-align:right">${esc(l[3])}</span></div>`).join("")}
-      <div style="display:flex;justify-content:flex-end;margin-top:8px"><div style="min-width:200px"><div class="sx-dl"><span>Subtotal</span><span>₡163 252</span></div><div class="sx-dl"><span>IVA 13 %</span><span>₡21 223</span></div><div class="sx-dl" style="font-weight:800"><span>Total</span><span>₡184 475</span></div></div></div>
+        <div style="display:flex;gap:10px;align-items:center">${PL_CFG.logo ? `<img src="mark.png" alt="" style="width:38px;height:38px;object-fit:contain">` : ""}<div><h4>${esc(EMP.comercial)}</h4><div class="sx-dm">${esc(EMP.nombre)} · ${esc(EMP.cedula)}<br>${esc(domicilio(EMP))} · ${esc(EMP.tel)}</div></div></div>
+        <div style="text-align:right"><b>${esc(p.t.toUpperCase())}</b><div class="sx-dm">${esc(d.cons)}<br>${fecha(d.fecha)} ${d.fecha.getFullYear()} · ${d.condicion === "Crédito" ? "Crédito " + plazo + " días" : "Contado"}</div></div></div>
+      <div style="margin:12px 0 6px"><b>Cliente:</b> ${cli ? esc(cli.nom) + " · " + esc(cli.ced || "") : "Consumidor final"}</div>
+      <div class="sx-dl" style="font-weight:700"><span style="flex:1">Descripción</span><span style="width:110px">CABYS</span><span style="width:40px;text-align:right">Cant.</span><span style="width:70px;text-align:right">Precio</span><span style="width:80px;text-align:right">Total</span></div>
+      ${lineasDoc(d).map((l) => `<div class="sx-dl"><span style="flex:1">${esc(l.desc)}${l.desc_ ? ` <span class="sx-dm">(desc. ${l.desc_} %)</span>` : ""}</span><span style="width:110px" class="sx-dm">${esc(l.cabys)}</span><span style="width:40px;text-align:right">${esc(String(l.cant))}</span><span style="width:70px;text-align:right">${c(l.precio)}</span><span style="width:80px;text-align:right">${c(l.total)}</span></div>`).join("")}
+      <div style="display:flex;justify-content:space-between;gap:16px;margin-top:8px"><div class="sx-dm" style="word-break:break-all;max-width:60%">${bloqueFiscal(d)}</div><div style="min-width:200px"><div class="sx-dl"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}<div class="sx-dl" style="font-weight:800"><span>Total</span><span>${c(d.total)}</span></div></div></div>
       ${p.firma ? `<div style="display:flex;gap:30px;margin-top:26px"><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px" class="sx-dm">Firma del cliente</div><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px" class="sx-dm">Cédula</div></div><div class="sx-dm" style="margin-top:6px">ORIGINAL · se imprime también la COPIA</div>` : ""}
       <div class="sx-dm" style="margin-top:14px;border-top:1px solid #e6e8ee;padding-top:8px">${esc(PL_CFG.pie)}<br>Consulta pública del comprobante: consulta.santarosa.cr/c/8F3K2Q — no abre el sistema ni pide sesión; vence en 30 días.</div></div>`;
   }

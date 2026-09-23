@@ -34,28 +34,8 @@
     ["Notas explicativas", "Las políticas contables y el detalle que los estados no muestran", null]
   ];
 
-  /* ═══ 2 · CUENTAS QUE FALTABAN ═════════════════════════════════════ */
-  const NUEVAS = [
-    ["1-01-06-001", "IVA diferido por cobrar", "Activo"],
-    ["1-02-01-003", "Equipo de cómputo", "Activo"],
-    ["1-02-02-001", "Depreciación acumulada", "Activo"],
-    ["2-01-04-001", "Impuesto sobre la renta por pagar", "Pasivo"],
-    ["2-01-05-001", "Provisión de aguinaldo", "Pasivo"],
-    ["2-01-05-002", "Provisión de vacaciones", "Pasivo"],
-    ["2-01-05-003", "Provisión de cesantía", "Pasivo"],
-    ["4-02-02-001", "Ingresos por servicios", "Ingreso"],
-    ["6-01-01-003", "Provisiones laborales", "Gasto"],
-    ["6-01-05-001", "Depreciación del período", "Gasto"],
-    ["6-01-06-001", "Gastos financieros", "Gasto"],
-    ["6-01-07-001", "Impuestos y patentes", "Gasto"]
-  ];
-  NUEVAS.forEach(c => {
-    if (!D.ctaByCod[c[0]]) {
-      const o = { cod: c[0], nom: c[1], tipo: c[2], debe: 0, haber: 0 };
-      D.cuentas.push(o); D.ctaByCod[c[0]] = o;
-    }
-  });
-  D.cuentas.sort((a, b) => a.cod < b.cod ? -1 : 1);
+  /* ═══ 2 · CUENTAS ═════════════════════════════════════════════════
+     El catálogo es uno solo y vive en data.js; aquí solo se agrupa. */
 
   /* ═══ 3 · PLAN DE CUENTAS JERÁRQUICO ═══════════════════════════════ */
   const CLASES = [
@@ -75,9 +55,9 @@
     "1-01-04": "Inventarios", "1-01-05": "Impuestos por cobrar", "1-01-06": "Impuestos diferidos",
     "1-02-01": "Propiedad, planta y equipo", "1-02-02": "Depreciación acumulada",
     "2-01-01": "Proveedores", "2-01-02": "Impuestos por pagar", "2-01-03": "Obligaciones laborales",
-    "2-01-04": "Impuesto sobre la renta", "2-01-05": "Provisiones laborales",
+    "2-01-04": "Impuesto sobre la renta", "2-01-05": "Provisiones laborales", "2-01-06": "Anticipos de clientes",
     "3-01-01": "Capital social", "3-02-01": "Utilidades acumuladas",
-    "4-01-01": "Ventas", "4-01-02": "Descuentos", "4-02-01": "Otros ingresos", "4-02-02": "Servicios",
+    "4-01-01": "Ventas", "4-01-02": "Descuentos", "4-01-03": "Devoluciones", "4-02-01": "Otros ingresos", "4-02-02": "Servicios",
     "5-01-01": "Costo de la mercadería",
     "6-01-01": "Personal", "6-01-02": "Operación", "6-01-03": "Inventario", "6-01-04": "Comercial",
     "6-01-05": "Depreciación", "6-01-06": "Financieros", "6-01-07": "Impuestos"

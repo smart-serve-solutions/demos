@@ -54,7 +54,9 @@
     artId: l.artId, cant: l.cant, precio: l.precio, nota: l.nota || "",
     desc: lineBruto(l) ? +((lineDescMonto(l) / lineBruto(l)) * 100).toFixed(4) : 0
   }));
-  const cartTot = () => D.totalizar(lineasFiscales());
+  /* la exoneración vigente del cliente de la factura baja el IVA de cada línea */
+  const cartExo = () => (S.cart.cliId ? D.exoneracionDe(S.cart.cliId, D.ahora()) : null);
+  const cartTot = () => D.totalizar(lineasFiscales(), { exoneracion: cartExo() });
   const cartPeso = () => S.cart.lineas.reduce((s, l) => s + (artOf(l.artId).peso || 0) * l.cant, 0);
   function cartMargen() {
     let ing = 0, cos = 0;
@@ -89,7 +91,9 @@
   function itemPanel(l, idx) {
     const a = artOf(l.artId);
     const bruto = lineBruto(l), descMonto = lineDescMonto(l), neto = bruto - descMonto;
-    const iva = Math.round(neto * D.IVA);
+    /* la línea lleva la tarifa de su CABYS y la exoneración del cliente */
+    const tl = D.totalizar([lineasFiscales()[idx]], { exoneracion: cartExo() });
+    const iva = tl.iva, tarifa = D.tarifaDe(l);
     const x = lineMargen(l);
     const bajo = x.m != null && x.m < x.min;
     return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -117,7 +121,8 @@
       <div style="padding:12px 14px;border-radius:11px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;flex-direction:column;gap:4px">
         ${posRow("Mercadería", c(neto))}
         ${descMonto ? posRow("Descuento aplicado", "−" + c(descMonto), "var(--warn)") : ""}
-        ${posRow("IVA 13 %", c(iva))}
+        ${posRow("IVA " + D.pctTxt(tarifa) + " · CABYS " + a.cabys, c(iva))}
+        ${tl.ivaExon ? posRow("IVA exonerado", "−" + c(tl.ivaExon), "var(--ok)") : ""}
         <div style="height:1px;background:var(--accent-line);margin:2px 0"></div>
         <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:750"><span>Línea</span><span class="num">${c(neto + iva)}</span></div>
       </div>`;
@@ -282,7 +287,7 @@
             <div style="padding:13px 18px 14px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:7px;flex:none">
               ${posRow("Mercadería", c(t.grav + t.exe))}
               ${t.desc ? posRow("Descuentos", "−" + c(t.desc), "var(--warn)") : ""}
-              ${posRow("IVA 13 %", c(t.iva))}
+              ${D.desgloseIva(t).map(([k, v]) => posRow(k, v < 0 ? "−" + c(-v) : c(v), v < 0 ? "var(--ok)" : "")).join("")}
               <div style="display:flex;justify-content:space-between;font-size:19.5px;font-weight:700;padding-top:5px;border-top:1px solid var(--hair-2)"><span>Total</span><span class="num">${c(t.total)}</span></div>
               <button class="bigbtn ${falta ? "bloq" : ""}" id="btnCobrar" ${nLin ? "" : "disabled"}>${icon(falta ? "shield" : "cash")}Cobrar<kbd>⏎</kbd></button>
             </div>
@@ -663,7 +668,7 @@
     if (!S.cart.lineas.length) return toast("La factura está vacía", "Agregue artículos antes de guardar una proforma.", "in");
     if (!S.cart.cliId) { toast("Seleccione un cliente", "La proforma necesita un cliente identificado.", "wa"); return elegirCliente(); }
     const lineas = lineasFiscales();
-    const t = D.totalizar(lineas);
+    const t = cartTot();
     D.seq.PROF++;
     const cons = "PROF-" + String(D.seq.PROF).padStart(6, "0");
     D.proformas.unshift({
@@ -718,6 +723,10 @@
           e.style.color = d < 0 ? "var(--crit)" : "var(--ok)";
         });
         $("#okPay", el).addEventListener("click", () => {
+          /* el anticipo solo alcanza hasta lo que el cliente dejó pagado */
+          const favor = cli ? cli.saldoFavor || 0 : 0;
+          if (S.cart.condicion !== "Crédito" && medio === "Anticipo" && favor < t.total)
+            return toast("El anticipo no alcanza", (cli ? cli.nom + " tiene " + c(favor) + " a favor" : "Consumidor final no tiene anticipos") + "; la factura es de " + c(t.total) + ".", "cr");
           const doc = D.emitir({
             tipo: cli ? "FE" : "TE", locId: S.locId, term: S.term,
             clienteId: S.cart.cliId, vendedor: S.vendedor,
@@ -726,6 +735,7 @@
             hacienda: S.offline ? "En cola" : "Aceptado", situacion: S.offline ? "3" : "1", fecha: D.ahora()
           });
           if (w.VENX) w.VENX.consumir(doc.cons);
+          if (doc.medio === "Anticipo" && cli) cli.saldoFavor -= doc.total;
           closeSheet();
           S.cart = { cliId: S.cart.cliId, condicion: S.cart.condicion, lineas: [], draft: null, apartado: [] };
           S.posSel = null;

@@ -195,7 +195,7 @@
           <dt>Código del proveedor</dt><dd class="num">${cp ? esc(cp.cod) + " · " + esc(provNom(cp.provId)) : "—"}</dd>
           <dt>CABYS</dt><dd class="num">${esc(a.cabys)}</dd>
           <dt></dt><dd style="font-weight:500;font-size:12px">${esc(I.cabysDesc(a.cabys))}</dd>
-          <dt>Impuesto</dt><dd>IVA 13 %</dd></dl>
+          <dt>Impuesto</dt><dd>IVA ${D.pctTxt(a.tarifa)} · código de tarifa ${D.TARIFA_COD[a.tarifa]}</dd></dl>
           ${a.ean ? "" : `<button class="btn sm pri" id="genCod" style="margin-top:12px">${icon("scan")}Generar código interno y etiqueta</button>`}`
     })}
           </div>`}

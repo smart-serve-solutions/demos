@@ -125,6 +125,9 @@
 
     ["FER-08010", "Manguera jardín ½\" × 15 m", "JAR", 0, "Amanco", "Unid", 5640, 8200, "3610103000000", "", "I1-01"],
     ["FER-08040", "Aspersor plástico giratorio", "JAR", 0, "Amanco", "Unid", 1980, 2950, "3610103000000", "", "I1-04"],
+    /* insumos agropecuarios: tarifa reducida del 1 % por su CABYS */
+    ["FER-08060", "Fertilizante 10-30-10 saco 46 kg", "JAR", 1, "Abonos del Pacífico", "Saco", 17800, 21500, "0111100000000", "", "I1-06"],
+    ["FER-08064", "Manguera de riego agrícola 1\" × 50 m", "JAR", 0, "Amanco", "Rollo", 21400, 27900, "2129100000000", "", "I1-07"],
 
     ["FER-09010", "Casco de seguridad blanco", "SEG", 0, "Steelpro", "Unid", 4200, 6400, "2822001000000", "", "J1-01"],
     ["FER-09020", "Guante de nitrilo talla L", "SEG", 0, "Steelpro", "Par", 980, 1650, "2822001000000", "", "J1-04"]
@@ -144,8 +147,13 @@
     "FER-04520": 0.9, "FER-04540": 0.24, "FER-04560": 0.85, "FER-05120": 5.6,
     "FER-05124": 5.6, "FER-05210": 4.4, "FER-05310": 0.18, "FER-07010": 0.004,
     "FER-07040": 1, "FER-07120": 0.28, "FER-08010": 2.1, "FER-08040": 0.12,
-    "FER-09010": 0.38, "FER-09020": 0.08
+    "FER-09010": 0.38, "FER-09020": 0.08, "FER-08060": 46, "FER-08064": 9.5
   };
+  /* tarifa de IVA según el CABYS del artículo; lo que no está aquí va al 13 % */
+  const TARIFA_CABYS = { "0111100000000": 1, "2129100000000": 1 };
+  /* código de tarifa del XML 4.4 para cada porcentaje */
+  const TARIFA_COD = { 13: "08", 4: "04", 2: "03", 1: "02", 0.5: "09", 0: "01" };
+  const tarifaDeCabys = cabys => (cabys in TARIFA_CABYS ? TARIFA_CABYS[cabys] : 13);
   /* la medida sale de la propia descripción: el catálogo no la repite a mano */
   const medidaDe = d => {
     const m = d.match(/×\s*([\d.,]+\s*(?:m|cm|mm|L|kg|ml|oz|W|")\b)/i)
@@ -156,23 +164,24 @@
   const articulos = ART.map((a, i) => ({
     id: "A" + (i + 1),
     cod: a[0], desc: a[1], nom: a[1], fam: a[2], sub: subcats[a[2]][a[3]], marca: a[4], unidad: a[5],
-    costo: a[6], precio: a[7], cabys: a[8], ean: a[9], ubic: a[10],
+    costo: a[6], precio: a[7], cabys: a[8], tarifa: tarifaDeCabys(a[8]), ean: a[9], ubic: a[10],
     tipo: "Producto", peso: PESO[a[0]] || 0, medida: medidaDe(a[1]),
     margen: +(((a[7] - a[6]) / a[7]) * 100).toFixed(1)
   }));
 
   /* servicios: el catálogo no es solo mercadería — mano de obra, taller, flete
      y patrocinios se cotizan y se facturan con el mismo cuerpo del documento */
+  /* cod, desc, fam, sub, unidad, costo, precio, ubicación, CABYS */
   const SERVICIOS = [
-    ["SRV-001", "Corte de tubo PVC o hierro", "TAL", "Taller", "Corte", 0, 800, "Taller"],
-    ["SRV-002", "Duplicado de llave · cerrajería", "TAL", "Taller", "Servicio", 0, 1200, "Taller"],
-    ["SRV-003", "Mano de obra — instalación de grifería", "INS", "Instalación", "Hora", 0, 8500, "Campo"],
-    ["SRV-004", "Transporte y flete a domicilio", "LOG", "Flete", "Viaje", 0, 0, "Ruta"],
-    ["SRV-005", "Patrocinio de evento local", "COM", "Patrocinio", "Evento", 0, 45000, "—"]
+    ["SRV-001", "Corte de tubo PVC o hierro", "TAL", "Taller", "Corte", 0, 800, "Taller", "8511000000000"],
+    ["SRV-002", "Duplicado de llave · cerrajería", "TAL", "Taller", "Servicio", 0, 1200, "Taller", "8511000000000"],
+    ["SRV-003", "Mano de obra — instalación de grifería", "INS", "Instalación", "Hora", 0, 8500, "Campo", "4291000000000"],
+    ["SRV-004", "Transporte y flete a domicilio", "LOG", "Flete", "Viaje", 0, 0, "Ruta", "6491000000000"],
+    ["SRV-005", "Patrocinio de evento local", "COM", "Patrocinio", "Evento", 0, 45000, "—", "8511000000000"]
   ];
   SERVICIOS.forEach((s, i) => articulos.push({
     id: "S" + (i + 1), cod: s[0], desc: s[1], nom: s[1], fam: s[2], sub: s[3],
-    marca: "—", unidad: s[4], costo: s[5], precio: s[6], cabys: "8511000000000", ean: "", ubic: s[7],
+    marca: "—", unidad: s[4], costo: s[5], precio: s[6], cabys: s[8], tarifa: tarifaDeCabys(s[8]), ean: "", ubic: s[7],
     tipo: "Servicio", peso: 0, medida: "",
     margen: s[6] ? 100 : null
   }));
@@ -234,6 +243,23 @@
     autorizados: c[2] === "Jurídica" ? ["Bodeguero de obra", "Chofer autorizado"] : [],
     desde: `${ri(2015, 2024)}`
   }));
+  /* exoneraciones: una sola fuente, en la ficha del cliente. pct son los
+     puntos de IVA exonerados (13 = exoneración total de la tarifa general) */
+  clientes.forEach((c, i) => {
+    c.exoneraciones = !c.exonerado ? [] : [{
+      numero: "AL-" + String(1024300 + i * 17).padStart(8, "0") + "-26",
+      tipo: c.nom.indexOf("ASADA") === 0 ? "Ley 8783 · ASADA" : "Institución pública",
+      tipoCod: c.nom.indexOf("ASADA") === 0 ? "03" : "02",
+      institucion: "Ministerio de Hacienda", pct: 13,
+      emitida: new Date(2026, 0, 20), vence: new Date(HOY.getTime() + 210 * 86400000)
+    }];
+  });
+  /* la exoneración que rige para ese cliente en esa fecha */
+  const exoneracionDe = (cliId, fecha) => {
+    const c = clientes.find(x => x.id === cliId);
+    const f = fecha || HOY;
+    return c ? c.exoneraciones.find(x => x.emitida <= f && f <= x.vence) || null : null;
+  };
   const cliById = {}; clientes.forEach(c => cliById[c.id] = c);
 
   /* ── proveedores ────────────────────────────────────────────── */
@@ -254,38 +280,110 @@
   const provById = {}; proveedores.forEach(p => provById[p.id] = p);
 
   /* ── catálogo contable ──────────────────────────────────────── */
+  /* un solo catálogo para toda la empresa: Ventas, Compras, Planilla,
+     Contabilidad y Configuración escogen de aquí */
   const cuentas = [
     ["1-01-01-001", "Caja general", "Activo"],
     ["1-01-02-001", "Banco Nacional cta. corriente", "Activo"],
     ["1-01-02-002", "BAC San José cta. corriente", "Activo"],
+    ["1-01-02-003", "Banco de Costa Rica cta. corriente", "Activo"],
+    ["1-01-02-004", "Banco Popular cta. corriente", "Activo"],
+    ["1-01-02-005", "Banco Nacional cta. dólares", "Activo"],
     ["1-01-03-001", "Cuentas por cobrar clientes", "Activo"],
+    ["1-01-03-002", "Estimación por incobrables", "Activo"],
+    ["1-01-03-003", "Cuentas por cobrar a colaboradores", "Activo"],
+    ["1-01-03-004", "Tarjetas por liquidar (datáfonos)", "Activo"],
+    ["1-01-03-005", "Reclamos a proveedores", "Activo"],
     ["1-01-04-001", "Inventario de mercadería", "Activo"],
     ["1-01-05-001", "IVA soportado (crédito fiscal)", "Activo"],
+    ["1-01-06-001", "IVA diferido por cobrar", "Activo"],
     ["1-02-01-001", "Mobiliario y equipo", "Activo"],
     ["1-02-01-002", "Flota vehicular", "Activo"],
+    ["1-02-01-003", "Equipo de cómputo", "Activo"],
+    ["1-02-02-001", "Depreciación acumulada", "Activo"],
     ["2-01-01-001", "Cuentas por pagar proveedores", "Pasivo"],
+    ["2-01-01-002", "Mercadería recibida por facturar", "Pasivo"],
     ["2-01-02-001", "IVA repercutido (débito fiscal)", "Pasivo"],
     ["2-01-02-002", "IVA por pagar diferido", "Pasivo"],
     ["2-01-03-001", "Cargas sociales por pagar", "Pasivo"],
     ["2-01-03-002", "Salarios por pagar", "Pasivo"],
+    ["2-01-03-003", "Impuesto al salario retenido por pagar", "Pasivo"],
+    ["2-01-03-004", "Deducciones de terceros por pagar", "Pasivo"],
+    ["2-01-04-001", "Impuesto sobre la renta por pagar", "Pasivo"],
+    ["2-01-05-001", "Provisión de aguinaldo", "Pasivo"],
+    ["2-01-05-002", "Provisión de vacaciones", "Pasivo"],
+    ["2-01-05-003", "Provisión de cesantía", "Pasivo"],
+    ["2-01-06-001", "Anticipos y saldos a favor de clientes", "Pasivo"],
     ["3-01-01-001", "Capital social", "Patrimonio"],
     ["3-02-01-001", "Utilidades acumuladas", "Patrimonio"],
     ["4-01-01-001", "Ventas de mercadería", "Ingreso"],
     ["4-01-02-001", "Descuentos sobre ventas", "Ingreso"],
+    ["4-01-03-001", "Devoluciones sobre ventas", "Ingreso"],
     ["4-02-01-001", "Otros ingresos", "Ingreso"],
+    ["4-02-02-001", "Ingresos por servicios", "Ingreso"],
     ["5-01-01-001", "Costo de la mercadería vendida", "Costo"],
     ["6-01-01-001", "Salarios", "Gasto"],
     ["6-01-01-002", "Cargas sociales patronales", "Gasto"],
+    ["6-01-01-003", "Provisiones laborales", "Gasto"],
     ["6-01-02-001", "Combustible y transporte", "Gasto"],
     ["6-01-02-002", "Servicios públicos", "Gasto"],
+    ["6-01-02-003", "Servicios contratados", "Gasto"],
+    ["6-01-02-004", "Alquileres de locales", "Gasto"],
+    ["6-01-02-005", "Mantenimiento y reparaciones", "Gasto"],
     ["6-01-03-001", "Merma de inventario", "Gasto"],
-    ["6-01-04-001", "Publicidad", "Gasto"]
+    ["6-01-04-001", "Publicidad", "Gasto"],
+    ["6-01-04-002", "Gasto por incobrables", "Gasto"],
+    ["6-01-05-001", "Depreciación del período", "Gasto"],
+    ["6-01-06-001", "Gastos financieros", "Gasto"],
+    ["6-01-06-002", "Diferencias de caja", "Gasto"],
+    ["6-01-07-001", "Impuestos y patentes", "Gasto"]
   ].map(c => ({ cod: c[0], nom: c[1], tipo: c[2], debe: 0, haber: 0 }));
   const ctaByCod = {}; cuentas.forEach(c => ctaByCod[c.cod] = c);
 
+  /* cuenta que recibe cada medio de pago. La tarjeta no es banco todavía:
+     queda por liquidar hasta que el adquirente deposita el lote neto de
+     comisión. El anticipo rebaja lo que el cliente dejó pagado. */
+  const CUENTA_MEDIO = {
+    "Efectivo": "1-01-01-001", "Dólares": "1-01-01-001",
+    "Tarjeta": "1-01-03-004", "A la misma tarjeta": "1-01-03-004",
+    "SINPE móvil": "1-01-02-001", "Transferencia": "1-01-02-001", "Cheque": "1-01-02-001",
+    "Anticipo": "2-01-06-001", "Saldo a favor del cliente": "2-01-06-001",
+    "Crédito": "1-01-03-001", "Rebaja de la cuenta por cobrar": "1-01-03-001"
+  };
+  const cuentaMedio = m => CUENTA_MEDIO[m] || "1-01-01-001";
+
   /* ── secuencias y documentos ────────────────────────────────── */
-  /* el emisor vive aquí porque data.js carga primero; Facturación lo lee */
-  const emisor = { nombre: "Ferretería Santa Rosa S.A.", comercial: "Ferretería Santa Rosa", cedula: "3-101-118844", tipoCed: "Jurídica" };
+  /* la ficha del emisor vive aquí porque data.js carga primero; Sistema la
+     edita y Facturación, la clave, las plantillas y la planilla la leen.
+     La ubicación va codificada como la pide el XML 4.4 (provincia, cantón,
+     distrito y otras señas). */
+  const emisor = {
+    nombre: "Ferretería Santa Rosa S.A.", comercial: "Ferretería Santa Rosa",
+    cedula: "3-101-118844", tipoCed: "Jurídica", tipoCedCod: "02",
+    regimen: "Tradicional · factura electrónica 4.4",
+    provincia: "3", canton: "05", distrito: "09",
+    otrasSenas: "Santa Rosa de Turrialba, 200 m sur de la plaza de deportes",
+    correos: ["facturacion@ferreteriasantarosa.cr", "contabilidad@ferreteriasantarosa.cr"],
+    tel: "2556-0000",
+    actividades: [
+      { cod: "471100", t: "Venta al por menor en comercios no especializados", principal: false },
+      { cod: "475200", t: "Venta al por menor de artículos de ferretería, pinturas y vidrio", principal: true },
+      { cod: "466300", t: "Venta al por mayor de materiales de construcción", principal: false },
+      { cod: "433000", t: "Terminación y acabado de edificios", principal: false }
+    ]
+  };
+  /* división territorial para la ubicación del emisor (solo lo que la demo usa) */
+  const UBICACION = {
+    provincias: { "1": "San José", "2": "Alajuela", "3": "Cartago", "4": "Heredia", "5": "Guanacaste", "6": "Puntarenas", "7": "Limón" },
+    cantones: { "3": { "01": "Cartago", "02": "Paraíso", "03": "La Unión", "04": "Jiménez", "05": "Turrialba", "06": "Alvarado", "07": "Oreamuno", "08": "El Guarco" } },
+    distritos: { "3-05": { "01": "Turrialba", "02": "La Suiza", "03": "Peralta", "04": "Santa Cruz", "05": "Santa Teresita", "06": "Pavones", "07": "Tuis", "08": "Tayutic", "09": "Santa Rosa", "10": "Tres Equis", "11": "La Isabel", "12": "Chirripó" } }
+  };
+  const ubicacionTexto = e => {
+    const p = UBICACION.provincias[e.provincia], c = (UBICACION.cantones[e.provincia] || {})[e.canton],
+      d = (UBICACION.distritos[e.provincia + "-" + e.canton] || {})[e.distrito];
+    return [d, c, p].filter(Boolean).join(", ");
+  };
+  const actividadPrincipal = () => emisor.actividades.find(a => a.principal) || emisor.actividades[0];
 
   const seq = { PROF: 5600, PED: 2400, OC: 4400, TR: 900, AJ: 300, AS: 12000 };
   const pad = (n, l) => String(n).padStart(l, "0");
@@ -295,6 +393,7 @@
   const TIPO_COD = { FE: "01", ND: "02", NC: "03", TE: "04", FEC: "08", REP: "10" };
   const SERIE_BASE = { FE: 34800, TE: 12400, NC: 2110, ND: 340, FEC: 120, REP: 4180 };
   const series = {}, serieInicio = {};
+  const TERM_INICIAL = {}; locales.forEach(l => TERM_INICIAL[l.id] = l.terminales);
   /* ¿puede esta terminal emitir comprobantes? solo tiendas, y dentro de sus cajas */
   const puedeEmitir = (locId, term) => {
     const l = locales.find(x => x.id === locId);
@@ -306,7 +405,8 @@
     const k = `${locId}|${term || 1}|${tipo}`;
     if (!(k in series)) {
       const i = Math.max(0, locales.findIndex(x => x.id === locId));
-      series[k] = serieInicio[k] = Math.round(SERIE_BASE[tipo] * (1 - i * 0.09) / (term || 1));
+      /* las cajas que ya existían traen su historia; una terminal creada en la sesión empieza en 1 */
+      series[k] = serieInicio[k] = (term || 1) > (TERM_INICIAL[locId] || 0) ? 0 : Math.round(SERIE_BASE[tipo] * (1 - i * 0.09) / (term || 1));
     }
     return k;
   }
@@ -331,17 +431,45 @@
     return `506${pad(d.getDate(), 2)}${pad(d.getMonth() + 1, 2)}${String(d.getFullYear()).slice(2)}${ced}${cons.replace(/-/g, "")}${situacion || "1"}${pad(ri(10000000, 99999999), 8)}`;
   }
 
-  const IVA = 0.13;
-  function totalizar(lineas) {
-    let grav = 0, desc = 0, exe = 0;
-    lineas.forEach(l => {
-      const bruto = l.cant * l.precio;
-      const d = bruto * (l.desc || 0) / 100;
+  const IVA = 0.13; /* tarifa general; cada línea usa la de su CABYS */
+  const tarifaDe = l => (l.tarifa != null ? l.tarifa : artById[l.artId] ? artById[l.artId].tarifa : 13);
+  /* IVA por línea, como lo arma el XML 4.4: cada línea lleva su tarifa y su
+     exoneración, y el encabezado es la suma de las líneas ya redondeadas (así
+     nunca aparece el rechazo 4001 por diferencia de redondeo).
+     grav = base de las líneas con tarifa (incluye lo exonerado); exe = tarifa 0;
+     exon = parte de la base cubierta por la exoneración. */
+  function totalizar(lineas, o) {
+    const exo = o && o.exoneracion;
+    let grav = 0, desc = 0, exe = 0, exon = 0, iva = 0, ivaExon = 0;
+    const porTarifa = {};
+    const det = lineas.map(l => {
+      const bruto = Math.round(l.cant * l.precio);
+      const d = Math.round(bruto * (l.desc || 0) / 100);
+      const neto = bruto - d, tarifa = tarifaDe(l);
       desc += d;
-      if (l.exento) exe += bruto - d; else grav += bruto - d;
+      if (!tarifa) { exe += neto; return { tarifa, cod: TARIFA_COD[0], neto, iva: 0, ivaExon: 0 }; }
+      const frac = exo ? Math.min(exo.pct, tarifa) / tarifa : 0;
+      const ivaPleno = Math.round(neto * tarifa / 100);
+      const ivaL = Math.round(ivaPleno * (1 - frac)), ivaExL = ivaPleno - ivaL;
+      grav += neto; exon += Math.round(neto * frac); iva += ivaL; ivaExon += ivaExL;
+      const k = porTarifa[tarifa] || (porTarifa[tarifa] = { tarifa, cod: TARIFA_COD[tarifa], base: 0, iva: 0 });
+      k.base += neto; k.iva += ivaL;
+      return { tarifa, cod: TARIFA_COD[tarifa], neto, iva: ivaL, ivaExon: ivaExL };
     });
-    const iva = Math.round(grav * IVA);
-    return { grav: Math.round(grav), desc: Math.round(desc), exe: Math.round(exe), iva, total: Math.round(grav + exe + iva) };
+    return {
+      grav, desc, exe, exon, iva, ivaExon, total: grav + exe + iva,
+      porTarifa: Object.values(porTarifa).sort((a, b) => b.tarifa - a.tarifa), detIva: det,
+      exoneracion: exo ? { numero: exo.numero, tipoCod: exo.tipoCod, institucion: exo.institucion, pct: exo.pct, emitida: exo.emitida } : null
+    };
+  }
+  /* filas del resumen de IVA para caja, comprobantes y plantillas:
+     una por tarifa y, si aplica, lo que cubrió la exoneración */
+  const pctTxt = p => String(p).replace(".", ",") + " %";
+  function desgloseIva(t) {
+    const filas = (t.porTarifa || []).map(k => ["IVA " + pctTxt(k.tarifa), k.iva]);
+    if (!filas.length) filas.push(["IVA", t.iva || 0]);
+    if (t.ivaExon) filas.push(["IVA exonerado" + (t.exoneracion ? " · " + t.exoneracion.numero : ""), -t.ivaExon]);
+    return filas;
   }
   function costoLineas(lineas) {
     return lineas.reduce((s, l) => s + l.cant * (artById[l.artId] ? artById[l.artId].costo : 0), 0);
@@ -366,6 +494,9 @@
   /* ── asientos ───────────────────────────────────────────────── */
   const asientos = [];
   function asentar(fecha, origen, glosa, detalle) {
+    /* partida doble: un asiento que no cuadra no entra al mayor */
+    const debe = detalle.reduce((s, d) => s + (d.debe || 0), 0), haber = detalle.reduce((s, d) => s + (d.haber || 0), 0);
+    if (Math.round(debe) !== Math.round(haber)) throw new Error(`Asiento descuadrado (${origen}): débitos ${debe} ≠ créditos ${haber}`);
     seq.AS++;
     const a = { id: "AS-" + seq.AS, num: seq.AS, fecha, origen, glosa, detalle };
     detalle.forEach(d => {
@@ -382,10 +513,11 @@
   const VENDEDORES = ["Kevin Solano", "Marta Rojas", "Jonathan Ureña", "Sofía Camacho", "Randall Mata", "Yeimy Picado"];
 
   function emitir(opts) {
-    const t = totalizar(opts.lineas);
+    const fecha = opts.fecha || HOY, situacion = opts.situacion || "1";
+    /* la exoneración vigente del cliente a la fecha del documento */
+    const t = totalizar(opts.lineas, { exoneracion: opts.clienteId ? exoneracionDe(opts.clienteId, fecha) : null });
     const tipo = opts.tipo || "FE";
     const cons = consecutivo(tipo, opts.locId, opts.term || 1);
-    const fecha = opts.fecha || HOY, situacion = opts.situacion || "1";
     const doc = {
       id: tipo + "-" + cons, tipo, cons, clave: clave(cons, fecha, situacion), situacion,
       fecha, locId: opts.locId, term: opts.term || 1,
@@ -405,8 +537,7 @@
 
     /* contabilidad */
     const det = [];
-    if (doc.condicion === "Crédito") det.push({ cta: "1-01-03-001", debe: doc.total, haber: 0 });
-    else det.push({ cta: doc.medio === "Efectivo" ? "1-01-01-001" : "1-01-02-001", debe: doc.total, haber: 0 });
+    det.push({ cta: doc.condicion === "Crédito" ? "1-01-03-001" : cuentaMedio(doc.medio), debe: doc.total, haber: 0 });
     det.push({ cta: "4-01-01-001", debe: 0, haber: doc.grav + doc.exe });
     det.push({ cta: doc.condicion === "Crédito" ? "2-01-02-002" : "2-01-02-001", debe: 0, haber: doc.iva });
     det.push({ cta: "5-01-01-001", debe: doc.costo, haber: 0 });
@@ -415,6 +546,31 @@
 
     if (doc.condicion === "Crédito" && cliById[doc.clienteId]) cliById[doc.clienteId].saldo += doc.total;
     return doc;
+  }
+
+  /* asiento de la nota de crédito: reversa la venta, el IVA y el costo según
+     el concepto, a dónde va la mercadería y cómo se le devuelve al cliente.
+     aCxC es lo que se rebajó de la factura; el resto queda a favor del cliente. */
+  const CONCEPTO_DESCUENTO = { "Descuento posterior": 1, "Financiera": 1, "Promocional": 1 };
+  function asentarNC(nc, base, aCxC) {
+    const det = [];
+    const ingreso = CONCEPTO_DESCUENTO[nc.concepto] ? "4-01-02-001" : "4-01-03-001";
+    det.push({ cta: ingreso, debe: nc.grav + nc.exe, haber: 0 });
+    /* el IVA vuelve a la cuenta donde quedó el de la factura */
+    if (nc.iva) det.push({ cta: base && base.condicion === "Crédito" && base.saldo > 0 ? "2-01-02-002" : "2-01-02-001", debe: nc.iva, haber: 0 });
+    if (nc.reintegro === "Rebaja de la cuenta por cobrar") {
+      const r = Math.min(nc.total, aCxC || 0);
+      if (r) det.push({ cta: "1-01-03-001", debe: 0, haber: r });
+      if (nc.total - r) det.push({ cta: "2-01-06-001", debe: 0, haber: nc.total - r });
+    } else det.push({ cta: cuentaMedio(nc.reintegro), debe: 0, haber: nc.total });
+    /* costo: solo si la mercadería vuelve */
+    if (nc.costo && nc.destino && nc.destino !== "—") {
+      const cta = nc.destino === "Vuelve a la venta" ? "1-01-04-001" : nc.destino === "Devolución al proveedor" ? "1-01-03-005" : "6-01-03-001";
+      det.push({ cta, debe: nc.costo, haber: 0 });
+      det.push({ cta: "5-01-01-001", debe: 0, haber: nc.costo });
+    }
+    nc.asiento = asentar(nc.fecha, nc.cons, `Nota de crédito ${nc.concepto || ""} sobre ${nc.refiere}`.replace(/\s+/g, " "), det).id;
+    return nc.asiento;
   }
 
   /* cartera vieja: ventas a crédito de los últimos cinco meses, para que
@@ -546,7 +702,8 @@
   ncBases.sort((a, b) => a.fecha - b.fecha).forEach(({ base, fecha }) => {
     const l = base.lineas[0];
     const lineas = [{ artId: l.artId, cant: Math.max(1, Math.round(l.cant / 2)), precio: l.precio, desc: 0 }];
-    const t = totalizar(lineas);
+    /* la NC devuelve el IVA con la misma exoneración de la factura */
+    const t = totalizar(lineas, { exoneracion: base.exoneracion });
     const cons = consecutivo("NC", base.locId, base.term);
     documentos.push({
       id: "NC-" + cons, tipo: "NC", cons, clave: clave(cons, fecha), situacion: "1", fecha,
@@ -555,9 +712,14 @@
       costo: costoLineas(lineas), saldo: 0,
       refiere: base.cons, refiereClave: base.clave, refiereTipo: base.tipo, refiereFecha: base.fecha,
       concepto: pick(["Devolución de mercadería", "Descuento posterior", "Garantía", "Error de facturación"]),
+      /* el reintegro sigue a cómo se pagó la factura */
+      reintegro: base.condicion === "Crédito" ? "Rebaja de la cuenta por cobrar" : base.medio === "Tarjeta" ? "A la misma tarjeta"
+        : base.medio === "SINPE móvil" ? "SINPE móvil" : base.clienteId && chance(0.35) ? "Saldo a favor del cliente" : "Efectivo",
       margen: 0
     });
-    lineas.forEach(x => mover(x.artId, base.locId, x.cant, "Devolución", cons, fecha));
+    /* solo vuelve mercadería si el concepto es una devolución o una garantía */
+    const doc = documentos[documentos.length - 1];
+    if (/Devolución|Garantía/.test(doc.concepto)) lineas.forEach(x => mover(x.artId, base.locId, x.cant, "Devolución", cons, fecha));
   });
 
   /* ── proformas y pedidos pendientes ─────────────────────────── */
@@ -566,7 +728,7 @@
     const cli = pick(clientes);
     const lineas = [];
     for (let j = 0; j < ri(2, 6); j++) { const a = pick(artVenta); if (!lineas.some(x => x.artId === a.id)) lineas.push({ artId: a.id, cant: ri(2, 30), precio: a.precio, desc: 0 }); }
-    const t = totalizar(lineas);
+    const t = totalizar(lineas, { exoneracion: exoneracionDe(cli.id) });
     seq.PROF++;
     proformas.push({
       id: "PF-" + seq.PROF, cons: "PROF-" + pad(seq.PROF, 6), tipo: chance(0.4) ? "Pedido" : "Proforma",
@@ -596,10 +758,11 @@
   function crearOC(provId, locId, items, estado, fecha) {
     seq.OC++;
     const lineas = items.map(it => ({ artId: it.a, cant: it.c, costo: it.k || artById[it.a].costo, var: it.v || 0 }));
-    const sub = lineas.reduce((s, l) => s + l.cant * l.costo, 0);
+    const sub = Math.round(lineas.reduce((s, l) => s + l.cant * l.costo, 0));
+    const iva = Math.round(sub * IVA);
     const oc = {
       id: "OC-" + seq.OC, cons: "OC-2026-" + pad(seq.OC, 6), provId, locId, fecha: fecha || dayAgo(ri(1, 20)),
-      lineas, sub, iva: Math.round(sub * IVA), total: Math.round(sub * 1.13),
+      lineas, sub, iva, total: sub + iva,
       estado: estado || "Registrada", plazo: provById[provId].plazo, recibido: 0
     };
     compras.push(oc);
@@ -968,7 +1131,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, emisor, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

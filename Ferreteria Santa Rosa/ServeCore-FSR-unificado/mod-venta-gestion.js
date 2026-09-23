@@ -148,7 +148,9 @@
           const sig = $("#arqSig", el).value;
           if (sig) V.abrir(t.locId, t.n, sig, t.fondo);
           closeSheet();
-          toast("Turno cerrado", (dif ? "Diferencia de " + c(dif) + " justificada. " : "Cuadró exacto. ") + (sig ? sig + " abrió su turno en la misma caja." : "La caja quedó cerrada."), dif ? "wa" : "ok");
+          const tol = w.AUTO ? w.AUTO.POLITICA.toleranciaCaja : 2000;
+          const dest = dif < 0 && -dif > tol ? " Se cargó a " + t.cajero + " en cuentas por cobrar a colaboradores." : " Quedó asentada en «Diferencias de caja».";
+          toast("Turno cerrado", (dif ? "Diferencia de " + c(dif) + " justificada." + dest + " " : "Cuadró exacto. ") + (sig ? sig + " abrió su turno en la misma caja." : "La caja quedó cerrada."), dif ? "wa" : "ok");
           if (despues) despues(); else A.refresh();
         });
       }
@@ -813,7 +815,7 @@
           <div>
             <div class="totline s"><span class="tl">Gravado</span><span class="tv">${grp(d.grav)}</span></div>
             <div class="totline s"><span class="tl">Descuentos</span><span class="tv">−${grp(d.desc)}</span></div>
-            <div class="totline"><span class="tl">IVA 13 %</span><span class="tv">${grp(d.iva)}</span></div>
+            ${D.desgloseIva(d).map(([k, v]) => `<div class="totline"><span class="tl">${esc(k)}</span><span class="tv">${v < 0 ? "−" : ""}${grp(v)}</span></div>`).join("")}
             <div class="totrule"></div>
             <div class="totline"><span class="tl b">Total</span><span class="tv" style="font-size:17px">${c(d.total)}</span></div>
           </div></div>`,
@@ -943,7 +945,7 @@
       const d = dev.doc;
       if (!D.puedeEmitir(S.locId, S.term)) return toast("Esta terminal no emite comprobantes", "La nota de crédito sale de una caja de tienda. Cambie de local o de terminal en la barra superior.", "cr");
       const lineas = d.lineas.filter(l => dev.cant[l.artId] > 0).map(l => ({ artId: l.artId, cant: dev.cant[l.artId], precio: l.precio, desc: l.desc || 0 }));
-      const monto = D.totalizar(lineas).total;
+      const monto = D.totalizar(lineas, { exoneracion: d.exoneracion }).total;
       const o = { doc: d, lineas, concepto: dev.concepto, destino: V.CONCEPTOS.find(k => k.id === dev.concepto).inv ? dev.destino : "—", reintegro: dev.reintegro || reintegroDe(d), firma: true, locId: S.locId, term: S.term, offline: S.offline, usuario: S.vendedor };
       if (monto > V.PARAM.devolucionSinAprobacion) {
         V.BOLETAS.unshift({ id: "BD-" + String(900 + V.BOLETAS.length).padStart(5, "0"), doc: d, lineas, total: monto, concepto: o.concepto, destino: o.destino, reintegro: o.reintegro, solicita: S.vendedor, locId: S.locId, term: S.term, fecha: V.ahora(), firma: true, estado: "Por aprobar", motivo: dev.motivo || "Sin motivo" });

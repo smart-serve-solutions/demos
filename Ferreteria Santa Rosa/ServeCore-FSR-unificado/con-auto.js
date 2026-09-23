@@ -36,23 +36,7 @@
     incobrables: [[61, 90, 5], [91, 120, 25], [121, 9999, 50]]  /* política de la empresa */
   };
 
-  /* ═══ 2 · CUENTAS QUE ESTE TRABAJO NECESITA ════════════════════════ */
-  [
-    ["1-01-03-002", "Estimación por incobrables", "Activo"],
-    ["1-01-03-003", "Cuentas por cobrar a colaboradores", "Activo"],
-    ["2-01-01-002", "Mercadería recibida por facturar", "Pasivo"],
-    ["6-01-02-003", "Servicios contratados", "Gasto"],
-    ["6-01-02-004", "Alquileres de locales", "Gasto"],
-    ["6-01-02-005", "Mantenimiento y reparaciones", "Gasto"],
-    ["6-01-04-002", "Gasto por incobrables", "Gasto"],
-    ["6-01-06-002", "Diferencias de caja", "Gasto"]
-  ].forEach(c => {
-    if (!D.ctaByCod[c[0]]) {
-      const o = { cod: c[0], nom: c[1], tipo: c[2], debe: 0, haber: 0 };
-      D.cuentas.push(o); D.ctaByCod[c[0]] = o;
-    }
-  });
-  D.cuentas.sort((a, b) => (a.cod < b.cod ? -1 : 1));
+  /* ═══ 2 · CUENTAS: las que usa este trabajo ya están en el catálogo único (data.js) ═══ */
 
   /* todo asiento automático dice qué regla lo generó */
   function asiento(fecha, origen, glosa, det, regla, aprobado) {
@@ -99,10 +83,11 @@
   const cierres = [], lotes = [], sinpe = [];
   D.tiendas.forEach(l => {
     const escala = { L1: 1.15, L2: 1.35, L3: 0.9, L4: 0.65, L5: 0.45, L6: 1, L7: 0.5 }[l.id] || 0.7;
-    for (let d = 6; d >= 0; d--) {
+    /* el día 7 solo aporta su lote: las ventas con tarjeta de ese día se liquidan igual */
+    for (let d = 7; d >= 0; d--) {
       const f = dia(d);
       const dom = f.getDay() === 0 ? 0.45 : 1;                /* el domingo abren medio día */
-      for (let t = 1; t <= l.terminales; t++) {
+      for (let t = 1; d < 7 && t <= l.terminales; t++) {
         const efectivo = r50(ri(900000, 2600000) * escala * dom);
         cierres.push({
           id: `CJ-${l.id}-${pad(f.getDate(), 2)}-${t}`, locId: l.id, term: t, fecha: f,
@@ -110,9 +95,16 @@
           efectivo, contado: efectivo, dif: 0, estado: "Cuadrado"
         });
       }
-      const bruto = r50(ri(700000, 2400000) * escala);
-      const comision = r0(bruto * POLITICA.comisionDatafono / 100);
-      lotes.push({ id: `LT-${l.id}-${pad(f.getDate(), 2)}`, locId: l.id, fecha: f, bruto, comision, neto: bruto - comision, acreditado: d > 0, estado: d > 0 ? "Conciliado" : "En tránsito" });
+      /* el lote del datáfono es lo que ese local cobró con tarjeta ese día,
+         menos lo que se devolvió a la misma tarjeta */
+      const delDia = x => x.locId === l.id && x.fecha.toDateString() === f.toDateString();
+      const bruto = D.documentos.filter(x => delDia(x) && x.tipo !== "NC" && x.condicion !== "Crédito" && x.medio === "Tarjeta").reduce((s, x) => s + x.total, 0)
+        - D.documentos.filter(x => delDia(x) && x.tipo === "NC" && x.reintegro === "A la misma tarjeta").reduce((s, x) => s + x.total, 0);
+      if (bruto > 0) {
+        const comision = r0(bruto * POLITICA.comisionDatafono / 100);
+        lotes.push({ id: `LT-${l.id}-${pad(f.getDate(), 2)}`, locId: l.id, fecha: f, bruto, comision, neto: bruto - comision, acreditado: d > 0, estado: d > 0 ? "Conciliado" : "En tránsito" });
+      }
+      if (d === 7) continue;
       const n = ri(3, 11);
       sinpe.push({ locId: l.id, fecha: f, n, monto: r50(n * ri(38000, 96000)), identificados: n });
     }
@@ -148,6 +140,16 @@
   if (depPend) { depPend.llego = false; depPend.estado = "No llegó"; }
   const lotePend = lotes.find(x => x.locId === "L6" && x.fecha.toDateString() === dia(1).toDateString());
   if (lotePend) { lotePend.acreditado = false; lotePend.estado = "No acreditado"; }
+  /* liquidación del lote acreditado: el banco recibe el neto, la comisión es
+     gasto financiero y se cancela lo que estaba por liquidar */
+  const liquidarLote = (x, fecha, por) => {
+    x.asiento = asiento(fecha, x.id, "Liquidación del datáfono · " + locNom(x.locId) + " · lote " + x.id, [
+      { cta: BANCO, debe: x.neto, haber: 0 },
+      { cta: "6-01-06-001", debe: x.comision, haber: 0 },
+      { cta: "1-01-03-004", debe: 0, haber: x.bruto }
+    ], "Liquidación de lotes del datáfono", por).id;
+  };
+  lotes.filter(x => x.acreditado).forEach(x => liquidarLote(x, new Date(Math.min(x.fecha.getTime() + 15 * 3600000, HOY.getTime()))));
   const sinpeHoy = sinpe.find(x => x.locId === "L2" && x.fecha.toDateString() === dia(0).toDateString());
   if (sinpeHoy) sinpeHoy.identificados = sinpeHoy.n - 1;
   const sinpeAyer = sinpe.find(x => x.locId === "L5" && x.fecha.toDateString() === dia(1).toDateString());

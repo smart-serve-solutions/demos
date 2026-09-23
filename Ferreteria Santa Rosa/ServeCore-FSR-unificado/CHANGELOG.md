@@ -1,5 +1,85 @@
 # Cambios
 
+## 2026-09-22 · Contabilidad de Ventas · Asientos que faltaban y cuentas reales
+
+Hallazgos C4, C6 y F4 de la auditoría del POS y 4 y 5 de Configuración.
+
+- **Un solo catálogo de cuentas** en `data.js`. Contabilidad agregaba cuentas por su lado en `con-data.js` y
+  `con-auto.js`; ahora solo agrupa. Cuentas nuevas: tarjetas por liquidar, reclamos a proveedores, bancos BCR,
+  Popular y BN dólares, anticipos y saldos a favor de clientes, devoluciones sobre ventas, impuesto al salario
+  retenido y deducciones de terceros por pagar.
+- **Cada medio de pago tiene su cuenta** (`D.CUENTA_MEDIO`): efectivo a Caja, tarjeta a «Tarjetas por liquidar»,
+  SINPE, transferencia y cheque al banco, anticipo contra el pasivo con el cliente. Antes todo lo que no era
+  efectivo iba al Banco Nacional. En Configuración › Medios de pago la cuenta se escoge del catálogo, la caja la
+  usa al asentar y el cambio queda en la bitácora con la cuenta anterior y la nueva.
+- **Lotes del datáfono reales:** salen de lo cobrado con tarjeta en cada local y día (menos lo devuelto a la
+  tarjeta), y el lote acreditado se asienta: banco por el neto, comisión a gastos financieros, se cancela lo
+  que estaba por liquidar. «Tarjetas por liquidar» queda con saldo igual a lo que está en tránsito.
+- **La nota de crédito se asienta:** devoluciones (o descuentos, si el concepto es descuento, financiera o
+  promocional), IVA a la cuenta donde quedó el de la factura, y el reintegro a caja, tarjeta, banco, cuenta por
+  cobrar o saldo a favor. Si vuelve mercadería se reversa el costo: al inventario, a reclamos al proveedor o a
+  merma, según el destino. Lo que excede el saldo de la factura queda a favor del cliente. Las NC del histórico
+  tienen su asiento y su reintegro sigue a cómo se pagó la factura.
+- **Anticipos:** el pago de un pedido por link entra al banco como anticipo del cliente; en la caja, «Anticipo»
+  solo alcanza hasta el saldo a favor y lo rebaja.
+- **Cierre de caja en Ventas:** la diferencia se asienta. Dentro de la tolerancia va a «Diferencias de caja»; un
+  faltante mayor se le carga al cajero en cuentas por cobrar a colaboradores.
+- **Cuentas bancarias** con su cuenta contable; una cuenta bancaria nueva abre su cuenta en el catálogo.
+- **Departamentos con centro de costo** en lugar de cuentas que no existían («5-01-01 Gastos de ventas» es el
+  costo de la mercadería). Planilla: el impuesto al salario y las deducciones de terceros ya no caen en
+  «Salarios por pagar».
+
+Archivos: `data.js`, `con-data.js`, `con-auto.js`, `ven-auto.js`, `mod-venta.js`, `mod-venta-gestion.js`,
+`mod-sys.js`, `mod-planilla.js`.
+
+## 2026-09-22 · Ventas y Facturación · IVA por tarifa y exoneraciones
+
+Hallazgo C1 de la auditoría del POS: el IVA era un 13 % fijo para todo y las exoneraciones registradas
+nunca se aplicaban.
+
+- **Tarifa por línea desde el CABYS.** Cada artículo lleva su tarifa y su código de tarifa del XML 4.4
+  (13 % = 08, 1 % = 02…). Se agregaron dos insumos agropecuarios al 1 %: fertilizante 10-30-10 y manguera de
+  riego agrícola. Los servicios de instalación y de flete llevan su propio CABYS (antes todos usaban el de taller).
+- **`D.totalizar` calcula línea por línea:** base, IVA y exoneración de cada línea, y el encabezado es la suma de
+  las líneas ya redondeadas (no puede aparecer el rechazo 4001). Devuelve el desglose por tarifa (`porTarifa`),
+  el IVA exonerado y la referencia de la exoneración.
+- **Exoneraciones en una sola fuente:** la ficha del cliente (`c.exoneraciones`). La caja, la ficha de Ventas y
+  Facturación la leen de ahí; se aplica la vigente a la fecha del documento (`D.exoneracionDe`). La Municipalidad
+  y la ASADA ya no pagan IVA, y la factura guarda el número de autorización.
+- La nota de crédito devuelve el IVA con la misma exoneración de la factura que corrige.
+- **REP e IVA diferido proporcionales** al IVA real de la factura (antes 13/113 fijo, que cobraba IVA a
+  las exoneradas y sobrestimaba lo que llevaba líneas al 1 %).
+- Caja, detalle del comprobante, ficha del artículo y plantillas muestran el IVA por tarifa y lo exonerado.
+- La actividad económica del receptor va con 6 dígitos, igual que la del emisor.
+- **Partida doble obligatoria:** `D.asentar` rechaza un asiento cuyos débitos no igualen los créditos. Encontró
+  de inmediato las compras, que redondeaban por separado el subtotal, el IVA y el total (₡1 de diferencia).
+
+Archivos: `data.js`, `fis-data.js`, `ven-auto.js`, `mod-venta.js`, `mod-venta-gestion.js`, `mod-inv.js`,
+`mod-sys.js`.
+
+## 2026-09-22 · Sistema · Un solo emisor, numeración real y terminales
+
+Hallazgos 3, 9, 10 y 13 de la auditoría de Configuración.
+
+- **Una sola ficha del emisor** (`D.emisor`). Sistema la edita y la leen la clave numérica, Facturación, las
+  plantillas y la planilla. Antes Sistema tenía su copia con la cédula `3-101-XXXXXX` y una actividad de 4
+  dígitos, y editarla no cambiaba lo que emitía Facturación.
+- Domicilio fiscal codificado como lo pide el XML 4.4: provincia, cantón y distrito (3-05-09, Santa Rosa de
+  Turrialba) más otras señas (hasta 250 caracteres). Tipo de identificación con código (02 · jurídica).
+  La ficha valida que el cantón y el distrito pertenezcan a la provincia y pide el motivo del cambio, que queda
+  en la bitácora con los valores de antes y de después.
+- **Plantillas con un comprobante real** del histórico: consecutivo, clave de 50 dígitos, actividad, condición
+  de venta, medio de pago, situación, CABYS por línea, y en el tiquete de 80 mm el desglose de subtotal e IVA.
+- **Numeración de documentos:** una fila por cada comprobante fiscal (FE, TE, NC, ND, REP, FEC) con el próximo
+  número real de la caja activa; los internos (proforma, OC, traslado, ajuste, asiento) muestran su próximo
+  número real y el formato que de verdad se usa (`PROF-{n}`, `AJ-{n}`).
+- **Terminales:** una terminal nueva existe desde que se crea (cuenta en el local, aparece en la lista, puede
+  facturar y su serie empieza en 1). Los textos ya no dicen que la terminal «se registra ante Hacienda»: la
+  numeración la administra el emisor y Hacienda valida que la serie no tenga saltos ni repetidos.
+- La bitácora de Sistema usa el reloj de la demo.
+
+Archivos: `data.js`, `fis-data.js`, `mod-fiscal.js`, `mod-sys.js`.
+
 ## 2026-09-22 · Facturación · Estado ante Hacienda único y cobro con REP en una sola vía
 
 Segunda revisión de la auditoría contable sobre la numeración fiscal.

@@ -345,9 +345,9 @@
       { cta: "6-01-01-001", nom: "Salarios", debe: t.bruto, haber: 0 },
       { cta: "6-01-01-002", nom: "Cargas sociales patronales", debe: t.pat, haber: 0 },
       { cta: "2-01-03-001", nom: "Cargas sociales por pagar (CCSS y otros)", debe: 0, haber: t.pat + ccssObr + bpObr },
-      { cta: "2-01-03-002", nom: "Impuesto al salario por pagar", debe: 0, haber: t.renta },
+      { cta: "2-01-03-003", nom: "Impuesto al salario retenido por pagar", debe: 0, haber: t.renta },
       { cta: "2-01-03-002", nom: "Salarios por pagar", debe: 0, haber: t.neto },
-      { cta: "2-01-03-001", nom: "Deducciones de terceros por pagar", debe: 0, haber: t.ded - ccssObr - bpObr - t.renta }
+      { cta: "2-01-03-004", nom: "Deducciones de terceros por pagar", debe: 0, haber: t.ded - ccssObr - bpObr - t.renta }
     ];
   }
   function pasoAsiento(p, t) {

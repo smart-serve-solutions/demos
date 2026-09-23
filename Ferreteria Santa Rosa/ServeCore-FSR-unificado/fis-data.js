@@ -127,14 +127,15 @@
   /* un código retirado, para que la pantalla tenga algo que resolver */
   CABYS.push({ cod: "2431100000000", desc: "Cinta selladora (código retirado)", tarifa: 13, fam: "Accesorios", vigente: false, sustituye: "2431100000100" });
 
-  const EXONERACIONES = D.clientes.filter(c => c.exonerado).map((c, i) => ({
-    cliId: c.id, nom: c.nom, ced: c.ced,
-    tipo: pick(["Institución pública", "Autorización especial DGT", "Ley 7509 · ASADA"]),
-    autorizacion: "EX-" + pad(ri(100000, 999999), 6),
-    porc: pick([100, 100, 13]),
-    desde: new Date(2025, ri(0, 11), ri(1, 28)),
-    hasta: new Date(2027, ri(0, 11), ri(1, 28))
-  }));
+  /* se leen de la ficha de cada cliente: la misma que aplica la caja */
+  const exoneraciones = () => {
+    const out = [];
+    D.clientes.forEach(c => c.exoneraciones.forEach(x => out.push({
+      cliId: c.id, nom: c.nom, ced: c.ced, tipo: x.tipo, autorizacion: x.numero,
+      porc: Math.round(x.pct / 13 * 100), desde: x.emitida, hasta: x.vence
+    })));
+    return out;
+  };
 
   /* ═══ 6 · COMPROBANTES EMITIDOS ════════════════════════════════════
      No se duplica la base: se pone una capa fiscal encima de los
@@ -179,6 +180,9 @@
   /* el REP sale de la misma serie que usa la caja: sucursal + terminal + tipo 10 */
   const consREP = (locId, term) => D.consecutivo("REP", locId, term || 1);
   const creditos = D.documentos.filter(d => d.condicion === "Crédito" && d.total > 0);
+  /* el IVA que traslada un abono es la parte de IVA que tiene la factura,
+     sea cual sea su tarifa o exoneración, no un 13/113 fijo */
+  const ivaDe = (doc, monto) => (doc.total ? r0(monto * doc.iva / doc.total) : 0);
   /* los REP del histórico salen de lo que la cartera efectivamente cobró
      (total − saldo): uno por abono, entre la factura y hoy */
   creditos.forEach(doc => {
@@ -192,7 +196,7 @@
       acumulado += monto;
       reps.push({
         docCons: doc.cons, docClave: doc.clave, cliId: doc.clienteId, locId: doc.locId, term: doc.term || 1,
-        fecha: fechas[i], monto, iva: r0(monto * 0.13 / 1.13),
+        fecha: fechas[i], monto, iva: ivaDe(doc, monto),
         medio: pick(["Transferencia", "SINPE móvil", "Cheque", "Efectivo"]),
         estado: chance(0.94) ? "Aceptado" : "En proceso",
         saldoAnterior: doc.total - acumulado + monto, saldoNuevo: doc.total - acumulado,
@@ -206,7 +210,7 @@
     const dias = Math.round((HOY - doc.fecha) / 86400000);
     return {
       doc, dias, saldo: doc.saldo, cobrado: doc.total - doc.saldo,
-      ivaDiferido: r0(doc.saldo * 0.13 / 1.13),
+      ivaDiferido: ivaDe(doc, doc.saldo),
       vencido: dias > 90, faltan: 90 - dias
     };
   }).sort((a, b) => b.dias - a.dias);
@@ -325,7 +329,7 @@
     const rep = {
       id: "REP-" + cons, cons, clave: D.clave(cons, fecha, situacion), situacion, locId: o.locId, term: o.term || 1,
       docCons: d.cons, docClave: d.clave, cliId: d.clienteId,
-      fecha, monto, iva: r0(monto * 0.13 / 1.13), medio: o.medio || "Transferencia",
+      fecha, monto, iva: ivaDe(d, monto), medio: o.medio || "Transferencia",
       estado: o.offline ? "En cola" : "Aceptado",
       saldoAnterior: d.saldo, saldoNuevo: d.saldo - monto, parcial: monto < d.saldo
     };
@@ -344,23 +348,18 @@
   }
 
   /* ═══ 12 · CONFIGURACIÓN DEL EMISOR ════════════════════════════════ */
-  const EMISOR = {
-    ...D.emisor,
-    actividades: [
-      { cod: "471100", t: "Venta al por menor en comercios no especializados", principal: false },
-      { cod: "475200", t: "Venta al por menor de artículos de ferretería, pinturas y vidrio", principal: true },
-      { cod: "466300", t: "Venta al por mayor de materiales de construcción", principal: false },
-      { cod: "433000", t: "Terminación y acabado de edificios", principal: false }
-    ],
-    correos: ["facturacion@ferreteriasantarosa.cr", "contabilidad@ferreteriasantarosa.cr"],
-    proveedorSistema: "Smart Serve Solutions · 3-102-946797",
-    sucursales: D.locales.filter(l => l.tipo === "tienda").length,
-    terminales: D.locales.reduce((s, l) => s + (l.terminales || 0), 0)
-  };
+  /* es la misma ficha de D.emisor (lo que se edite en Sistema se ve aquí);
+     solo se le agrega lo que se calcula */
+  const EMISOR = D.emisor;
+  EMISOR.proveedorSistema = "Smart Serve Solutions · 3-102-946797";
+  Object.defineProperties(EMISOR, {
+    sucursales: { get: () => D.locales.filter(l => l.tipo === "tienda").length },
+    terminales: { get: () => D.locales.reduce((s, l) => s + (l.tipo === "tienda" ? l.terminales || 0 : 0), 0) }
+  });
 
   w.FIS = {
     NORMA, TIPOS, tipoDe, SITUACIONES, CLAVE_SEG, CONS_SEG, TARIFAS, PLAZOS,
-    ERRORES, LLAVE, CABYS, EXONERACIONES, EMISOR,
+    ERRORES, LLAVE, CABYS, get EXONERACIONES() { return exoneraciones(); }, EMISOR,
     capa, registrar, emitidos, delDia, cola, reps, get diferidas() { return diferidas(); },
     get consecutivos() { return consecutivos(); }, recibidos, ivaMes,
     reintentar, transmitirCola, aceptarRecibidos, aplicarCobro, consREP

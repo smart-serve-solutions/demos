@@ -262,6 +262,16 @@
     t.cierre = { hora: ahora(), contado, diferencia: dif, justificacion: justificacion || "", por: por || t.cajero };
     t.estado = "Cerrada";
     CIERRES.unshift({ fecha: t.cierre.hora, locId: t.locId, n: t.n, cajero: t.cajero, ventas: r.ventas, diferencia: dif, justificacion: justificacion || "" });
+    /* la diferencia llega a la contabilidad: dentro de la tolerancia es gasto
+       (o ingreso) de caja; un faltante mayor se le carga al cajero */
+    if (dif) {
+      const tol = w.AUTO ? w.AUTO.POLITICA.toleranciaCaja : 2000, m = Math.abs(dif);
+      const contra = dif < 0 && m > tol ? "1-01-03-003" : "6-01-06-002";
+      const glosa = (dif < 0 ? "Faltante" : "Sobrante") + " de caja · " + locDe(t.locId).nom + " caja " + t.n + " · " + t.cajero;
+      t.cierre.asiento = D.asentar(t.cierre.hora, "CJ-" + t.id, glosa, dif < 0
+        ? [{ cta: contra, debe: m, haber: 0 }, { cta: "1-01-01-001", debe: 0, haber: m }]
+        : [{ cta: "1-01-01-001", debe: m, haber: 0 }, { cta: "6-01-06-002", debe: 0, haber: m }]).id;
+    }
     anotar("Cerró caja", locDe(t.locId).nom + " · caja " + t.n + " · diferencia ₡" + dif, t.cajero, t.locId, dif ? "Media" : "Baja");
     return dif;
   }
@@ -302,7 +312,7 @@
     D.proformas.unshift(Object.assign({
       id: "PF-" + D.seq.PROF, cons: "PROF-" + pad(D.seq.PROF, 6), tipo: "Pedido", fecha: dia(k, 8 + k, 20), clienteId: x[0], locId: "L1", lineas,
       vence: dia(-7), estado: "Vigente", origen: x[1], estadoPed: x[2], vendedor: "Kevin Solano"
-    }, D.totalizar(lineas), x[2] === "Pagado · por facturar" ? { link: { enviado: dia(0, 7, 50), medio: "Página web", codigo: "FSR-004902" }, pagado: dia(0, 8, 5) } : {}));
+    }, D.totalizar(lineas, { exoneracion: D.exoneracionDe(x[0]) }), x[2] === "Pagado · por facturar" ? { link: { enviado: dia(0, 7, 50), medio: "Página web", codigo: "FSR-004902" }, pagado: dia(0, 8, 5) } : {}));
   });
   D.proformas.forEach(prep);
   /* ventas perdidas del mes que ya no están en la lista de trabajo */
@@ -321,7 +331,19 @@
     if (p.tipo === "Pedido") p.estadoPed = "Esperando pago";
     anotar("Envió link de pago", p.cons + " · " + (D.cliById[p.clienteId] || {}).nom, "Kevin Solano", p.locId, "Baja");
   }
-  function confirmarPago(p) { p.estadoPed = "Pagado · por facturar"; p.pagado = ahora(); anotar("Confirmó pago de pedido", p.cons, "Sistema", p.locId, "Baja"); }
+  /* el pago de un pedido antes de facturarlo es un anticipo: entra al banco y
+     queda como pasivo con el cliente hasta que la factura lo consuma */
+  function registrarAnticipo(p) {
+    if (p.anticipo) return;
+    p.anticipo = D.asentar(p.pagado, p.cons, "Anticipo de " + ((D.cliById[p.clienteId] || {}).nom || "cliente") + " · " + p.cons, [
+      { cta: "1-01-02-001", debe: p.total, haber: 0 },
+      { cta: "2-01-06-001", debe: 0, haber: p.total }
+    ]).id;
+    const cli = D.cliById[p.clienteId];
+    if (cli) cli.saldoFavor = (cli.saldoFavor || 0) + p.total;
+  }
+  function confirmarPago(p) { p.estadoPed = "Pagado · por facturar"; p.pagado = ahora(); registrarAnticipo(p); anotar("Confirmó pago de pedido", p.cons, "Sistema", p.locId, "Baja"); }
+  D.proformas.filter(p => p.pagado).forEach(registrarAnticipo);
   function marcarPerdida(p, motivo) { p.estado = "Vencida"; p.motivo = motivo; anotar("Marcó proforma como perdida", p.cons + " · " + motivo, "Kevin Solano", p.locId, "Baja"); }
 
   /* ═══ 8 · ENTREGAS Y RETIROS (VEN-004, VEN-005, VEN-006) ═══ */
@@ -391,7 +413,15 @@
   ];
   const DESTINOS = ["Vuelve a la venta", "Producto de segunda", "Devolución al proveedor"];
   const REINTEGROS = ["Efectivo", "A la misma tarjeta", "SINPE móvil", "Saldo a favor del cliente", "Rebaja de la cuenta por cobrar"];
-  D.documentos.filter(d => d.tipo === "NC").forEach((d, i) => { d.reintegro = d.reintegro || REINTEGROS[i % 4]; d.destino = d.destino || DESTINOS[i % 2]; d.firma = true; });
+  /* el reintegro de las NC del histórico ya viene de data.js (sigue a cómo se pagó la factura) */
+  D.documentos.filter(d => d.tipo === "NC").forEach((d, i) => { d.destino = d.destino || DESTINOS[i % 2]; d.firma = true; });
+  /* las NC del histórico también llevan su asiento (en orden de fecha) */
+  D.documentos.filter(d => d.tipo === "NC" && !d.asiento).sort((a, b) => a.fecha - b.fecha).forEach(nc => {
+    const base = D.documentos.find(x => x.cons === nc.refiere);
+    const conc = CONCEPTOS.find(c => c.id === nc.concepto);
+    if (!conc || !conc.inv) { nc.costo = 0; nc.destino = "—"; }
+    if (base) aplicarReintegro(nc, base);
+  });
   /* VEN-024: observaciones por línea que salen impresas (cortes y medidas) */
   const NOTAS = { TEC: "Cortar a 2,40 m", FON: "Cortar a 3 m y roscar", MAT: "Varilla cortada a 1,20 m" };
   let nn = 0;
@@ -406,34 +436,43 @@
       if (!d) return;
       const l = grande(d);
       const lineas = [{ artId: l.artId, cant: Math.max(1, Math.round(l.cant * (i ? 0.6 : 1))), precio: l.precio, desc: l.desc || 0 }];
-      const t = D.totalizar(lineas);
+      const t = D.totalizar(lineas, { exoneracion: d.exoneracion });
       BOLETAS.push({ id: "BD-" + pad(812 + i, 5), doc: d, lineas, total: t.total, concepto: i ? "Garantía" : "Devolución de mercadería", destino: i ? "Devolución al proveedor" : "Vuelve a la venta", reintegro: d.condicion === "Crédito" ? "Rebaja de la cuenta por cobrar" : "Saldo a favor del cliente", solicita: i ? "Marta Rojas" : "Kevin Solano", locId: i ? "L2" : "L1", fecha: dia(0, 9 + i, 20), firma: true, estado: "Por aprobar", motivo: i ? "La sierra no enciende; tiene 3 meses de uso" : "Sobró material de la obra" });
     });
   })();
   /* emite la nota de crédito: inventario, cartera, bitácora */
+  /* asienta la NC y aplica el reintegro: rebaja la factura hasta su saldo y
+     lo que sobra queda a favor del cliente */
+  function aplicarReintegro(nc, d) {
+    const r = nc.reintegro === "Rebaja de la cuenta por cobrar" ? Math.min(d.saldo, nc.total) : 0;
+    D.asentarNC(nc, d, r);
+    const cli = D.cliById[d.clienteId];
+    if (r) { d.saldo -= r; if (cli) cli.saldo -= r; }
+    const aFavor = nc.reintegro === "Saldo a favor del cliente" ? nc.total : nc.reintegro === "Rebaja de la cuenta por cobrar" ? nc.total - r : 0;
+    if (aFavor && cli) cli.saldoFavor = (cli.saldoFavor || 0) + aFavor;
+  }
   function emitirNC(o) {
     const d = o.doc;
     const lineas = o.lineas.filter(l => l.cant > 0).map(l => ({ artId: l.artId, cant: l.cant, precio: l.precio, desc: l.desc || 0, nota: l.nota }));
-    const t = D.totalizar(lineas);
+    /* la NC devuelve el IVA con la misma exoneración de la factura */
+    const t = D.totalizar(lineas, { exoneracion: d.exoneracion });
     /* la NC sale de la caja que la aplica; si es otro local, de su primera terminal */
     const locId = o.locId || d.locId;
     const term = o.term || (locId === d.locId ? d.term : 1);
     const cons = D.consecutivo("NC", locId, term);
     const fecha = ahora(), situacion = o.offline ? "3" : "1";
+    const conc = CONCEPTOS.find(c => c.id === o.concepto);
     const nc = {
       id: "NC-" + cons, tipo: "NC", cons, clave: D.clave(cons, fecha, situacion), situacion, fecha, locId, term,
       clienteId: d.clienteId, vendedor: d.vendedor, lineas, ...t, condicion: "Contado", medio: "Devolución",
-      hacienda: o.offline ? "En cola" : "Aceptado", costo: D.costoLineas(lineas), saldo: 0,
+      /* sin mercadería de vuelta (descuento, financiera…) no hay costo que reversar */
+      hacienda: o.offline ? "En cola" : "Aceptado", costo: conc && conc.inv ? D.costoLineas(lineas) : 0, saldo: 0,
       refiere: d.cons, refiereClave: d.clave, refiereTipo: d.tipo, refiereFecha: d.fecha,
-      concepto: o.concepto, reintegro: o.reintegro, destino: o.destino, firma: !!o.firma, margen: 0
+      concepto: o.concepto, reintegro: o.reintegro, destino: conc && conc.inv ? o.destino : "—", firma: !!o.firma, margen: 0
     };
     D.documentos.unshift(nc);
-    const conc = CONCEPTOS.find(c => c.id === o.concepto);
     if (conc && conc.inv && o.destino === "Vuelve a la venta") lineas.forEach(l => D.mover(l.artId, nc.locId, l.cant, "Devolución", cons, nc.fecha));
-    if (o.reintegro === "Rebaja de la cuenta por cobrar" && d.saldo > 0) {
-      const r = Math.min(d.saldo, nc.total); d.saldo -= r;
-      if (D.cliById[d.clienteId]) D.cliById[d.clienteId].saldo -= r;
-    }
+    aplicarReintegro(nc, d);
     anotar("Aplicó nota de crédito", "NC " + cons + " · " + o.concepto + " · sobre " + d.cons, o.usuario || "Kevin Solano", nc.locId, "Media", "", "₡" + t.total);
     return nc;
   }
@@ -454,10 +493,13 @@
     const act = c.nom.indexOf("ASADA") === 0 ? ["3600", "Captación, tratamiento y distribución de agua"]
       : c.nom.indexOf("Coopeagri") === 0 ? ["4630", "Venta al por mayor de alimentos, bebidas y tabaco"] : ACT[c.categoria] || null;
     const corto = c.nom.split(" ")[0].toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    /* un proyecto de acueducto con autorización por vencer: la ficha avisa que hay que renovarla */
+    if (i === 3 && c.exonerado) c.exoneraciones.push({ numero: "AL-00987712-25", tipo: "Proyecto de acueducto", tipoCod: "03", institucion: "AyA", pct: 13, emitida: new Date(2025, 8, 1), vence: dia(-12) });
     FICHA[c.id] = {
-      actividad: act ? { cod: act[0], desc: act[1] } : null,
-      exoneraciones: c.exonerado ? [{ numero: "AL-" + pad(1024300 + i * 17, 8) + "-26", tipo: "Exoneración institucional", institucion: "Ministerio de Hacienda", pct: 13, vence: dia(-210) }]
-        .concat(i === 3 ? [{ numero: "AL-00987712-25", tipo: "Proyecto de acueducto", institucion: "AyA", pct: 13, vence: dia(12) }] : []) : [],
+      /* la actividad del receptor va con los 6 dígitos de la CIIU 4, como la del emisor */
+      actividad: act ? { cod: act[0].padEnd(6, "0"), desc: act[1] } : null,
+      /* las exoneraciones viven en la ficha del cliente (data.js); aquí solo se leen */
+      exoneraciones: c.exoneraciones,
       contactos: c.tipoCed === "Jurídica"
         ? [{ nom: ["Adriana Vindas", "Mauricio Céspedes", "Paola Quesada", "Hernán Solís"][i % 4], puesto: "Proveeduría", tel: c.tel, correo: "compras@" + corto + ".cr", comprobantes: true },
            { nom: ["Luis Diego Brenes", "Carlos Monge", "Wálter Solano", "Johnny Cordero"][i % 4], puesto: "Maestro de obras", tel: "8" + pad(610 + i * 13, 3) + "-" + pad(2200 + i * 71, 4), correo: "", comprobantes: false }]

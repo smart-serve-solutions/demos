@@ -794,7 +794,8 @@
           <dt>Razón social</dt><dd>${esc(E.nombre)}</dd>
           <dt>Nombre comercial</dt><dd>${esc(E.comercial)}</dd>
           <dt>Cédula</dt><dd class="num">${esc(E.cedula)}</dd>
-          <dt>Tipo de identificación</dt><dd>${esc(E.tipoCed)}</dd>
+          <dt>Tipo de identificación</dt><dd>${esc(E.tipoCedCod)} · ${esc(E.tipoCed)}</dd>
+          <dt>Ubicación</dt><dd>${esc(D.ubicacionTexto(E))} <span class="dim num">(${esc(E.provincia)}-${esc(E.canton)}-${esc(E.distrito)})</span><br><span style="font-weight:500;font-size:12px">${esc(E.otrasSenas)}</span></dd>
           <dt>Sucursales</dt><dd class="num">${E.sucursales}</dd>
           <dt>Terminales</dt><dd class="num">${E.terminales}</dd>
           <dt>Correos del emisor</dt><dd style="font-weight:500;font-size:12px">${E.correos.map(esc).join("<br>")}</dd>
