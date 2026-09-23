@@ -200,7 +200,8 @@
   gasto({ canal: "WhatsApp", prov: "Parqueo por trámite en San José", enviado: "Adrián Vindas Mora · Gerencia", locId: "L2", monto: 2500, cta: "6-01-02-001", conf: 78, fecha: dia(2), estado: "Por confirmar",
     motivo: "Foto del comprobante del parqueo. Propone «Combustible y transporte» con caja chica." });
   function asentarGasto(g) {
-    const iva = g.canal === "XML" ? r0(g.monto * 0.13 / 1.13) : 0;
+    /* el XML trae el IVA; servicios comerciales (luz, agua, alquiler, internet) van al 13 % */
+    const iva = g.canal === "XML" ? D.ivaIncluido(g.monto, g.tarifa == null ? 13 : g.tarifa) : 0;
     const det = [{ cta: g.cta, debe: g.monto - iva, haber: 0 }];
     if (iva) det.push({ cta: "1-01-05-001", debe: iva, haber: 0 });
     det.push({ cta: g.canal === "XML" ? "2-01-01-001" : "1-01-01-001", debe: 0, haber: g.monto });

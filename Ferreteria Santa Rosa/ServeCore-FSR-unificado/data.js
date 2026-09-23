@@ -280,7 +280,8 @@
     ["3-101-445509", "Grupo Sur S.A.", 30, "CR63015201001445509", "Pinturas"],
     ["3-101-772103", "Truper Costa Rica", 60, "CR74015201001772103", "Herramienta"],
     ["3-101-330277", "Conducen S.A.", 30, "CR85015201001330277", "Eléctrico"],
-    ["3-101-556644", "Productos de Concreto S.A.", 30, "CR96015201001556644", "Prefabricados"]
+    ["3-101-556644", "Productos de Concreto S.A.", 30, "CR96015201001556644", "Prefabricados"],
+    ["3-101-884210", "Abonos del Pacífico S.A.", 30, "CR30015201001884210", "Agro"]
   ];
   const proveedores = PROV.map((p, i) => ({
     id: "P" + (i + 1), ced: p[0], nom: p[1], plazo: p[2], cuenta: p[3], linea: p[4], saldo: 0
@@ -811,14 +812,27 @@
 
   /* ── compras y recepciones ──────────────────────────────────── */
   const compras = [];
+  /* el IVA de una compra va línea por línea con la tarifa del artículo: un
+     insumo agropecuario al 1 % no da crédito fiscal del 13 % */
+  function totalesCompra(lineas) {
+    const porTarifa = {};
+    let sub = 0, iva = 0;
+    lineas.forEach(l => {
+      const base = Math.round(l.cant * l.costo), t = tarifaDe(l), i = Math.round(base * t / 100);
+      sub += base; iva += i;
+      const k = porTarifa[t] || (porTarifa[t] = { tarifa: t, base: 0, iva: 0 });
+      k.base += base; k.iva += i;
+    });
+    return { sub, iva, total: sub + iva, porTarifa: Object.values(porTarifa).sort((a, b) => b.tarifa - a.tarifa) };
+  }
+  /* IVA contenido en un monto que ya lo trae incluido */
+  const ivaIncluido = (monto, tarifa) => Math.round(monto - sinIva(monto, tarifa));
   function crearOC(provId, locId, items, estado, fecha) {
     seq.OC++;
     const lineas = items.map(it => ({ artId: it.a, cant: it.c, costo: it.k || artById[it.a].costo, var: it.v || 0 }));
-    const sub = Math.round(lineas.reduce((s, l) => s + l.cant * l.costo, 0));
-    const iva = Math.round(sub * IVA);
     const oc = {
       id: "OC-" + seq.OC, cons: "OC-2026-" + pad(seq.OC, 6), provId, locId, fecha: fecha || dayAgo(ri(1, 20)),
-      lineas, sub, iva, total: sub + iva,
+      lineas, ...totalesCompra(lineas),
       estado: estado || "Registrada", plazo: provById[provId].plazo, recibido: 0
     };
     compras.push(oc);
@@ -854,6 +868,9 @@
     for (let i = 0; i < ri(3, 7); i++) { const a = pick(pool.length ? pool : articulos); if (!items.some(x => x.a === a.id)) items.push({ a: a.id, c: ri(30, 800), v: +(rnd() * 8 - 3).toFixed(1) }); }
     crearOC(p, l, items, pick(["Registrada", "Aplicada", "Aplicada", "Recibida parcial"]));
   });
+  /* insumos agropecuarios para Pejibaye: el IVA de la compra va al 1 % */
+  const porCod = c => articulos.find(a => a.cod === c).id;
+  crearOC(proveedores.find(p => p.linea === "Agro").id, "L5", [{ a: porCod("FER-08060"), c: 120 }, { a: porCod("FER-08064"), c: 40 }, { a: porCod("FER-08010"), c: 30 }], "Aplicada", dayAgo(9));
 
   /* compras aplicadas: ingresan mercadería y generan asiento */
   compras.filter(c => c.estado === "Aplicada").forEach(oc => {
@@ -872,13 +889,18 @@
     const p = pick(proveedores);
     const monto = ri(120000, 9800000);
     const dias = ri(0, 9);
+    /* si viene de una orden, trae la mezcla de tarifas de esa orden; si no, la general */
+    const deEse = compras.filter(c => c.provId === p.id);
+    const oc = deEse.length && chance(0.6) ? pick(deEse) : null;
+    const tipo = chance(0.86) ? "Factura electrónica" : chance(0.5) ? "Nota de crédito" : "Tiquete electrónico";
     recibidos.push({
       id: "R" + i, clave: "506" + pad(ri(1, 28), 2) + "092631" + p.ced.replace(/-/g, "") + pad(ri(1, 999999), 6),
-      provId: p.id, fecha: dayAgo(dias), monto, iva: Math.round(monto * 0.13 / 1.13),
-      tipo: chance(0.86) ? "Factura electrónica" : chance(0.5) ? "Nota de crédito" : "Tiquete electrónico",
+      provId: p.id, fecha: dayAgo(dias), monto,
+      iva: oc ? Math.round(monto * oc.iva / oc.total) : ivaIncluido(monto, 13),
+      tipo,
       estado: i < 47 ? "Sin aceptar" : pick(["Aceptado", "Aceptado parcial", "Rechazado"]),
       venceEn: 8 - dias,
-      ocLigada: chance(0.6) ? pick(compras).cons : null
+      ocLigada: oc ? oc.cons : null
     });
   }
 
@@ -1192,7 +1214,7 @@
     articulos, artById, SERVICIOS, existencias, stock, disp, stockTotal, kardex, mover,
     clientes, cliById, proveedores, provById,
     cuentas, ctaByCod, asientos, asentar,
-    ahora, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
+    ahora, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
     compras, recibidos, cxp, crearOC,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,

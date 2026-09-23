@@ -1,5 +1,22 @@
 # Cambios
 
+## 2026-09-23 · Compras e impuestos · IVA de las compras por tarifa
+
+Decisión pendiente de la auditoría: el IVA de las compras era un 13 % fijo.
+
+- **Orden de compra por línea** (`D.totalesCompra`): cada línea lleva el IVA de la tarifa de su artículo y la
+  orden guarda el desglose por tarifa. Aplicar la compra desde Compras usa el mismo cálculo (antes recalculaba al
+  13 % y sin redondear). El crédito fiscal que se asienta es ese.
+- Proveedor nuevo de insumos agropecuarios (Abonos del Pacífico) con una compra aplicada para Pejibaye:
+  fertilizante y manguera agrícola al 1 %, manguera de jardín al 13 %. Con el 13 % fijo, esa compra habría
+  llevado unos ₡359 000 de crédito fiscal de más.
+- **Comprobantes recibidos:** si vienen de una orden, su IVA sigue la mezcla de tarifas de esa orden; si no, la
+  general. Las **notas de crédito de proveedores restan** crédito fiscal en el IVA del mes (antes sumaban).
+- **Gastos por XML:** el IVA sale de la tarifa del gasto (`D.ivaIncluido`); los servicios comerciales de luz,
+  agua, alquiler e internet van al 13 %, que queda explícito.
+
+Archivos: `data.js`, `mod-compra.js`, `con-auto.js`, `fis-data.js`.
+
 ## 2026-09-23 · Ventas · Precios de lista con IVA incluido
 
 Decisión pendiente de la auditoría: la caja trataba el precio de lista como si no tuviera IVA y lo sumaba

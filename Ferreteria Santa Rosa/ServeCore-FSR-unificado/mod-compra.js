@@ -157,14 +157,15 @@
         const oc = D.compras[S.ocSel];
         const bad = oc.lineas.filter(l => Math.abs(l.var) > 15);
         if (bad.length) return toast("Hay una línea bloqueada", `La variación de costo de ${artOf(bad[0].artId).desc} excede el tope de ±15 %. Corríjala o pida autorización.`, "cr");
-        oc.lineas.forEach(l => D.mover(l.artId, oc.locId, l.cant, "Compra", oc.cons, new Date()));
-        const sub = oc.lineas.reduce((s2, l) => s2 + l.cant * l.costo, 0);
-        D.asentar(new Date(), oc.cons, "Compra a " + provNom(oc.provId), [
-          { cta: "1-01-04-001", debe: sub, haber: 0 },
-          { cta: "1-01-05-001", debe: Math.round(sub * 0.13), haber: 0 },
-          { cta: "2-01-01-001", debe: 0, haber: Math.round(sub * 1.13) }
+        oc.lineas.forEach(l => D.mover(l.artId, oc.locId, l.cant, "Compra", oc.cons, D.ahora()));
+        /* el IVA de cada línea con la tarifa de su artículo; el crédito fiscal es ese */
+        Object.assign(oc, D.totalesCompra(oc.lineas));
+        D.asentar(D.ahora(), oc.cons, "Compra a " + provNom(oc.provId), [
+          { cta: "1-01-04-001", debe: oc.sub, haber: 0 },
+          { cta: "1-01-05-001", debe: oc.iva, haber: 0 },
+          { cta: "2-01-01-001", debe: 0, haber: oc.total }
         ]);
-        D.provById[oc.provId].saldo += Math.round(sub * 1.13);
+        D.provById[oc.provId].saldo += oc.total;
         oc.estado = "Aplicada";
         toast("Compra aplicada", `Entró la mercadería en ${locNom(oc.locId)}, subió el inventario y se generó el asiento y la cuenta por pagar.`, "ok");
         A.refresh();

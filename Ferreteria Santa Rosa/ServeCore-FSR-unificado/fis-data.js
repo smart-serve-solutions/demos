@@ -274,7 +274,8 @@
     const debitoREP = reps.filter(r => r.fecha.getMonth() === m && r.fecha.getFullYear() === y)
       .reduce((s, r) => s + r.iva, 0);
     const recib = recibidos();
-    const creditoFiscal = recib.filter(r => /Aceptado/.test(r.estado)).reduce((s, r) => s + r.iva, 0);
+    /* la nota de crédito de un proveedor devuelve crédito fiscal: resta */
+    const creditoFiscal = recib.filter(r => /Aceptado/.test(r.estado)).reduce((s, r) => s + (/crédito/.test(r.tipo) ? -r.iva : r.iva), 0);
     const enRiesgo = recib.reduce((s, r) => s + r.creditoEnRiesgo, 0);
     const dif = diferidas();
     const diferidoPend = dif.filter(x => !x.vencido).reduce((s, x) => s + x.ivaDiferido, 0);
