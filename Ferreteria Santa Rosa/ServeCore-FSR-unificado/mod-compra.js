@@ -241,7 +241,8 @@
     render(v, arg) {
       if (arg) provSel = arg;
       const p = D.provById[provSel] || D.proveedores[0];
-      const docs = D.cxp.filter(x => x.provId === p.id);
+      /* el mismo auxiliar de Cobros y pagos: facturas migradas, compras aplicadas y comprobantes aceptados */
+      const docs = w.COB ? w.COB.docsCxP().filter(x => x.provId === p.id && Math.round(x.saldo) !== 0) : D.cxp.filter(x => x.provId === p.id);
       const ocs = D.compras.filter(o => o.provId === p.id);
       const rec = D.recibidos.filter(r => r.provId === p.id);
       v.innerHTML = `<div class="split ancho">
@@ -274,9 +275,10 @@
             { t: "Emitida", cls: "mono", fmt: r => fecha(r.fecha) },
             { t: "Vence", cls: "mono", fmt: r => fecha(r.vence) },
             { t: "Monto", r: true, cls: "mono", fmt: r => grp(r.monto) },
-            { t: "Saldo", r: true, cls: "mono", fmt: r => `<b>${grp(r.saldo)}</b>` }
+            { t: "Saldo", r: true, cls: "mono", fmt: r => `<b>${r.saldo < 0 ? "−" : ""}${grp(r.saldo)}</b>` }
           ], rows: docs, rowCls: r => (r.dias > 0 ? "wa" : "")
-        })
+        }),
+        actions: `<button class="btn sm" data-ir="cob-estado-prov|${p.id}">Estado de cuenta completo</button>`
       })}
             ${card({
         title: "Órdenes de compra",
@@ -294,80 +296,11 @@
           </div>
         </div></div>`;
     },
-    wire(v) { $$("[data-p]", v).forEach(b => b.addEventListener("click", () => { provSel = b.dataset.p; A.refresh(); })); }
+    wire(v) { A.wireIr(v); $$("[data-p]", v).forEach(b => b.addEventListener("click", () => { provSel = b.dataset.p; A.refresh(); })); }
   });
 
-  /* ══ CUENTAS POR PAGAR ═══════════════════════════════════════ */
-  A.screen("cxp", {
-    title: "Cuentas por pagar",
-    sub: () => "Vencimientos y archivo de pago al banco",
-    render(v) {
-      const rows = D.cxp.slice().sort((a, b) => b.dias - a.dias);
-      const vencidas = rows.filter(r => r.dias > 0);
-      const semana = rows.filter(r => r.dias > -7 && r.dias <= 0);
-      const total = rows.reduce((s, r) => s + r.saldo, 0);
-      v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Saldo total con proveedores", c(total), { txt: rows.length + " documentos abiertos", dir: "" })}
-          ${stat("Vencidas", c(vencidas.reduce((s, r) => s + r.saldo, 0)), { txt: vencidas.length + " documentos fuera de plazo", dir: "down" }, "var(--crit)")}
-          ${stat("Vencen esta semana", c(semana.reduce((s, r) => s + r.saldo, 0)), { txt: semana.length + " documentos por programar", dir: "" }, "var(--warn)")}
-          ${stat("Pago semanal típico", "₡150 000 000", { txt: "por archivo plano al Banco Nacional", dir: "" })}
-        </div>
-        ${card({
-        title: "Análisis de pagos por vencimiento", hint: "seleccione lo que va en el pago de la semana",
-        actions: `<button class="btn pri" id="genArch">${icon("bank")}Generar archivo de pago</button>`,
-        body: table({
-          h: "calc(100dvh - 420px)",
-          cols: [
-            { t: "Proveedor", fmt: r => `${esc(provNom(r.provId))}<span class="sub">${esc(D.provById[r.provId].ced)}</span>` },
-            { t: "Documento", cls: "mono", fmt: r => esc(r.doc) },
-            { t: "Cuenta IBAN", cls: "mono", fmt: r => `<span class="mut">${esc(D.provById[r.provId].cuenta)}</span>` },
-            { t: "Emitida", cls: "mono", fmt: r => fecha(r.fecha) },
-            { t: "Vence", cls: "mono", fmt: r => fecha(r.vence) },
-            { t: "Días", r: true, cls: "mono", fmt: r => r.dias > 0 ? `<b style="color:${r.dias > 30 ? "var(--crit)" : "var(--warn)"}">${r.dias} vencida</b>` : `<span class="mut">${-r.dias} por vencer</span>` },
-            { t: "Monto", r: true, cls: "mono", fmt: r => grp(r.monto) },
-            { t: "Saldo", r: true, cls: "mono", fmt: r => `<b>${grp(r.saldo)}</b>` }
-          ], rows, rowCls: r => (r.dias > 30 ? "cr" : r.dias > 0 ? "wa" : "")
-        })
-      })}</div>`;
-    },
-    wire(v) {
-      $("#genArch", v).addEventListener("click", () => {
-        const sel = D.cxp.filter(r => r.dias > -7).slice(0, 85);
-        const tot = sel.reduce((s, r) => s + r.saldo, 0);
-        openSheet({
-          wide: true, title: "Archivo de pago al Banco Nacional",
-          sub: `${sel.length} transferencias · ${c(tot)} · formato plano BN`,
-          body: `<div style="display:flex;gap:10px;padding:12px 14px;border-radius:10px;background:var(--ok-soft);border:1px solid var(--ok-line);margin-bottom:14px">${icon("check")}
-            <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">La cuenta IBAN sale de la ficha del proveedor, no se escribe a mano. El archivo se genera desde el sistema y no depende de una herramienta hecha aparte.</div></div>
-            <div class="num" style="font-size:11px;background:var(--surface-2);border:1px solid var(--hair);border-radius:10px;padding:12px;max-height:320px;overflow:auto;line-height:1.8">
-${sel.slice(0, 14).map((r, i) => {
-            const p = D.provById[r.provId];
-            return esc(`${String(i + 1).padStart(4, "0")}|${p.cuenta}|${p.ced.replace(/-/g, "").padEnd(12)}|${String(r.saldo).padStart(12, "0")}|CRC|${p.nom.slice(0, 28).padEnd(28)}|${r.doc}`);
-          }).join("<br>")}
-<br><span class="mut">… ${sel.length - 14} líneas más</span></div>
-            <div class="card" style="margin-top:14px"><div class="card-b flush"><div class="ficha">
-              ${fichaCell("Transferencias", sel.length)}
-              ${fichaCell("Monto total", c(tot))}
-              ${fichaCell("Autorización", tag("Mancomunada · 2 firmas", "wa", "shield"))}
-              ${fichaCell("Cuenta de origen", '<span style="font-size:12px">CR15015201001023456</span>')}
-            </div></div></div>`,
-          footer: `<button class="btn" id="cancArch">Cancelar</button><div class="gap"></div><button class="btn">${icon("download")}Descargar .txt</button><button class="btn pri" id="okArch">${icon("shield")}Enviar a autorización</button>`,
-          after(el) {
-            $("#cancArch", el).addEventListener("click", closeSheet);
-            $("#okArch", el).addEventListener("click", () => {
-              closeSheet();
-              toast("Enviado a autorización mancomunada", "Adrián Vindas y Sonia Calderón deben firmar. Quedó registrado en la bitácora.", "ok");
-              D.bitacora.unshift({
-                id: "BTP" + Date.now(), fecha: new Date(), usuario: "Óscar Jiménez", rol: "Proveeduría", locId: "L1",
-                accion: "Generó archivo de pago al banco", detalle: `${sel.length} transferencias · ${c(tot)}`,
-                sev: "Alta", antes: "", despues: "", ip: "10.2.14.31"
-              });
-            });
-          }
-        });
-      });
-    }
-  });
+  /* ══ CUENTAS POR PAGAR ═══════════════════════════════════════
+     Se mudó a mod-cobros.js (módulo Cobros y pagos, 23 set 2026):
+     vencimientos, lotes con firma mancomunada y archivo del Banco Nacional. */
 
 })(window);

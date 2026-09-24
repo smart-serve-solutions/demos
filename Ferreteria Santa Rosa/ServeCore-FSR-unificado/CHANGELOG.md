@@ -1,5 +1,103 @@
 # Cambios
 
+## 2026-09-23 · Cobros y pagos + Nómina · Pagos al banco: una sola bandeja para proveedores y planilla
+
+El archivo plano del Banco Nacional es el mismo para proveedores y para planilla, así que el proceso de pago
+ya no se repite en los dos módulos. Proveeduría (lote de facturas) y Nómina (corrida aprobada) **preparan**;
+Cobros y pagos › **Pagos al banco** firma, genera el archivo, registra la validación del módulo local, marca el
+envío y confirma con su asiento.
+
+- **Bandeja única** (`cob-archivo`): lotes de los dos orígenes con filtro, pasos (firmas · archivo · módulo local
+  · banco · confirmado), la planilla primero y con aviso de la fecha legal de pago, y un archivo por lote
+  (concepto «SALARIO» o «PAGO PROGRAMADO»). Pestañas: Bandeja, Historial, Firmas y responsables, Cuentas de
+  proveedores y Estructura del archivo.
+- **Firmas y responsables parametrizables por origen**: cantidad de firmas (1 a 3), quiénes pueden firmar (con
+  límite por lote), quién genera y valida el archivo (por omisión Andrey Ramírez, TI) y quién lo sube al banco
+  (por omisión Adrián Vindas, gerencia). Quien preparó nunca firma y nadie firma dos veces; los cambios quedan
+  en la bitácora.
+- **Nómina** (`mod-planilla.js`, paso Pago): «Enviar a Pagos al banco» en lugar de generar el archivo; el paso
+  muestra el lote y su estado, y si tesorería lo devuelve permite reenviarlo. Al confirmar el pago la planilla
+  queda «Pagada» y se registra el asiento de salarios por pagar contra el banco, que el asiento de la planilla
+  cancela (verificado: queda en cero).
+- **Análisis de pagos a proveedores** (`cxp`): vencimientos y lote; la pestaña de lotes pasa a seguimiento y
+  las firmas se hacen en la bandeja.
+- `nom-data.js`: las cuentas de los colaboradores tenían 19 caracteres; ahora son IBAN válidos de 22 (con el
+  código del banco de cada persona), sin cambiar el resto de los datos de ejemplo.
+- `nav.js`: la sección se llama «Pagos»; «Pagos al banco» cita CXP-002, CXP-003 y CXP-004, y «Análisis de pagos
+  a proveedores» CXP-001.
+
+Archivos: `mod-cobros.js`, `mod-planilla.js`, `nom-data.js`, `nav.js`.
+
+## 2026-09-23 · Cobros y pagos · Sin acceso directo al archivo de planilla
+
+Se quitó del menú de Cobros y pagos «Archivo plano de planilla (Banco Nacional)»: era un acceso directo que
+llevaba a Nómina › Planilla › Pago y cambiaba de módulo sin aviso. El archivo sale de la corrida aprobada, así que
+queda solo en Nómina, donde CXP-003 ya estaba citado. La sección pasa a llamarse «Caja menor» (caja chica y
+tarjeta empresarial). Cobros y pagos queda con 10 opciones.
+
+Archivo: `nav.js`.
+
+## 2026-09-23 · Cobros y pagos · Buscador de clientes y proveedores
+
+Con miles de clientes y cientos de proveedores un combo no sirve. En Cobros y pagos, cada campo de cliente o
+proveedor es ahora un buscador que muestra resultados al digitar (nombre, cédula o teléfono), con las letras
+coincidentes resaltadas, hasta 8 resultados y el total de coincidencias, y se maneja con ↑ ↓, Enter y Esc. Aplica
+en el recibo de dinero, estado de cuenta, gestión de cobro, anticipos, identificación de transferencias,
+solicitud de crédito, cambio de cuenta de proveedor y notas a proveedor. Las listas largas (líneas de crédito,
+antigüedad por cliente, documentos por cobrar, facturas por pagar y proveedores del estado de cuenta) tienen un
+filtro en vivo.
+
+Archivo: `mod-cobros.js`.
+
+## 2026-09-23 · Cobros y pagos · Módulo completo de cuentas por cobrar y por pagar
+
+Revisión con el auditor contable contra la matriz (CXC-001 a CXC-005, CXP-001 a CXP-007). El módulo tenía
+dos pantallas (antigüedad y vencimientos); ahora tiene una opción por tarea, cada una con el asiento que genera
+a la vista. Todo lo que mueve saldos usa las funciones del resto del sistema (`FIS.aplicarCobro`, `D.asentar`):
+el auxiliar de clientes, el de proveedores y el de anticipos siguen cuadrando con el mayor después de cada acción.
+
+- **Crédito de clientes** (CXC-001/002): líneas de toda la cartera (límite, saldo, comprometido, disponible,
+  días promedio de pago, estado en la caja), solicitudes de línea con segregación (solicita · analiza · aprueba),
+  bitácora de excepciones con autorizador y clave, y política de crédito (días de bloqueo, tramos, recordatorios).
+- **Conta ruta** (CXC-004): facturas a un día con ruta y chofer, liquidación desde la lista (sale el REP) y
+  liquidación del efectivo por chofer. Se emiten seis facturas de ejemplo con `D.emitir`; los clientes de contado
+  C5, C9 y C11 quedan con plazo 1 día.
+- **Análisis y gestión de cobro** (CXC-003): antigüedad en los seis tramos de la política (91–120 y más de 120
+  separados), por cliente, con cuadre contra 1-01-03-001; documentos con IVA diferido y asiento de la venta;
+  estado de cuenta por obra con saldo corrido; gestión de cobro (promesas, bitácora); estimación de incobrables
+  con el ajuste propuesto y candidatas a castigo.
+- **Recibos de dinero**: un recibo aplica a varias facturas con hasta cuatro medios, referencia obligatoria,
+  saldo a favor aplicable, remanente a anticipo, un REP por factura cobrada, anulación con reversa y autorización,
+  y la bandeja de transferencias que llegan por WhatsApp (INT-007).
+- **Anticipos de cliente** (CXC-005): saldos a favor con su origen, registro, aplicación y devolución; depósitos
+  sin identificar (se registran contra 2-01-06-002 y se identifican después).
+- **Pagos a proveedores** (CXP-001/004): auxiliar único (facturas migradas, compras aplicadas, comprobantes
+  aceptados, gastos por XML y notas), selección con totales vivos, pronto pago por negociación (COM-011), notas de
+  crédito aplicadas solas, retenidas y comprobantes sin aceptar fuera del pago; lotes con dos firmas distintas a
+  quien preparó y límite por firmante.
+- **Archivo plano del Banco Nacional** (CXP-002): líneas 1-2-3-4 con la cuenta tomada de la ficha, validaciones
+  (IBAN de 22 caracteres y módulo 97, fecha, totales, duplicados, firmas), descarga del .txt, llave del módulo
+  local, envío y confirmación con asiento. Cambio de cuenta de proveedor con respaldo y segunda aprobación.
+- **Estado de cuenta del proveedor** (CXP-007) y **notas de crédito y débito** (CXP-006) con los ocho conceptos,
+  cuenta por concepto, validación de la clave de 50 dígitos (cédula del emisor, tipo 03) y detección de duplicados.
+- **Caja chica y tarjeta empresarial** (CXP-005): fondos fijos por local, vales con o sin factura electrónica,
+  arqueo, liquidación y reposición; movimientos de la tarjeta con comprobante y asiento del pago.
+
+Correcciones de datos y compartidos (cambios pequeños):
+
+- `data.js`: el saldo del proveedor sumaba el monto original de las facturas migradas aunque estuvieran abonadas
+  (el detalle daba ₡29,5 M menos que el saldo). Ahora suma el saldo. Las cuentas IBAN de los proveedores tenían
+  19 caracteres: ahora son IBAN válidos de 22. Cuentas nuevas en el catálogo: 2-01-01-003 Tarjeta empresarial por
+  pagar, 2-01-06-002 Depósitos sin identificar y 5-01-02-001 Descuentos y bonificaciones sobre compras.
+- `con-auto.js`: la antigüedad de Contabilidad cortaba en «más de 90» y aplicaba 25 % a todo; ahora separa 91–120
+  (25 %) y más de 120 (50 %) como dice la política. El auxiliar de proveedores respeta el saldo de un gasto pagado.
+- `nav.js`: árbol de Cobros y pagos (11 opciones) y sus pantallas en el índice. `index.html`: carga
+  `mod-cobros.js` y la antigüedad de seis tramos cabe en una fila.
+- `mod-venta.js` y `mod-compra.js`: las pantallas `cxc` y `cxp` se mudaron a `mod-cobros.js` (mismo id);
+  Compras › Proveedores muestra el mismo auxiliar y enlaza al estado de cuenta completo.
+
+Archivos: `mod-cobros.js` (nuevo), `data.js`, `con-auto.js`, `nav.js`, `index.html`, `mod-venta.js`, `mod-compra.js`.
+
 ## 2026-09-23 · Contabilidad · Ajustes de la revisión final para la demo
 
 Hallazgos 1 a 6 y 10 de la revisión final de preparación para la demo.

@@ -270,7 +270,7 @@
     const libro = C.saldoDe(D.ctaByCod["1-01-03-001"]);
     /* la antigüedad se mide desde el vencimiento (fecha + plazo del cliente), no desde la emisión */
     const vencida = d => Math.round((HOY - d.fecha) / 86400000) - ((D.cliById[d.clienteId] || {}).plazo || 30);
-    const tramos = [[-9999, 0, "Al día"], [1, 30, "1 a 30 días vencida"], [31, 60, "31 a 60 días vencida"], [61, 90, "61 a 90 días vencida"], [91, 9999, "Más de 90 días vencida"]]
+    const tramos = [[-9999, 0, "Al día"], [1, 30, "1 a 30 días vencida"], [31, 60, "31 a 60 días vencida"], [61, 90, "61 a 90 días vencida"], [91, 120, "91 a 120 días vencida"], [121, 9999, "Más de 120 días vencida"]]
       .map(t => {
         const s = docs.filter(d => { const x = vencida(d); return x >= t[0] && x <= t[1]; }).reduce((a, d) => a + d.saldo, 0);
         const pol = POLITICA.incobrables.find(p => t[0] >= p[0] && t[0] <= p[1]);
@@ -280,7 +280,8 @@
   }
   function proveedores() {
     /* lo que se le debe a cada proveedor (facturas, compras aplicadas y comprobantes aceptados) más los gastos por XML */
-    const aux = D.proveedores.reduce((s, p) => s + p.saldo, 0) + GASTOS.filter(g => g.canal === "XML" && g.asiento).reduce((s, g) => s + g.monto, 0);
+    /* un gasto pagado desde Cobros y pagos baja su saldo (g.saldo) */
+    const aux = D.proveedores.reduce((s, p) => s + p.saldo, 0) + GASTOS.filter(g => g.canal === "XML" && g.asiento).reduce((s, g) => s + (g.saldo != null ? g.saldo : g.monto), 0);
     const libro = C.saldoDe(D.ctaByCod["2-01-01-001"]);
     return { aux, libro, diferencia: libro - aux };
   }

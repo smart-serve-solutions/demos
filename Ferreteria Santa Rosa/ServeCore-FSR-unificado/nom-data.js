@@ -194,6 +194,14 @@
   const BANCOS = ["Banco Nacional", "BAC Credomatic", "Banco Popular"];
   const LOCS = D.locales.map(l => l.id);
 
+  /* IBAN costarricense válido (CR + 2 dígitos de control + 0 + banco + 14 dígitos,
+     módulo 97): el archivo de planilla que se genera en Pagos al banco lo valida */
+  const COD_BANCO = { "Banco Nacional": "151", "BAC Credomatic": "102", "Banco Popular": "161" };
+  function ibanCR(banco, cuenta) {
+    const bban = "0" + (COD_BANCO[banco] || "151") + String(cuenta).replace(/\D/g, "").padStart(14, "0").slice(-14);
+    let r = 0; for (const ch of bban + "122700") r = (r * 10 + +ch) % 97;
+    return "CR" + String(98 - r).padStart(2, "0") + bban;
+  }
   const empleados = [];
   function nuevo(nom, puestoNom, locId, i) {
     const p = puestoDe(puestoNom);
@@ -234,6 +242,7 @@
     if (chance(0.05)) e.embargo = r0(salario * 0.08 / 1000) * 1000;
     if (chance(0.22)) e.prestamoBP = r0(salario * (0.04 + rnd() * 0.06) / 1000) * 1000;
     if (chance(0.15)) e.adelanto = pick([25000, 40000, 50000, 75000, 100000]);
+    e.cuenta = ibanCR(e.banco, e.cuenta);
     empleados.push(e);
     return e;
   }

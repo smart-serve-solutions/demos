@@ -921,17 +921,15 @@
         items: [
           {
             t: "Límite y bloqueo de crédito de clientes",
-            d: "Ficha del cliente, límite de crédito y bloqueo",
+            d: "Líneas, bloqueos en la caja, solicitudes y excepciones",
             reqs: ["CXC-001", "CXC-002"],
-            /* la misma pantalla de Ventas › Clientes, abierta en Crédito */
-            screen: "clientes",
-            arg: "credito",
-            alias: true,
+            screen: "cob-credito",
           },
           {
             t: "Conta ruta (crédito de un día)",
-            d: "Cuentas por cobrar de un día a clientes de ruta",
+            d: "Facturas a un día con entrega, liquidadas sin ir a cuentas por cobrar",
             reqs: ["CXC-004"],
+            screen: "cob-ruta",
           },
         ],
       },
@@ -941,47 +939,67 @@
         items: [
           {
             t: "Análisis de crédito y gestión de cobro",
-            d: "Cuentas por cobrar: antigüedad de saldos y cobro",
+            d: "Antigüedad, estado de cuenta, gestiones e incobrables",
             reqs: ["CXC-003"],
             screen: "cxc",
           },
+          {
+            t: "Recibos de dinero",
+            d: "Pago a varias facturas, varios medios, REP y transferencias por WhatsApp",
+            reqs: ["CXC-003"],
+            screen: "cob-recibos",
+          },
+          {
+            t: "Anticipos de cliente",
+            d: "Adelantos, saldos a favor y transferencias no identificadas",
+            reqs: ["CXC-005"],
+            screen: "cob-anticipos",
+          },
         ],
       },
       {
-        t: "Pagos a proveedores",
+        t: "Pagos",
         ic: "bank",
         items: [
           {
-            t: "Análisis y autorización de pagos a proveedores",
-            d: "Cuentas por pagar: vencimientos y lote de pago",
-            reqs: ["CXP-001", "CXP-004"],
+            t: "Análisis de pagos a proveedores",
+            d: "Vencimientos, pronto pago y lote de la semana",
+            reqs: ["CXP-001"],
             screen: "cxp",
           },
           {
-            t: "Archivo plano de pago a proveedores (Banco Nacional)",
-            d: "Cuentas por pagar: el lote aprobado, listo para el banco",
-            reqs: ["CXP-002"],
-            screen: "cxp",
+            /* bandeja única: proveedores y planilla se firman, se generan
+               (archivo plano BN) y se confirman aquí; Nómina solo envía */
+            t: "Pagos al banco (firma y archivo plano BN)",
+            d: "Proveedores y planilla: firma mancomunada, archivo y confirmación",
+            reqs: ["CXP-002", "CXP-003", "CXP-004"],
+            screen: "cob-archivo",
+          },
+          {
+            t: "Estado de cuenta del proveedor",
+            d: "Saldo, facturas, pagos y notas aplicadas",
+            reqs: ["CXP-007"],
+            screen: "cob-estado-prov",
+          },
+          {
+            t: "Notas de crédito y débito a proveedor",
+            d: "Conceptos configurables, clave validada y aplicación",
+            reqs: ["CXP-006"],
+            screen: "cob-notas-prov",
           },
         ],
       },
       {
-        t: "Planilla y caja menor",
+        /* el archivo de planilla (CXP-003) vive solo en Nómina › Planilla ›
+           Pago: sale de la corrida aprobada y ya está citado allá */
+        t: "Caja menor",
         ic: "wallet",
         items: [
           {
-            /* acceso directo: la pantalla vive en Nómina › Planilla,
-               por eso no cuenta para las migas de pan */
-            t: "Archivo plano de planilla (Banco Nacional)",
-            reqs: ["CXP-003"],
-            screen: "nom-planilla",
-            arg: "pago",
-            alias: true,
-          },
-          {
             t: "Caja chica y tarjeta empresarial",
-            d: "Pagos menores y gastos con la tarjeta de la empresa",
+            d: "Fondos por local, vales, reposición y tarjeta de la empresa",
             reqs: ["CXP-005"],
+            screen: "cob-cajachica",
           },
         ],
       },
@@ -1702,10 +1720,34 @@
       d: "Desempeño, metas, comisiones y clave en mostrador",
     },
     cxc: {
-      t: "Cuentas por cobrar",
+      t: "Análisis y gestión de cobro",
       ic: "wallet",
-      g: "Clientes",
-      d: "Antigüedad de saldos y gestión de cobro",
+      g: "Cobros y pagos",
+      d: "Antigüedad, estado de cuenta, gestiones e incobrables",
+    },
+    "cob-credito": {
+      t: "Crédito de clientes",
+      ic: "users",
+      g: "Cobros y pagos",
+      d: "Líneas, bloqueos, solicitudes y excepciones",
+    },
+    "cob-ruta": {
+      t: "Conta ruta",
+      ic: "route",
+      g: "Cobros y pagos",
+      d: "Crédito de un día con entrega a domicilio",
+    },
+    "cob-recibos": {
+      t: "Recibos de dinero",
+      ic: "cash",
+      g: "Cobros y pagos",
+      d: "Pagos a varias facturas, REP y transferencias por WhatsApp",
+    },
+    "cob-anticipos": {
+      t: "Anticipos de cliente",
+      ic: "wallet",
+      g: "Cobros y pagos",
+      d: "Adelantos, saldos a favor y depósitos sin identificar",
     },
     "sis-locales": {
       t: "Empresa y estructura",
@@ -1834,10 +1876,34 @@
       d: "Ficha, plazo y estado de cuenta",
     },
     cxp: {
-      t: "Cuentas por pagar",
+      t: "Análisis de pagos a proveedores",
       ic: "bank",
-      g: "Compras",
-      d: "Vencimientos y archivo de pago al banco",
+      g: "Cobros y pagos",
+      d: "Vencimientos, pronto pago y lote de la semana",
+    },
+    "cob-archivo": {
+      t: "Pagos al banco",
+      ic: "upload",
+      g: "Cobros y pagos",
+      d: "Proveedores y planilla: firmas, archivo plano BN y confirmación",
+    },
+    "cob-estado-prov": {
+      t: "Estado de cuenta del proveedor",
+      ic: "file",
+      g: "Cobros y pagos",
+      d: "Saldo, facturas, pagos y notas aplicadas",
+    },
+    "cob-notas-prov": {
+      t: "Notas a proveedor",
+      ic: "swap",
+      g: "Cobros y pagos",
+      d: "Notas de crédito y débito con conceptos configurables",
+    },
+    "cob-cajachica": {
+      t: "Caja chica y tarjeta",
+      ic: "card",
+      g: "Cobros y pagos",
+      d: "Fondos, vales, reposición y tarjeta empresarial",
     },
     fiscal: {
       t: "Facturación electrónica",

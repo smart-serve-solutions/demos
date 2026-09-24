@@ -272,17 +272,19 @@
 
   /* ── proveedores ────────────────────────────────────────────── */
   const PROV = [
-    ["3-101-023456", "Amanco Costa Rica S.A.", 30, "CR15015201001023456", "Fontanería"],
-    ["3-101-004411", "Holcim Costa Rica S.A.", 15, "CR21015201001004411", "Cemento"],
-    ["3-101-118820", "Arcelor Mittal C.R.", 45, "CR33015201001118820", "Acero"],
-    ["3-101-667712", "Metalco S.A.", 30, "CR41015201001667712", "Techos"],
-    ["3-101-990312", "Tuboplast de Costa Rica", 30, "CR52015201001990312", "Accesorios"],
-    ["3-101-445509", "Grupo Sur S.A.", 30, "CR63015201001445509", "Pinturas"],
-    ["3-101-772103", "Truper Costa Rica", 60, "CR74015201001772103", "Herramienta"],
-    ["3-101-330277", "Conducen S.A.", 30, "CR85015201001330277", "Eléctrico"],
-    ["3-101-556644", "Productos de Concreto S.A.", 30, "CR96015201001556644", "Prefabricados"],
-    ["3-101-884210", "Abonos del Pacífico S.A.", 30, "CR30015201001884210", "Agro"]
+    ["3-101-023456", "Amanco Costa Rica S.A.", 30, "CR43015120010000023456", "Fontanería"],
+    ["3-101-004411", "Holcim Costa Rica S.A.", 15, "CR85015220010000004411", "Cemento"],
+    ["3-101-118820", "Arcelor Mittal C.R.", 45, "CR80015120010000118820", "Acero"],
+    ["3-101-667712", "Metalco S.A.", 30, "CR32010220010000667712", "Techos"],
+    ["3-101-990312", "Tuboplast de Costa Rica", 30, "CR56015120010000990312", "Accesorios"],
+    ["3-101-445509", "Grupo Sur S.A.", 30, "CR02015220010000445509", "Pinturas"],
+    ["3-101-772103", "Truper Costa Rica", 60, "CR04010220010000772103", "Herramienta"],
+    ["3-101-330277", "Conducen S.A.", 30, "CR64015120010000330277", "Eléctrico"],
+    ["3-101-556644", "Productos de Concreto S.A.", 30, "CR74016120010000556644", "Prefabricados"],
+    ["3-101-884210", "Abonos del Pacífico S.A.", 30, "CR12015120010000884210", "Agro"]
   ];
+  /* cuentas IBAN de 22 caracteres (CR + 20 dígitos, módulo 97 válido): el
+     archivo del Banco Nacional las toma de aquí (Cobros y pagos, 23 set) */
   const proveedores = PROV.map((p, i) => ({
     id: "P" + (i + 1), ced: p[0], nom: p[1], plazo: p[2], cuenta: p[3], linea: p[4], saldo: 0
   }));
@@ -346,6 +348,7 @@
     ["1-02-02-001", "Depreciación acumulada", "Activo"],
     ["2-01-01-001", "Cuentas por pagar proveedores", "Pasivo"],
     ["2-01-01-002", "Mercadería recibida por facturar", "Pasivo"],
+    ["2-01-01-003", "Tarjeta empresarial por pagar", "Pasivo"],
     ["2-01-02-001", "IVA repercutido (débito fiscal)", "Pasivo"],
     ["2-01-02-002", "IVA por pagar diferido", "Pasivo"],
     ["2-01-02-003", "IVA por pagar (liquidación del mes)", "Pasivo"],
@@ -358,6 +361,7 @@
     ["2-01-05-002", "Provisión de vacaciones", "Pasivo"],
     ["2-01-05-003", "Provisión de cesantía", "Pasivo"],
     ["2-01-06-001", "Anticipos y saldos a favor de clientes", "Pasivo"],
+    ["2-01-06-002", "Depósitos sin identificar", "Pasivo"],
     ["3-01-01-001", "Capital social", "Patrimonio"],
     ["3-02-01-001", "Utilidades acumuladas", "Patrimonio"],
     ["4-01-01-001", "Ventas de mercadería", "Ingreso"],
@@ -367,6 +371,7 @@
     ["4-02-02-001", "Ingresos por servicios", "Ingreso"],
     ["4-02-03-001", "Diferencial cambiario ganado", "Ingreso"],
     ["5-01-01-001", "Costo de la mercadería vendida", "Costo"],
+    ["5-01-02-001", "Descuentos y bonificaciones sobre compras", "Costo"],
     ["6-01-01-001", "Salarios", "Gasto"],
     ["6-01-01-002", "Cargas sociales patronales", "Gasto"],
     ["6-01-01-003", "Provisiones laborales", "Gasto"],
@@ -964,12 +969,15 @@
     for (let i = 0; i < ri(2, 5); i++) {
       const monto = ri(300000, 12000000);
       const emit = ri(13, 70);   /* facturas del sistema anterior: vienen en la migración */
+      const doc = "FE-" + pad(ri(100000, 999999), 6), saldo = chance(0.25) ? Math.round(monto * 0.4) : monto;
       cxp.push({
-        id: "CP" + cxp.length, provId: p.id, doc: "FE-" + pad(ri(100000, 999999), 6),
-        fecha: dayAgo(emit), vence: dayAgo(emit - p.plazo), monto, saldo: chance(0.25) ? Math.round(monto * 0.4) : monto,
+        id: "CP" + cxp.length, provId: p.id, doc,
+        fecha: dayAgo(emit), vence: dayAgo(emit - p.plazo), monto, saldo,
         dias: emit - p.plazo
       });
-      p.saldo += monto;
+      /* el saldo del proveedor suma lo que se debe, no el monto original:
+         así el auxiliar cuadra con el detalle por factura */
+      p.saldo += saldo;
     }
   });
 

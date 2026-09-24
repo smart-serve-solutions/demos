@@ -95,7 +95,7 @@
     { id: "novedades", t: "Novedades", d: "Recibe horas extra autorizadas, comisiones, incapacidades, adelantos, embargos y compras de personal." },
     { id: "calculo", t: "Cálculo", d: "El sistema aplica las reglas de ley y deja la corrida visible, persona por persona. Toque una fila para ver la colilla." },
     { id: "aprobacion", t: "Aprobación", d: "Firma de gerencia sobre el resumen. A partir de aquí la corrida se congela y cualquier cambio exige reabrir con bitácora." },
-    { id: "pago", t: "Pago", d: "Archivo al banco, colillas enviadas y depósitos confirmados uno por uno." },
+    { id: "pago", t: "Pago", d: "Nómina envía la corrida aprobada a Pagos al banco (Cobros y pagos): allí se firma, se genera el archivo del Banco Nacional y se confirma. Aquí se ve el avance y salen las colillas." },
     { id: "asiento", t: "Asiento", d: "Asiento de salarios, cargas y provisiones. Las obligaciones con la CCSS, Hacienda y el INS quedan en cola." }
   ];
   /* en qué paso va cada estado del periodo (5 = recorrido completo) */
@@ -104,6 +104,9 @@
   const per = () => M.perById[plPer];
   const pasoDe = p => PASOS[Math.min(AVANCE[p.estado], 4)].id;
   const anterior = p => M.periodos.filter(x => x.tipo === p.tipo && x.hasta < p.desde).sort((a, b) => b.desde - a.desde)[0];
+  /* el pago se ejecuta en Cobros y pagos › Pagos al banco (el mismo proceso que el de proveedores) */
+  const loteDe = p => (w.COB && w.COB.loteDe ? w.COB.loteDe(p.id) : null);
+  const loteVivo = p => { const l = loteDe(p); return l && l.estado !== "Rechazado" ? l : null; };
   const esNovedad = f => f.ing.length > 1 || f.ded.some(x => DE_LEY.indexOf(x.cod) < 0);
 
   function pasoTexto(id, p, filas, t) {
@@ -112,7 +115,7 @@
       case "novedades": return filas.filter(esNovedad).length + " personas con novedades";
       case "calculo": return "Neto " + c(t.neto);
       case "aprobacion": return av >= 3 ? "Firmada por gerencia" : "Falta la firma de gerencia";
-      case "pago": return av >= 4 ? t.n + " depósitos enviados" : t.n + " depósitos · " + fecha(p.pago);
+      case "pago": return av >= 4 ? t.n + " depósitos enviados" : loteVivo(p) ? "En Pagos al banco · " + w.COB.estadoLote(loteVivo(p)).toLowerCase() : t.n + " depósitos · " + fecha(p.pago);
       default: return av >= 5 ? "En el libro diario" : "Salarios, cargas y provisiones";
     }
   }
@@ -130,8 +133,9 @@
       ? `<button class="btn pri" data-act="aprobar">${icon("check")}Aprobar corrida</button>`
       : `${tag("Aprobada por gerencia", "ok", "check")}<button class="btn" data-paso="pago">Ir al pago ${icon("chev")}</button>`;
     else if (paso.id === "pago") {
-      if (av < 3) { aviso = "Primero hay que aprobar la corrida"; accion = `<button class="btn pri" disabled>${icon("bank")}Generar archivo del banco</button>`; }
-      else if (av === 3) accion = `<button class="btn pri" data-act="pagar">${icon("bank")}Generar archivo del banco</button>`;
+      if (av < 3) { aviso = "Primero hay que aprobar la corrida"; accion = `<button class="btn pri" disabled>${icon("bank")}Enviar a Pagos al banco</button>`; }
+      else if (av === 3 && loteVivo(p)) { const l = loteVivo(p); aviso = "Lote " + l.cons + " · " + w.COB.estadoLote(l); accion = `<button class="btn pri" data-ir="cob-archivo|bandeja">${icon("bank")}Ver en Pagos al banco</button>`; }
+      else if (av === 3) { const d = loteDe(p); if (d && d.estado === "Rechazado") aviso = "Tesorería devolvió el lote " + d.cons + ": " + (d.motivo || ""); accion = `<button class="btn pri" data-act="pagar">${icon("bank")}${d ? "Reenviar a Pagos al banco" : "Enviar a Pagos al banco"}</button>`; }
       else accion = `${tag("Archivo enviado", "ok", "check")}<button class="btn" data-paso="asiento">Ir al asiento ${icon("chev")}</button>`;
     } else {
       if (av < 4) { aviso = "Se contabiliza cuando la planilla está pagada"; accion = `<button class="btn pri" disabled>${icon("check")}Contabilizar</button>`; }
@@ -295,6 +299,7 @@
           <div class="cell"><div class="cl">Bancos destino</div><div class="cv num">${Object.keys(porBanco).length}</div></div>
           <div class="cell"><div class="cl">Fecha de pago</div><div class="cv num">${fechaL(p.pago)}</div></div>
           <div class="cell"><div class="cl">Depósitos confirmados</div><div class="cv num">${pagada ? t.n + " de " + t.n : "0 de " + t.n}</div></div>
+          <div class="cell"><div class="cl">En Pagos al banco</div><div class="cv">${loteDe(p) ? tag(loteDe(p).cons + " · " + w.COB.estadoLote(loteDe(p)), loteDe(p).estado === "Pagado" ? "ok" : loteDe(p).estado === "Rechazado" ? "cr" : "wa") : pagada ? tag("Pagada", "ok", "check") : '<span class="mut" style="font-size:13px">sin enviar</span>'}</div></div>
         </div>`, flush: true
     })}
       <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start">
@@ -509,11 +514,22 @@
         },
         aprobar() {
           p.estado = "Aprobada"; plPaso = "pago";
-          toast("Corrida aprobada", "Queda congelada. El siguiente paso es generar el archivo del banco.", "ok");
+          toast("Corrida aprobada", "Queda congelada. El siguiente paso es enviarla a Pagos al banco.", "ok");
         },
         pagar() {
-          p.estado = "Pagada"; plPaso = "asiento";
-          toast("Archivo generado", M.corrida(p).length + " transferencias listas para el Banco Nacional. Las colillas salen al confirmarse el depósito.", "ok");
+          if (!w.COB || !w.COB.enviarLote) {   /* sin Cobros y pagos cargado, el comportamiento anterior */
+            p.estado = "Pagada"; plPaso = "asiento";
+            return toast("Archivo generado", M.corrida(p).length + " transferencias listas para el Banco Nacional. Las colillas salen al confirmarse el depósito.", "ok");
+          }
+          const filas = M.corrida(p);
+          const l = w.COB.enviarLote({
+            origen: "Planilla", concepto: "Planilla " + p.id, prepara: "Nómina", fechaPago: p.pago, ref: p.id,
+            items: filas.map(f => ({ key: f.e.id, nom: f.e.nom, ced: f.e.ced, iban: f.e.cuenta, neto: Math.round(f.neto), det: f.e.puesto + " · " + f.e.banco })),
+            alConfirmar: () => { if (p.estado === "Aprobada") p.estado = "Pagada"; },
+            alDevolver: () => { }
+          });
+          plPaso = "pago";
+          toast("Enviada a Pagos al banco", l.cons + " · " + filas.length + " transferencias. Las firmas, el archivo del Banco Nacional y la confirmación se hacen en Cobros y pagos; aquí verá el avance.", "ok");
         },
         contabilizar() {
           const t = M.totales(M.corrida(p));

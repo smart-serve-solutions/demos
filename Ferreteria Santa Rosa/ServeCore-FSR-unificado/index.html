@@ -1540,6 +1540,8 @@
       .ag.d1 .agv { color: var(--ok) }
       .ag.d3 .agv { color: var(--warn) }
       .ag.d4 .agv, .ag.d5 .agv { color: var(--crit) }
+      /* seis tramos (política de incobrables 91–120 y más de 120) en una sola fila */
+      .aging:has(> .ag:nth-child(6)) { grid-template-columns: repeat(6, 1fr) }
       @media (max-width: 860px) {
         .aging { grid-template-columns: repeat(2, 1fr) }
       }
@@ -3079,6 +3081,7 @@
 <script src="mod-venta-gestion.js"></script>
 <script src="mod-inv.js"></script>
 <script src="mod-compra.js"></script>
+<script src="mod-cobros.js"></script>
 <script src="mod-nomina.js"></script>
 <script src="mod-planilla.js"></script>
 <script src="mod-fiscal.js"></script>
