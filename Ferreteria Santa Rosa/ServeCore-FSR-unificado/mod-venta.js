@@ -754,26 +754,24 @@
       "Abra la línea marcada en rojo y solicite la autorización. La factura no se aplica mientras tanto.", "cr");
     const t = cartTot();
     const cli = cliCart();
-    const credito = S.cart.condicion === "Crédito";
-    const rc = credito ? revisarCredito(cli, t.total) : null;
-    if (rc && rc.error) return toast("No se puede facturar a crédito", rc.error, "cr");
+    /* el crédito es un medio más: la venta nunca se bloquea. Si el crédito del cliente no
+       procede (mora, límite) solo ese medio queda deshabilitado y se cobra con otro */
+    const tieneCredito = !!(cli && cli.limite);
+    const rc = tieneCredito ? revisarCredito(cli, t.total) : null;
+    const creditoOk = tieneCredito && !rc.error;
+    let credito = creditoOk && S.cart.condicion === "Crédito";
     const pagos = [];
     const pagado = () => pagos.reduce((s, x) => s + x.monto, 0);
     const pendiente = () => Math.max(0, t.total - pagado());
     const autorizados = cli ? ["El titular"].concat(cli.autorizados || []) : [];
     openSheet({
-      title: credito ? "Factura a crédito" : "Cobro de la factura", sub: `${cli ? cli.nom : "Consumidor final"} · ${c(t.total)}`,
-      body: credito ? `
-        <div class="grid g2" style="gap:12px">
-          <div class="field" style="margin:0"><label for="pOC">Orden de compra del cliente</label><input id="pOC" placeholder="Opcional · sale en la factura"></div>
-          <div class="field" style="margin:0"><label for="pRet">Retira</label><select id="pRet">${autorizados.map(x => `<option>${esc(x)}</option>`).join("")}</select></div></div>
-        <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:13px"><span>Crédito disponible</span><span class="num b">${c(cli.limite - cli.saldo)}</span></div>
-        ${rc.aviso ? `<div style="margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--warn-soft,var(--surface-2));border:1px solid var(--hair);font-size:12.5px">${icon("alert")} ${esc(rc.aviso)}</div>` : ""}
-        <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;gap:10px">${icon("info")}
-          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Condición 02 · crédito a ${cli.plazo} días. El <strong>Recibo Electrónico de Pago</strong> se emite cuando entre el dinero.</div></div>`
-        : `<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px" id="medios">
-          ${ALT_MEDIOS.map((m, i) => `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px" data-medio="${m[1]}" aria-pressed="${i === 0}">${icon(m[0])}${m[1]}<kbd style="font-size:10px">Alt+${i + 1}</kbd></button>`).join("")}
+      title: "Cobro de la factura", sub: `${cli ? cli.nom : "Consumidor final"} · ${c(t.total)}`,
+      body: `<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px" id="medios">
+          ${ALT_MEDIOS.map((m, i) => `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px" data-medio="${m[1]}" aria-pressed="${!credito && i === 0}">${icon(m[0])}${m[1]}<kbd style="font-size:10px">Alt+${i + 1}</kbd></button>`).join("")}
+          ${tieneCredito ? `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px${creditoOk ? "" : ";opacity:.45;cursor:not-allowed"}" data-medio="Crédito" aria-pressed="${credito}" ${creditoOk ? "" : "disabled"}>${icon("file")}Crédito ${cli.plazo} días<kbd style="font-size:10px">Alt+${ALT_MEDIOS.length + 1}</kbd></button>` : ""}
         </div>
+        ${tieneCredito && !creditoOk ? `<div style="margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--surface-2);border:1px solid var(--hair);font-size:12.5px;color:var(--ink-2)">${icon("info")} Crédito no disponible para este cliente (mora o límite). Cobre con otro medio.</div>` : ""}
+        <div id="secCont"${credito ? " hidden" : ""}>
         <div class="grid g2" style="gap:12px;margin-top:14px">
           <div class="field" style="margin:0"><label for="monto" id="montoLbl">Monto</label><input id="monto" class="num" style="font-size:20px;font-weight:600;text-align:right;padding:10px 12px" value="${grp(t.total)}"><div class="sx-hint" id="usdHint"></div></div>
           <div class="field" style="margin:0"><label for="pRef">Referencia</label><input id="pRef" placeholder="Autorización, SINPE o n.º de cheque"></div></div>
@@ -781,9 +779,17 @@
         <div id="pagosLista" style="margin-top:10px"></div>
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:1px solid var(--hair-2)">
           <span style="font-size:13px;font-weight:600" id="vueltoLbl">Vuelto</span>
-          <span class="num" id="vuelto" style="font-size:21px;font-weight:700;color:var(--ok)">₡0</span></div>`
+          <span class="num" id="vuelto" style="font-size:21px;font-weight:700;color:var(--ok)">₡0</span></div></div>`
+        + (creditoOk ? `<div id="secCred" style="margin-top:16px"${credito ? "" : " hidden"}><div class="grid g2" style="gap:12px">
+          <div class="field" style="margin:0"><label for="pOC">Orden de compra del cliente</label><input id="pOC" placeholder="Opcional · sale en la factura"></div>
+          <div class="field" style="margin:0"><label for="pRet">Retira</label><select id="pRet">${autorizados.map(x => `<option>${esc(x)}</option>`).join("")}</select></div></div>
+        <div id="primaCred" style="margin-top:12px"></div>
+        <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:13px"><span>Crédito disponible</span><span class="num b">${c(cli.limite - cli.saldo)}</span></div>
+        ${rc.aviso ? `<div style="margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--warn-soft,var(--surface-2));border:1px solid var(--hair);font-size:12.5px">${icon("alert")} ${esc(rc.aviso)}</div>` : ""}
+        <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);display:flex;gap:10px">${icon("info")}
+          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Condición 02 · crédito a ${cli.plazo} días. El <strong>Recibo Electrónico de Pago</strong> se emite cuando entre el dinero.</div></div></div>` : "")
         + `<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);display:flex;gap:10px">${icon("shield")}
-          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Al aplicar: se firma y ${S.offline ? "se encola para" : "se envía a"} Hacienda, se imprime el comprobante, baja el inventario y se genera el asiento contable${credito ? " y la cuenta por cobrar" : ""}.</div></div>`,
+          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Al aplicar: se firma y ${S.offline ? "se encola para" : "se envía a"} Hacienda, se imprime el comprobante, baja el inventario y se genera el asiento contable<span id="notaCxc">${credito ? " y la cuenta por cobrar" : ""}</span>.</div></div>`,
       footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="okPay">${icon("check")}Aplicar</button>`,
       after(el) {
         let medio = "Efectivo";
@@ -800,9 +806,40 @@
         };
         /* lo que se aplicaría si se presiona Aplicar ahora: los pagos agregados más el que está en pantalla */
         const propuesta = () => (leer() > 0 && pagos.length < 4 ? pagos.concat([pagoActual()]) : pagos.slice());
-        const ponerMonto = col => { mo.value = medio === "Dólares" ? dec(Math.ceil(col / tc.compra * 100) / 100, 2) : grp(col); };
+        /* máscara del monto: miles separados con espacio mientras se digita; en dólares admite
+           coma y hasta dos decimales */
+        const fmtMonto = v => {
+          const usd = medio === "Dólares";
+          const limpio = (usd ? String(v).replace(/\./g, ",") : String(v)).replace(usd ? /[^\d,]/g : /\D/g, "");
+          const k = usd ? limpio.indexOf(",") : -1;
+          const ent = (k >= 0 ? limpio.slice(0, k) : limpio).replace(/^0+(?=\d)/, "");
+          const frac = k >= 0 ? limpio.slice(k + 1).replace(/,/g, "").slice(0, 2) : null;
+          return (ent ? ent.replace(/\B(?=(\d{3})+(?!\d))/g, " ") : frac !== null ? "0" : "") + (frac !== null ? "," + frac : "");
+        };
+        const enmascarar = () => {
+          const v = mo.value, pos = mo.selectionStart == null ? v.length : mo.selectionStart;
+          const cuenta = (v.slice(0, pos).match(medio === "Dólares" ? /[\d,.]/g : /\d/g) || []).length;
+          const nuevo = fmtMonto(v);
+          if (nuevo === v) return;
+          mo.value = nuevo;
+          /* el cursor queda después del mismo dígito que tenía a la izquierda */
+          let n = 0, p = 0;
+          while (p < nuevo.length && n < cuenta) { if (medio === "Dólares" ? /[\d,]/.test(nuevo[p]) : /\d/.test(nuevo[p])) n++; p++; }
+          mo.setSelectionRange(p, p);
+        };
+        const ponerMonto = col => { mo.value = fmtMonto(medio === "Dólares" ? dec(Math.ceil(col / tc.compra * 100) / 100, 2) : grp(col)); };
         const pintar = () => {
-          if (credito) return;
+          if (credito) {
+            /* crédito con abono al facturar: lo pagado hoy sale con su REP y el resto queda en la cartera */
+            const abono = pagado();
+            $("#primaCred", el).innerHTML = (pagos.length ? pagos.map((x, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--hair-2)">
+              <span>Abono en ${esc(x.medio)}${x.usd ? ` <span class="dim">· US$ ${dec(x.usd, 2)}</span>` : ""}${x.ref ? ` <span class="dim">· ${esc(x.ref)}</span>` : ""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num b">${c(x.monto)}</span><button class="btn sm" data-quitarp="${i}" aria-label="Quitar abono">✕</button></span></div>`).join("") : "")
+              + `<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px"><span style="font-size:13px;font-weight:600">Queda a crédito</span><span class="num" style="font-size:19px;font-weight:700">${c(t.total - abono)}</span></div>`
+              + (pagos.length ? "" : `<div class="mut" style="font-size:12px;margin-top:4px">Si el cliente da una parte hoy, escoja el medio, digite el monto y agréguelo; el resto queda a crédito.</div>`);
+            $$("[data-quitarp]", el).forEach(b => b.addEventListener("click", () => { pagos.splice(+b.dataset.quitarp, 1); pintar(); }));
+            okB.disabled = t.total - abono <= 0;
+            return;
+          }
           $("#pagosLista", el).innerHTML = pagos.map((x, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--hair-2)">
             <span>${esc(x.medio)}${x.usd ? ` <span class="dim">· US$ ${dec(x.usd, 2)}</span>` : ""}${x.ref ? ` <span class="dim">· ${esc(x.ref)}</span>` : ""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num b">${c(x.monto)}</span><button class="btn sm" data-quitar="${i}" aria-label="Quitar pago">✕</button></span></div>`).join("");
           $$("[data-quitar]", el).forEach(b => b.addEventListener("click", () => { pagos.splice(+b.dataset.quitar, 1); ponerMonto(pendiente()); pintar(); }));
@@ -818,17 +855,37 @@
           okB.disabled = dif < 0 || noEfectivo > t.total || (dif > 0 && !pr.some(x => EFECTIVO_M[x.medio]));
           $("#addPago", el).disabled = pagos.length >= 3 || leer() <= 0 || leer() >= pendiente();
         };
+        const mostrar = () => {
+          const sc = $("#secCred", el); if (sc) sc.hidden = !credito;
+          $("#secCont", el).hidden = credito;
+          $("#notaCxc", el).textContent = credito ? " y la cuenta por cobrar" : "";
+        };
         const elegir = b => {
+          if (b.disabled) return;
           $$("[data-medio]", el).forEach(x => x.setAttribute("aria-pressed", "false"));
-          const antes = medio, col = leer();
-          b.setAttribute("aria-pressed", "true"); medio = b.dataset.medio;
+          b.setAttribute("aria-pressed", "true");
+          /* crédito: queda por cobrar lo que no se pagó hoy. Un monto parcial digitado y no
+             agregado todavía se toma como abono (el monto completo que trae el campo, no) */
+          if (b.dataset.medio === "Crédito") {
+            const x = pagoActual();
+            if (x.monto > 0 && x.monto < pendiente() && pagos.length < 4) { pagos.push(x); $("#pRef", el).value = ""; }
+            if (pendiente() <= 0) {
+              b.setAttribute("aria-pressed", "false"); $$("[data-medio]", el).find(y => y.dataset.medio === medio).setAttribute("aria-pressed", "true");
+              return toast("La factura ya está pagada", "Lo agregado cubre el total; no queda nada para dejar a crédito.", "wa");
+            }
+            credito = true; mostrar(); pintar(); return;
+          }
+          const veniaDeCredito = credito, antes = medio, col = leer();
+          credito = false; medio = b.dataset.medio; mostrar();
           /* al cambiar de medio el monto se conserva en colones (o se convierte a dólares) */
-          if (antes !== medio) ponerMonto(!EFECTIVO_M[medio] ? Math.min(col, pendiente()) : col);
+          if (veniaDeCredito) ponerMonto(pendiente());
+          else if (antes !== medio) ponerMonto(!EFECTIVO_M[medio] ? Math.min(col, pendiente()) : col);
           pintar();
+          if (veniaDeCredito) { mo.focus(); mo.select(); }
         };
         $$("[data-medio]", el).forEach(b => b.addEventListener("click", () => elegir(b)));
         if (mo) {
-          mo.addEventListener("input", pintar);
+          mo.addEventListener("input", () => { enmascarar(); pintar(); });
           $("#addPago", el).addEventListener("click", () => {
             const x = pagoActual();
             if (x.monto <= 0) return;
@@ -838,9 +895,9 @@
             pintar(); mo.focus(); mo.select();
           });
           el.addEventListener("keydown", e => {
-            if (e.altKey && /^Digit[1-7]$/.test(e.code)) { e.preventDefault(); const b = $$("[data-medio]", el)[+e.code.slice(5) - 1]; if (b) elegir(b); }
+            if (e.altKey && /^Digit[1-8]$/.test(e.code)) { e.preventDefault(); const b = $$("[data-medio]", el)[+e.code.slice(5) - 1]; if (b) elegir(b); }
           });
-          setTimeout(() => { mo.focus(); mo.select(); }, 40);
+          setTimeout(() => { if (!credito) { mo.focus(); mo.select(); } }, 40);
         }
         pintar();
         okB.addEventListener("click", () => {
@@ -864,25 +921,42 @@
             if (anticipo > favor)
               return toast("El anticipo no alcanza", (cli ? cli.nom + " tiene " + c(favor) + " a favor" : "Consumidor final no tiene anticipos") + "; se intentó aplicar " + c(anticipo) + ".", "cr");
           }
+          /* abono al facturar a crédito: cada pago sale como cobro (REP) de la factura */
+          const abonos = credito ? pagos.map(x => ({ ...x })) : [];
+          if (abonos.length) {
+            const antA = abonos.filter(x => x.medio === "Anticipo").reduce((s, x) => s + x.monto, 0);
+            if (antA > (cli.saldoFavor || 0))
+              return toast("El anticipo no alcanza", cli.nom + " tiene " + c(cli.saldoFavor || 0) + " a favor; se intentó aplicar " + c(antA) + ".", "cr");
+            if (!w.FIS) return toast("No se puede registrar el abono", "Falta el módulo fiscal para emitir el REP.", "cr");
+          }
           const principal = aplicados.filter(x => !x.vuelto).sort((a, b) => b.monto - a.monto)[0];
           let doc;
           try { doc = D.emitir({
             tipo: cli ? "FE" : "TE", locId: S.locId, term: S.term,
             clienteId: S.cart.cliId, vendedor: S.vendedor,
             lineas: lineasFiscales(),
-            condicion: S.cart.condicion, medio: credito ? "Crédito" : principal.medio, pagos: aplicados,
+            condicion: credito ? "Crédito" : "Contado", medio: credito ? "Crédito" : principal.medio, pagos: aplicados,
             ordenCompra: credito ? $("#pOC", el).value.trim() : "", retira: credito ? $("#pRet", el).value : "",
             hacienda: S.offline ? "En cola" : "Aceptado", situacion: S.offline ? "3" : "1", fecha: D.ahora()
           }); } catch (e) { return toast("No se aplicó la factura", e.message, "cr"); }
           if (w.VENX) w.VENX.consumir(doc.cons);
           const ant = D.pagadoCon(doc, "Anticipo");
           if (ant && cli) cli.saldoFavor -= ant;
-          if (rc && rc.sobregiro) rc.sobregiro.usado = doc.cons;
+          if (credito && rc && rc.sobregiro) rc.sobregiro.usado = doc.cons;
+          const sinAplicar = [];
+          doc.abonos = [];
+          abonos.forEach(x => {
+            const r = w.FIS.aplicarCobro(doc, { monto: x.monto, medio: x.medio, locId: S.locId, term: S.term, offline: S.offline });
+            if (r.error) return sinAplicar.push(x.medio + " " + c(x.monto) + ": " + r.error);
+            if (x.medio === "Anticipo") cli.saldoFavor -= x.monto;
+            doc.abonos.push({ ...x, rep: r.rep.cons, fecha: r.rep.fecha });
+          });
           closeSheet();
           S.cart = { cliId: S.cart.cliId, condicion: S.cart.condicion, lineas: [], draft: null, apartado: [] };
           S.posSel = null;
           toast("Factura " + doc.cons + " aplicada",
-            `${S.offline ? "Queda en cola para Hacienda." : "Aceptada por Hacienda."} ${doc.pagos.length > 1 ? "Cobrada con " + D.mediosTxt(doc) + ". " : ""}Bajó el inventario y generó el asiento${credito ? " y la cuenta por cobrar" : ""}.`, "ok");
+            `${S.offline ? "Queda en cola para Hacienda." : "Aceptada por Hacienda."} ${doc.pagos.length > 1 ? "Cobrada con " + D.mediosTxt(doc) + ". " : ""}${doc.abonos.length ? "Abono de " + c(doc.abonos.reduce((s, x) => s + x.monto, 0)) + " con su REP; quedan " + c(doc.saldo) + " a crédito. " : ""}Bajó el inventario y generó el asiento${credito ? " y la cuenta por cobrar" : ""}.`, "ok");
+          if (sinAplicar.length) toast("Un abono no se registró", sinAplicar.join(" · ") + " Regístrelo en Cobros y pagos.", "cr");
           A.refresh();
         });
       }

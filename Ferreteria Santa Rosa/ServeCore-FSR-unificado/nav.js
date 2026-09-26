@@ -749,14 +749,14 @@
           },
           {
             t: "Documentos y devoluciones",
-            d: "Comprobantes emitidos, devolución con firma del cliente y notas de crédito",
+            d: "Historial de ventas, devolución con firma del cliente y notas de crédito",
             reqs: ["VEN-011", "VEN-012"],
             screen: "documentos",
             tabs: [
               {
-                t: "Documentos emitidos",
+                t: "Historial de ventas",
                 id: "emitidos",
-                kw: "factura tiquete reimprimir reenviar xml comprobante",
+                kw: "historial ventas facturas emitidas documentos emitidos detalle vendedor medio de pago factura tiquete reimprimir reenviar xml comprobante",
               },
               {
                 t: "Devolver mercadería",
@@ -1011,7 +1011,7 @@
         items: [
           { t: "Panel fiscal", reqs: ["FEL-001"], screen: "fiscal" },
           {
-            t: "Comprobantes emitidos",
+            t: "Estado ante Hacienda",
             reqs: ["FEL-006"],
             screen: "fel-emitidos",
           },
@@ -1663,7 +1663,7 @@
       t: "Documentos y devoluciones",
       ic: "file",
       g: "Ventas",
-      d: "Comprobantes, devoluciones con firma y notas de crédito",
+      d: "Historial de ventas, devoluciones con firma y notas de crédito",
     },
     cotizaciones: {
       t: "Cotizaciones y pedidos",
@@ -1912,10 +1912,10 @@
       d: "Panel del módulo: emisión, plazos y alertas",
     },
     "fel-emitidos": {
-      t: "Comprobantes emitidos",
+      t: "Estado ante Hacienda",
       ic: "file",
       g: "Fiscal",
-      d: "Clave, XML y respuesta de Hacienda",
+      d: "Comprobantes emitidos: clave, XML y respuesta de Hacienda",
     },
     "fel-recibidos": {
       t: "Comprobantes recibidos",

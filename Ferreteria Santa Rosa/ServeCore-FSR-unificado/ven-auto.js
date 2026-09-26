@@ -252,7 +252,8 @@
     docs.forEach(d => {
       if (d.tipo === "NC") { if (d.reintegro === "Efectivo") devol += d.total; return; }
       ventas += d.total;
-      if (d.condicion === "Crédito") { por["Crédito"].n++; por["Crédito"].monto += d.total; return; }
+      /* a crédito cuenta lo que quedó por cobrar; el abono al facturar entra por su REP (abajo) */
+      if (d.condicion === "Crédito") { por["Crédito"].n++; por["Crédito"].monto += d.total - (d.abonos || []).reduce((s, x) => s + x.monto, 0); return; }
       /* una venta con pago mixto suma a cada medio lo que entró por él */
       (d.pagos && d.pagos.length ? d.pagos : [{ medio: d.medio, monto: d.total }]).forEach(x => {
         const m = por[x.medio] ? x.medio : "Efectivo";
@@ -261,9 +262,10 @@
         if (x.usd) usd += x.usd;
       });
     });
-    /* los abonos de cuentas por cobrar pagados en efectivo en esta caja también están en la gaveta */
-    (w.FIS ? w.FIS.reps : []).filter(r => r.locId === t.locId && r.term === t.n && r.fecha >= t.abre && r.fecha < hasta && r.medio === "Efectivo")
-      .forEach(r => { por["Efectivo"].n++; por["Efectivo"].monto += r.monto; });
+    /* los abonos de cuentas por cobrar cobrados en esta caja (también el abono al facturar a
+       crédito) suman a su medio: el efectivo está en la gaveta y la tarjeta en el lote del datáfono */
+    (w.FIS ? w.FIS.reps : []).filter(r => r.locId === t.locId && r.term === t.n && r.fecha >= t.abre && r.fecha < hasta && por[r.medio] && r.medio !== "Crédito")
+      .forEach(r => { por[r.medio].n++; por[r.medio].monto += r.monto; });
     const retiros = t.retiros.reduce((s, r) => s + r.monto, 0);
     /* los dólares se cuentan aparte, en dólares: no se mezclan con los colones de la gaveta */
     const efectivo = t.fondo + por["Efectivo"].monto - retiros - devol;

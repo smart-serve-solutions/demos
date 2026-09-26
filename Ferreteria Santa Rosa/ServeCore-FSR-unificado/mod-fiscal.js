@@ -106,7 +106,7 @@
   /* ══ COMPROBANTES EMITIDOS ═══════════════════════════════════ */
   let emQ = "", emTipo = "Todos", emEstado = "Todos";
   A.screen("fel-emitidos", {
-    title: "Comprobantes emitidos",
+    title: "Estado ante Hacienda",
     sub: () => grp(D.documentos.length) + " en la ventana de la demo · ≈29 500 documentos fiscales al mes en producción",
     extra: () => `<button class="btn" id="emXml">${icon("download")}Descargar XML del período</button>`,
     render(v) {

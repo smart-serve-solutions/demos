@@ -1,5 +1,54 @@
 # Cambios
 
+## 2026-09-26 · POS + Ventas · Crédito con abono al facturar
+
+Al combinar un pago (p. ej. efectivo) con Crédito, el pago se descartaba: la factura salía a crédito por el
+total y el historial solo mostraba el crédito.
+
+- `mod-venta.js`: al escoger **Crédito** se conservan los pagos ya agregados y también el monto parcial
+  digitado sin agregar (el monto completo que trae el campo por defecto no cuenta). La hoja muestra cada
+  abono (con ✕ para quitarlo) y **Queda a crédito**. Al aplicar, la factura sale a crédito por el total y
+  cada abono se registra con `FIS.aplicarCobro` —la misma vía de Cobros—: emite su REP, baja el saldo de la
+  factura y del cliente y asienta (el IVA del abono pasa de diferido a por pagar). La factura guarda
+  `doc.abonos` con medio, monto, referencia y REP. Si lo agregado cubre todo, avisa que no queda nada a crédito.
+- `mod-venta-gestion.js`: el historial muestra «Efectivo + Crédito» en la columna Pago y en el detalle cada
+  abono con su REP, lo que quedó a crédito, vencimiento y saldo.
+- `ven-auto.js`: en el resumen del turno, Crédito suma solo lo que quedó por cobrar, y los abonos cobrados en
+  la caja suman a su medio (antes solo el efectivo), para que el lote del datáfono cuadre.
+
+## 2026-09-26 · POS · El monto del cobro conserva el formato mientras se digita
+
+- `mod-venta.js`: el campo **Monto** del cobro separa los miles con espacio en cada tecla (antes se veía
+  «1 000000» al digitar) y el cursor se queda junto al dígito que se estaba editando. En **Dólares** acepta
+  coma o punto como decimal, con hasta dos decimales, y el monto convertido también sale con miles separados.
+
+## 2026-09-26 · Ventas + Facturación · Historial de ventas con cómo se pagó
+
+«Documentos emitidos» (Ventas) y «Comprobantes emitidos» (Facturación) se llamaban casi igual y no quedaba
+claro dónde se ven las facturas con su detalle.
+
+- `mod-venta-gestion.js`: la pestaña pasa a **Historial de ventas**. La lista cambia la columna «Cond.» por
+  **Pago** (crédito o los medios usados, p. ej. «Tarjeta + Efectivo») y el buscador también encuentra por
+  vendedor. El detalle agrega la celda **Vendedor** y un bloque **Cómo se pagó**: cada pago con su monto y
+  referencia (dólares con su tipo de cambio y el vuelto), o, si fue a crédito, plazo, vencimiento, orden de
+  compra, quién retiró y saldo pendiente.
+- `mod-fiscal.js` y `nav.js`: «Comprobantes emitidos» de Facturación pasa a **Estado ante Hacienda** (clave,
+  XML y respuesta de Hacienda); el menú y los textos de ayuda se ajustaron a los dos nombres nuevos.
+
+## 2026-09-26 · POS · El crédito es un medio de pago más y la venta nunca se bloquea
+
+Desde «Controles de la caja» (22-set, commit 514b04f), un cliente con crédito abría el cobro en una hoja
+«Factura a crédito» sin medios de pago, y si tenía el crédito bloqueado por mora o límite la caja no dejaba
+cobrar. Ahora:
+
+- `mod-venta.js`: una sola hoja «Cobro de la factura». A clientes con crédito se les agrega el medio
+  **Crédito N días** (Alt+8), preseleccionado. Escoger efectivo, tarjeta, SINPE, etc. (o pagos mixtos) cobra
+  la factura de contado; escoger Crédito muestra orden de compra, quién retira, disponible y aviso del REP.
+- Si el crédito no procede (mora, límite, sin sobregiro autorizado) solo se deshabilita el medio Crédito con
+  una nota corta; la venta se cobra con cualquier otro medio. El seguimiento de la mora vive en Cobros.
+- La factura guarda la condición según el medio escogido; el sobregiro solo se consume si fue a crédito.
+- Se conserva el resto de ese commit: pagos mixtos, turno obligatorio, arqueo ciego y autorización de margen.
+
 ## 2026-09-23 · Cobros y pagos + Nómina · Pagos al banco: una sola bandeja para proveedores y planilla
 
 El archivo plano del Banco Nacional es el mismo para proveedores y para planilla, así que el proceso de pago

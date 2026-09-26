@@ -795,17 +795,47 @@
   });
 
   /* ═════════════════════════════════════════════════════════════
-     5 · DOCUMENTOS Y DEVOLUCIONES — Documentos emitidos ·
+     5 · DOCUMENTOS Y DEVOLUCIONES — Historial de ventas ·
          Devolver mercadería · Notas de crédito
      ═════════════════════════════════════════════════════════════ */
   const docF = { tipo: "Todos", loc: "Todos", q: "" };
   const filtrarDocs = () => {
     let rows = D.documentos.filter(d => docF.tipo === "Todos" || d.tipo === docF.tipo);
     if (docF.loc !== "Todos") rows = rows.filter(d => d.locId === docF.loc);
-    if (docF.q) rows = rows.filter(d => norm(d.cons + " " + cliNom(d.clienteId)).includes(norm(docF.q)));
+    if (docF.q) rows = rows.filter(d => norm(d.cons + " " + cliNom(d.clienteId) + " " + (d.vendedor || "")).includes(norm(docF.q)));
     return rows.slice(0, 160);
   };
   const hacTag = d => (d.hacienda === "Aceptado" ? tag("Aceptado", "ok", "check") : tag(d.hacienda, d.hacienda === "Rechazado" ? "cr" : "wa", "alert"));
+  /* cómo se pagó: crédito con su plazo y vencimiento, o cada pago con su referencia */
+  /* medios de una venta: a crédito con abono al facturar se ve «Efectivo + Crédito» */
+  const pagoTxt = d => d.condicion === "Crédito"
+    ? (d.abonos && d.abonos.length ? d.abonos.map(x => x.medio).join(" + ") + " + Crédito" : "Crédito")
+    : D.mediosTxt(d);
+  function cobroDoc(d) {
+    if (d.tipo === "NC") return "";
+    const cl = D.cliById[d.clienteId];
+    if (d.condicion === "Crédito") {
+      const plazo = cl ? cl.plazo : 0;
+      const ab = d.abonos || [], abTot = ab.reduce((s, x) => s + x.monto, 0);
+      return card({ title: "Cómo se pagó", hint: ab.length ? "abono al facturar + crédito" : "", body: (ab.length ? ab.map(x => `
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--hair-2)">
+        <span>Abono en ${esc(x.medio)}${x.usd ? ` <span class="dim">· US$ ${dec(x.usd, 2)} × ₡${dec(x.tc, 2)}</span>` : ""}${x.ref ? ` <span class="dim">· ref. ${esc(x.ref)}</span>` : ""} <span class="dim">· REP ${esc(x.rep)}</span></span>
+        <span class="num b">${grp(x.monto)}</span></div>`).join("") + `
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:6px 0 10px;border-bottom:1px solid var(--hair-2)">
+        <span>A crédito</span><span class="num b">${grp(d.total - abTot)}</span></div>` : "") + kvs([
+        ["Condición", "Crédito a " + plazo + " días"],
+        ["Vence", fecha(new Date(d.fecha.getTime() + plazo * 86400000))],
+        ["Orden de compra", d.ordenCompra ? esc(d.ordenCompra) : "—"],
+        ["Retiró", d.retira ? esc(d.retira) : "—"],
+        ["Saldo pendiente", d.saldo ? c(d.saldo) : "Pagada"]
+      ]) });
+    }
+    const pagos = d.pagos && d.pagos.length ? d.pagos : [{ medio: d.medio, monto: d.total }];
+    return card({ title: "Cómo se pagó", hint: pagos.filter(x => !x.vuelto).length > 1 ? "pago mixto" : "", body: pagos.map(x => `
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--hair-2)">
+        <span>${x.vuelto ? "Vuelto en efectivo (colones)" : esc(x.medio)}${x.usd ? ` <span class="dim">· US$ ${dec(x.usd, 2)} × ₡${dec(x.tc, 2)}</span>` : ""}${x.ref ? ` <span class="dim">· ref. ${esc(x.ref)}</span>` : ""}</span>
+        <span class="num b">${x.monto < 0 ? "−" : ""}${grp(Math.abs(x.monto))}</span></div>`).join("") });
+  }
   function detalleDoc(d) {
     if (!d) return;
     const f = V.FICHA[d.clienteId];
@@ -814,7 +844,8 @@
       sub: `${cliNom(d.clienteId)} · ${fh(d.fecha)} · ${locNom(d.locId)} caja ${d.term} · ${d.vendedor}`,
       body: `<div class="card" style="margin-bottom:14px"><div class="card-b flush"><div class="strip">
           <div class="cell"><div class="cl">Clave numérica</div><div class="cv num" style="font-size:11px;word-break:break-all">${esc(d.clave)}</div></div>
-          <div class="cell"><div class="cl">${d.tipo === "NC" ? "Concepto" : "Condición"}</div><div class="cv">${d.tipo === "NC" ? esc(d.concepto || "—") + (d.refiere ? `<span class="sub ui">sobre ${esc(d.refiere)}</span>` : "") : esc(d.condicion) + " · " + esc(D.mediosTxt(d))}</div></div>
+          <div class="cell"><div class="cl">${d.tipo === "NC" ? "Concepto" : "Condición"}</div><div class="cv">${d.tipo === "NC" ? esc(d.concepto || "—") + (d.refiere ? `<span class="sub ui">sobre ${esc(d.refiere)}</span>` : "") : d.condicion === "Crédito" ? esc(pagoTxt(d)) : "Contado · " + esc(D.mediosTxt(d))}</div></div>
+          <div class="cell"><div class="cl">Vendedor</div><div class="cv">${esc(d.vendedor || "—")}</div></div>
           <div class="cell"><div class="cl">Hacienda</div><div class="cv">${hacTag(d)}</div></div>
           ${d.tipo === "NC" ? `<div class="cell"><div class="cl">Reintegro</div><div class="cv">${esc(d.reintegro || "—")}</div></div>` : `<div class="cell"><div class="cl">Saldo</div><div class="cv num">${d.saldo ? c(d.saldo) : "Pagada"}</div></div>`}
         </div></div></div>
@@ -830,7 +861,7 @@
         ], rows: d.lineas
       })}
         <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;margin-top:16px">
-          <div class="mut" style="font-size:12.5px;line-height:1.6">El XML firmado y la respuesta de Hacienda se guardan cinco años en el archivo de la empresa. El PDF no lleva ningún enlace que abra el sistema.${f ? " Los comprobantes salen a " + esc(f.correoFE) + "." : ""}</div>
+          <div>${cobroDoc(d)}<div class="mut" style="font-size:12.5px;line-height:1.6;margin-top:12px">El XML firmado y la respuesta de Hacienda se guardan cinco años en el archivo de la empresa. El PDF no lleva ningún enlace que abra el sistema.${f ? " Los comprobantes salen a " + esc(f.correoFE) + "." : ""}</div></div>
           <div>
             <div class="totline s"><span class="tl">Subtotal sin IVA</span><span class="tv">${grp(d.grav + d.exe)}</span></div>
             ${d.desc ? `<div class="totline s"><span class="tl">Incluye descuentos por</span><span class="tv">${grp(d.desc)}</span></div>` : ""}
@@ -852,9 +883,9 @@
     const rows = filtrarDocs();
     const tot = rows.reduce((s, d) => s + (d.tipo === "NC" ? -d.total : d.total), 0);
     v.innerHTML = card({
-      title: "Comprobantes electrónicos", hint: rows.length + " en pantalla",
+      title: "Historial de ventas", hint: rows.length + " en pantalla · clic en una fila para ver el detalle",
       actions: `${seg("dtipo", ["Todos", "FE", "TE", "NC"], docF.tipo)}
-        <input class="inp" id="dq" placeholder="Consecutivo o cliente" value="${esc(docF.q)}" style="width:200px">
+        <input class="inp" id="dq" placeholder="Consecutivo, cliente o vendedor" value="${esc(docF.q)}" style="width:200px">
         <select class="inp" id="dloc" style="width:auto"><option>Todos</option>${D.tiendas.map(l => `<option value="${l.id}" ${docF.loc === l.id ? "selected" : ""}>${esc(l.nom)}</option>`).join("")}</select>`,
       body: table({
         h: "calc(100dvh - 330px)", onRow: true,
@@ -865,7 +896,7 @@
           { t: "Local", fmt: r => esc(locNom(r.locId)) },
           { t: "Cliente", fmt: r => esc(cliNom(r.clienteId)) },
           { t: "Vendedor", fmt: r => `<span class="mut">${esc(r.vendedor)}</span>` },
-          { t: "Cond.", fmt: r => esc(r.tipo === "NC" ? r.concepto || "—" : r.condicion) },
+          { t: "Pago", fmt: r => esc(r.tipo === "NC" ? r.concepto || "—" : pagoTxt(r)) },
           { t: "Total", r: true, cls: "mono", fmt: r => `<b>${r.tipo === "NC" ? "−" : ""}${grp(r.total)}</b>` },
           { t: "Hacienda", fmt: hacTag }
         ],
@@ -1030,7 +1061,7 @@
       }
     },
     tabs: [
-      { id: "emitidos", t: "Documentos emitidos", sub: () => D.documentos.length + " comprobantes electrónicos · buscar, reimprimir, reenviar", render: emitidos, wire: emitidosWire },
+      { id: "emitidos", t: "Historial de ventas", sub: () => D.documentos.length + " facturas, tiquetes y notas de crédito · detalle, vendedor, pago, reimprimir, reenviar", render: emitidos, wire: emitidosWire },
       {
         id: "devolver", t: "Devolver mercadería", sub: "De la factura a la nota de crédito, con la firma del cliente",
         badge: () => { const n = V.BOLETAS.filter(b => b.estado === "Por aprobar").length; return { n, k: "wa", l: n + " por aprobar" }; },
