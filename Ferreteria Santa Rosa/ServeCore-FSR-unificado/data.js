@@ -289,6 +289,14 @@
     id: "P" + (i + 1), ced: p[0], nom: p[1], plazo: p[2], cuenta: p[3], linea: p[4], saldo: 0
   }));
   const provById = {}; proveedores.forEach(p => provById[p.id] = p);
+  /* negociaciones vigentes por proveedor (COM-011): la normal y, si la hay, la
+     de pronto pago. Mismos términos que usa Cobros y pagos para programar pagos. */
+  const PRONTO_NEG = { P1: [2, 10], P2: [1.5, 8], P4: [1, 7], P7: [3, 15], P10: [2, 10] };
+  proveedores.forEach(p => {
+    p.negociaciones = [{ id: "N", t: "Normal", plazo: p.plazo, desc: 0 }];
+    const x = PRONTO_NEG[p.id];
+    if (x) p.negociaciones.push({ id: "PP", t: "Pronto pago", plazo: x[1], desc: x[0] });
+  });
 
   /* ── sesión ─────────────────────────────────────────────────── */
   /* quién está usando el sistema. En la demo se puede cambiar desde el
@@ -297,7 +305,10 @@
   const PERSONAS = [
     { id: "andrey", nom: "Andrey Ramírez Solano", corto: "Andrey Ramírez", rol: "TI", cargo: "Encargado de TI", ini: "AR", ip: "10.2.14.8" },
     { id: "sonia", nom: "Sonia Calderón Ruiz", corto: "Sonia Calderón", rol: "Contabilidad", cargo: "Contadora general", ini: "SC", ip: "10.2.14.31" },
-    { id: "adrian", nom: "Adrián Vindas Mora", corto: "Adrián Vindas", rol: "Gerencia", cargo: "Gerente general", ini: "AV", ip: "10.2.14.2" }
+    { id: "adrian", nom: "Adrián Vindas Mora", corto: "Adrián Vindas", rol: "Gerencia", cargo: "Gerente general", ini: "AV", ip: "10.2.14.2" },
+    /* Compras: quien compra no recibe, y quien recibe no registra la factura (separación de funciones) */
+    { id: "oscar", nom: "Óscar Jiménez Ureña", corto: "Óscar Jiménez", rol: "Proveeduría", cargo: "Jefe de proveeduría", ini: "OJ", ip: "10.2.14.22" },
+    { id: "kevin", nom: "Kevin Solano Mata", corto: "Kevin Solano", rol: "Bodega", cargo: "Jefe de bodega · CEDI", ini: "KS", ip: "10.2.14.40" }
   ];
   const sesion = { ...PERSONAS[0] };
   const cambiarSesion = id => { const p = PERSONAS.find(x => x.id === id); if (p) Object.assign(sesion, p); return sesion; };
@@ -868,7 +879,10 @@
   const ivaIncluido = (monto, tarifa) => Math.round(monto - sinIva(monto, tarifa));
   function crearOC(provId, locId, items, estado, fecha) {
     seq.OC++;
-    const lineas = items.map(it => ({ artId: it.a, cant: it.c, costo: it.k || artById[it.a].costo, var: it.v || 0 }));
+    /* el consecutivo nunca se repite (la orden de la demo lleva uno fijo) */
+    while (compras.some(c => c.cons === "OC-2026-" + pad(seq.OC, 6))) seq.OC++;
+    /* el costo de la línea sale de su variación contra el costo vigente (o viene dado) */
+    const lineas = items.map(it => ({ artId: it.a, cant: it.c, costo: it.k || Math.round(artById[it.a].costo * (1 + (it.v || 0) / 100)), var: it.v || 0 }));
     const oc = {
       id: "OC-" + seq.OC, cons: "OC-2026-" + pad(seq.OC, 6), provId, locId, fecha: fecha || dayAgo(ri(1, 20)),
       lineas, ...totalesCompra(lineas),
@@ -930,12 +944,19 @@
     const dias = ri(0, 9);
     /* si viene de una orden, trae la mezcla de tarifas de esa orden; si no, la general */
     const deEse = compras.filter(c => c.provId === p.id);
-    const oc = deEse.length && chance(0.6) ? pick(deEse) : null;
+    let oc = deEse.length && chance(0.6) ? pick(deEse) : null;
     const tipo = chance(0.86) ? "Factura electrónica" : chance(0.5) ? "Nota de crédito" : "Tiquete electrónico";
+    /* una sola factura por orden, con las líneas que el proveedor facturó: el
+       precio de la factura es el real (si la orden trae un costo mal digitado,
+       la factura no lo repite) */
+    if (oc && (tipo !== "Factura electrónica" || recibidos.some(x => x.ocLigada === oc.cons))) oc = null;
+    const xml = oc ? oc.lineas.map(l => ({ artId: l.artId, cant: l.cant, costo: Math.abs(l.var) > 15 ? artById[l.artId].costo : l.costo })) : null;
+    const tx = xml ? totalesCompra(xml) : null;
     recibidos.push({
       id: "R" + i, clave: "506" + pad(ri(1, 28), 2) + "092631" + p.ced.replace(/-/g, "") + pad(ri(1, 999999), 6),
-      provId: p.id, fecha: dayAgo(dias), monto,
-      iva: oc ? Math.round(monto * oc.iva / oc.total) : ivaIncluido(monto, 13),
+      provId: p.id, fecha: dayAgo(dias), monto: tx ? tx.total : monto,
+      iva: tx ? tx.iva : ivaIncluido(monto, 13),
+      lineas: xml,
       tipo,
       estado: i < 47 ? "Sin aceptar" : pick(["Aceptado", "Aceptado parcial", "Rechazado"]),
       venceEn: 8 - dias,
@@ -951,6 +972,10 @@
     if (!/Aceptado/.test(estado) || r.asiento) return r;
     const oc = r.ocLigada && compras.find(c => c.cons === r.ocLigada);
     if (oc && oc.estado === "Aplicada") { r.asiento = "en " + oc.cons; return r; }
+    /* la orden todavía no se registra como compra: el mensaje de receptor sale,
+       pero la cuenta por pagar y el crédito fiscal entran una sola vez, cuando
+       Compras registra la compra con esta factura */
+    if (oc && oc.estado !== "Anulada") { r.esperaCompra = oc.cons; return r; }
     const base = r.monto - r.iva, nc = /crédito/.test(r.tipo);
     const det = [
       { cta: "1-01-04-001", debe: nc ? 0 : base, haber: nc ? base : 0 },
@@ -962,6 +987,26 @@
     return r;
   }
   recibidos.filter(r => /Aceptado/.test(r.estado)).forEach(r => aceptarRecibido(r, r.estado));
+
+  /* costo promedio ponderado, uno para toda la empresa (INV-002): lo que hay
+     en negativo cuenta como cero (INV-003), así la compra no arrastra un costo falso */
+  function costoPromedio(artId, cant, costo) {
+    const a = artById[artId];
+    if (!a || !(cant > 0)) return null;
+    const q = Object.values(existencias[artId] || {}).reduce((s, e) => s + Math.max(0, e.cant), 0);
+    const antes = a.costo;
+    a.costo = Math.round((q * antes + cant * costo) / (q + cant));
+    return { antes, despues: a.costo, existencia: q };
+  }
+  /* ¿el comprobante recibido cuadra con su compra registrada? */
+  function cotejoRecibido(r) {
+    const oc = r && r.ocLigada && compras.find(c => c.cons === r.ocLigada);
+    if (!oc) return { ok: false, motivo: "Sin orden de compra" };
+    if (oc.estado !== "Aplicada") return { ok: false, oc, motivo: "La compra de " + oc.cons + " todavía no se registra" };
+    const aceptado = oc.montoAceptado != null ? oc.montoAceptado : oc.total;
+    if (Math.abs(r.monto - aceptado) > Math.max(1000, aceptado * 0.005)) return { ok: false, oc, motivo: "El monto no coincide con la compra registrada" };
+    return { ok: true, oc };
+  }
 
   /* ── cuentas por pagar ──────────────────────────────────────── */
   const cxp = [];
@@ -1278,7 +1323,7 @@
     cuentas, ctaByCod, asientos, asentar,
     ahora, exigePeriodoAbierto, aceptarRecibido, INICIO, migrados, registrarApertura, get cargando() { return cargando; }, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
-    compras, recibidos, cxp, crearOC,
+    compras, recibidos, cxp, crearOC, costoPromedio, cotejoRecibido,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,
     banco, traslados, ajustes, conteos, rutas, tarifario, seq,
     ventasDelDia, serieSemana, ventaPorLocal, margenPorFamilia, bajoMinimo, quiebres,

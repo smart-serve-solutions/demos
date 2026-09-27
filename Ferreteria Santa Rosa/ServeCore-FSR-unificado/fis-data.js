@@ -322,7 +322,9 @@
   }
   function aceptarRecibidos() {
     let n = 0;
-    D.recibidos.forEach(r => { if (r.estado === "Sin aceptar" && r.ocLigada) { D.aceptarRecibido(r, "Aceptado"); n++; } });
+    /* solo los que cuadran contra su compra registrada (orden, recepción y monto);
+       los demás quedan para que alguien los revise uno por uno */
+    D.recibidos.forEach(r => { if (r.estado === "Sin aceptar" && D.cotejoRecibido(r).ok) { D.aceptarRecibido(r, "Aceptado"); n++; } });
     return n;
   }
   /* asiento de un cobro: entra a caja si es efectivo y al banco lo demás; el

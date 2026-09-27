@@ -1,5 +1,99 @@
 # Cambios
 
+## 2026-09-26 · Inventarios · Campo de proveedores del sugerido más compacto
+
+- `mod-inv.js` (Reposición › Sugerido de compra): las etiquetas de proveedores van dentro del mismo campo,
+  con el texto de búsqueda a continuación (mide lo mismo que Local, Familia y Días, y crece solo si hay muchas
+  etiquetas). El campo comparte fila con «Sin ventas atípicas», «Con temporadas activas» y «Generar sugerido»,
+  así la tarjeta de filtros baja una fila. Clic en cualquier parte del campo pone el cursor; Retroceso con el
+  texto vacío quita la última etiqueta.
+
+Archivos: `mod-inv.js`.
+
+## 2026-09-26 · Inventarios + Compras · Proveedores del sugerido con buscador
+
+- `mod-inv.js` (Reposición › Sugerido de compra): las casillas de proveedores (una por proveedor, no escala a
+  cientos) pasan a un buscador por nombre, cédula o línea; cada proveedor elegido queda como etiqueta con ✕.
+  Sin etiquetas, el sugerido toma todos los proveedores, como antes. Si Compras no cargara, vuelven las casillas.
+- `mod-compra.js`: expone su buscador en `A.compras.ui` para que lo usen las pantallas vecinas.
+- Queda como idea, sin hacer: cambiar el proveedor por línea en el resultado del sugerido y proveedores
+  alternos por artículo en el catálogo.
+
+Archivos: `mod-inv.js`, `mod-compra.js`.
+
+## 2026-09-26 · Compras / Proveeduría · Buscadores, cotizar desde cero y alta de proveedores
+
+Revisión del usuario sobre la versión anterior.
+
+- **Buscador con resultados al digitar** (`mod-compra.js`): reemplaza los combos donde la lista es larga.
+  Proveedor de la orden nueva, artículos de la orden, artículos e invitados de la cotización. Busca por
+  nombre, código, cédula, marca, línea o código de barras; flechas y Enter eligen; el lector (código exacto
+  o `24*código`) entra directo. Con el campo vacío sugiere lo que se le compra a ese proveedor o los
+  proveedores con más compras. Antes el campo de artículos solo reaccionaba a un código exacto con Enter.
+- **Cotizar a proveedores** se arma completo en su propia opción: bandeja de cotizaciones y **Nueva
+  cotización**. Recorrido Artículos → Proveedores → Envío y respuestas → Adjudicación, con la barra «qué
+  sigue». Los artículos se agregan con el buscador, se pegan desde Excel o se traen del sugerido de compra
+  (vuelven a la misma cotización en borrador). Se invita a **cualquier** proveedor con el buscador;
+  los sugeridos (los que surten esos artículos y los de mejor cumplimiento) son botones de un toque. Borrador
+  editable y descartable hasta enviarse.
+- **Proveedores**: búsqueda en la lista, **Nuevo proveedor** y **Editar datos** en el mismo cajón (cédula,
+  razón social, línea, plazo, IBAN, contacto, correo y WhatsApp). La cédula no cambia y la cuenta bancaria se
+  cambia en Cobros y pagos; un proveedor no se borra, se inactiva (SEG-007) y deja de aparecer en órdenes y
+  cotizaciones. Desde la orden se abre el mismo cajón sin salir (COM-018).
+- Botón «Desde el sugerido» de Órdenes pasa a «Sugerido de compra».
+
+Archivos: `mod-compra.js`.
+
+## 2026-09-26 · Compras / Proveeduría · Ciclo completo de la compra, auditado contra la matriz
+
+Auditoría del módulo (auditor de proveeduría) y corrección. Antes: la orden no se creaba ni se anulaba, la
+recepción era estática, «Aplicar compra» metía al kardex el 100 % de lo pedido sin factura ni recepción, el
+costo promedio no se recalculaba y un XML aceptado antes de aplicar la orden duplicaba la cuenta por pagar.
+
+- **Menú por flujo** (`nav.js`): Comprar (Cotizar · Órdenes) → Recibir y registrar (Recepción · Registrar
+  compra) → Proveedores (· Importaciones, próximamente). Cubre COM-001 a COM-022, cada uno una vez.
+- **Órdenes de compra** (`mod-compra.js`): bandeja por estado (abiertas, por aprobar, por recibir, por registrar,
+  cerradas) y la orden con su recorrido y la barra «qué sigue». Registrada → Aprobada → Recibida (parcial) →
+  Aplicada · Anulada con motivo (COM-001, SIS-008). Líneas editables mientras está registrada, con Enter que baja
+  de línea, alta por código o escáner (`24*código`), plantilla pegada desde Excel con revisión previa (COM-015),
+  copia a otro local (COM-016), QR (COM-004), negociación y plazo especial con motivo (COM-011, COM-017), ficha
+  del proveedor en un cajón sin salir de la orden (COM-018), autoconsumo al gasto (COM-012), suma corrida a la
+  vista y tabla alta (COM-021). La variación se calcula contra el costo vigente; sobre ±15 % bloquea la aprobación
+  hasta corregir o que Gerencia autorice con motivo (COM-008). Aprobación masiva con resumen.
+- **Recepción en bodega**: escaneo real con foco permanente, multiplicador, pitido y aviso distinto para «bien»,
+  «excede lo pedido» y «no está en la orden»; recepción ciega opcional; «llenar con lo pedido» para contar por
+  excepción; lo no solicitado queda con trazabilidad sin crear artículo (COM-020); placa, transportista, sello y
+  fotos obligatorios al cerrar (COM-019); faltante queda pendiente o se cierra corto, sobrante se devuelve o se
+  acepta (COM-003, COM-006). **Reparto a los locales** con sugerido por mínimos y existencia de cada tienda, que
+  genera los traslados en tránsito con `INVX.crearTraslado` (COM-009).
+- **Registrar compra**: la factura del proveedor se toma del buzón (XML ligado a la orden) y se coteja en tres vías
+  pedido · recibido · facturado con tolerancia de precio. Entra al kardex lo recibido al precio de la factura,
+  se recalcula el costo promedio (negativo en cero), sale un asiento y una cuenta por pagar, el mensaje de receptor
+  es total o parcial y lo facturado de más queda como nota de crédito por pedir (COM-002, COM-005, FEL-003,
+  FEL-006, INV-002/003). Lo pendiente abre una orden aprobada por lo que falta (COM-007).
+- **Cotizar a proveedores**: preselección de invitados con plazo y cumplimiento, carga de respuestas, cuadro con
+  último costo y existencia, adjudicación por línea (sugerida, por precio o manual) con explicación calculada, y
+  crea las órdenes de verdad (COM-010, COM-013, COM-014).
+- **Proveedores**: negociaciones vigentes y desempeño de 90 días (a tiempo y completas, líneas surtidas, entrega
+  real contra prometida, variación de precio).
+- **Separación de funciones**: compra Proveeduría, aprueba Gerencia (nunca quien hizo la orden), recibe Bodega,
+  registra Proveeduría o Contabilidad (nunca quien recibió). Cada paso firma en la bitácora y en el historial de
+  la orden. La barra ofrece «Entrar como…» para la demo.
+- `data.js` (compartido, autorizado): Óscar Jiménez (Proveeduría) y Kevin Solano (Bodega) en la sesión;
+  `aceptarRecibido` ya no asienta el XML de una orden sin aplicar (la compra lo registra una sola vez);
+  `D.costoPromedio` y `D.cotejoRecibido`; el costo de cada línea sembrada sale de su variación; un XML por orden,
+  con sus líneas; negociaciones por proveedor (mismos términos que `PRONTO` de Cobros); el consecutivo de orden
+  nunca se repite (antes el sugerido podía crear otra OC-2026-004412).
+- `fis-data.js` (autorizado): «Aceptar todos» en Comprobantes recibidos solo acepta los que cuadran con su compra
+  registrada.
+- `mod-inv.js` (autorizado): «Cotizar a proveedores» del sugerido crea la subasta en Compras en vez de solo avisar.
+
+Pendiente fuera de alcance: `con-auto.js` (Contabilidad) sigue aceptando en bloque los comprobantes con orden sin
+cotejar; `mod-cobros.js` podría leer `proveedor.negociaciones` en vez de su `PRONTO`; el tope de ±15 % de Sistema ›
+Parámetros todavía es solo de lectura.
+
+Archivos: `mod-compra.js`, `nav.js`, `data.js`, `fis-data.js`, `mod-inv.js`.
+
 ## 2026-09-26 · POS + Ventas · Crédito con abono al facturar
 
 Al combinar un pago (p. ej. efectivo) con Crédito, el pago se descartaba: la factura salía a crédito por el

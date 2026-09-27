@@ -1263,6 +1263,18 @@
          Temporadas
      ═════════════════════════════════════════════════════════════ */
   const rp = { locId: "CD", fam: "all", provs: [], dias: 30, excluirAtipicas: true, temporadas: true, res: null };
+  /* proveedores del sugerido: buscador de Compras y etiquetas con ✕ (escala a cientos de proveedores) */
+  const CU = () => (A.compras && A.compras.ui) || null;
+  /* un solo campo con las etiquetas adentro y el texto a continuación (patrón de selección múltiple):
+     mide lo mismo que los demás filtros y crece solo si hay muchas etiquetas */
+  function provTags() {
+    const u = CU();
+    return `<div id="rpBox" class="inp" style="position:relative;display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 8px;min-height:38px;cursor:text">
+      ${rp.provs.map(id => `<span class="tag acc" style="gap:5px;padding-right:5px">${esc(u.provCorto(id))}<button type="button" data-rpx="${id}" aria-label="Quitar ${esc(provNom(id))}" style="all:unset;cursor:pointer;display:inline-flex;border-radius:50%">${icon("x", 'style="width:13px;height:13px"')}</button></span>`).join("")}
+      <input id="rpP" type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rpPL" aria-label="Agregar proveedor"
+        placeholder="${rp.provs.length ? "Agregar otro…" : "Todos · buscar por nombre, cédula o línea"}" style="flex:1;min-width:150px;border:0;padding:4px 2px;background:transparent;box-shadow:none;outline:none;font-size:13.5px">
+      <div id="rpPL" role="listbox" style="position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:40;cursor:default"></div></div>`;
+  }
   function sugerido(v) {
     const provsL = D.proveedores;
     v.innerHTML = `<div class="wrap">
@@ -1273,13 +1285,18 @@
             ${U.field("Familia", `<select id="rpF"><option value="all">Todas</option>${D.familias.filter(f => !f.servicio).map(f => `<option value="${f.id}" ${rp.fam === f.id ? "selected" : ""}>${esc(f.nom)}</option>`).join("")}</select>`)}
             ${U.field("Días de inventario", `<select id="rpD">${[15, 30, 45, 60].map(d => `<option ${rp.dias === d ? "selected" : ""}>${d}</option>`).join("")}</select>`)}
           </div>
-          <div style="margin-top:12px">${U.field("Proveedores (varios a la vez)", `<div style="display:flex;flex-wrap:wrap;gap:6px">${provsL.map(p => `<label class="chipck"><input type="checkbox" value="${p.id}" ${rp.provs.indexOf(p.id) >= 0 ? "checked" : ""}><span>${esc(p.nom.replace(/ (S\.A\.|C\.R\.|Costa Rica|de Costa Rica)$/g, "").replace(" Costa Rica", ""))}</span></label>`).join("")}</div>`)}</div>
+          ${CU() ? `<div style="display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">
+            <div style="flex:1 1 380px;min-width:0">${U.field("Proveedores", provTags())}</div>
+            <label class="chipck"><input type="checkbox" id="rpAt" ${rp.excluirAtipicas ? "checked" : ""}><span>Sin ventas atípicas</span></label>
+            <label class="chipck"><input type="checkbox" id="rpTe" ${rp.temporadas ? "checked" : ""}><span>Con temporadas activas</span></label>
+            <button class="btn pri" id="rpGen">${icon("sparkle")}Generar sugerido</button>
+          </div>` : `<div style="margin-top:12px">${U.field("Proveedores (varios a la vez)", `<div style="display:flex;flex-wrap:wrap;gap:6px">${provsL.map(p => `<label class="chipck"><input type="checkbox" value="${p.id}" ${rp.provs.indexOf(p.id) >= 0 ? "checked" : ""}><span>${esc(p.nom.replace(/ (S\.A\.|C\.R\.|Costa Rica|de Costa Rica)$/g, "").replace(" Costa Rica", ""))}</span></label>`).join("")}</div>`)}</div>
           <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:14px">
             <label class="chipck"><input type="checkbox" id="rpAt" ${rp.excluirAtipicas ? "checked" : ""}><span>Sin ventas atípicas</span></label>
             <label class="chipck"><input type="checkbox" id="rpTe" ${rp.temporadas ? "checked" : ""}><span>Con temporadas activas</span></label>
             <div style="flex:1"></div>
             <button class="btn pri" id="rpGen">${icon("sparkle")}Generar sugerido</button>
-          </div>`
+          </div>`}`
     })}
         <div id="rpRes">${rp.res ? resultado() : card({ body: empty("filter", "Escoja y presione generar", "La pantalla no consulta nada hasta que usted lo pide, así una consulta pesada nunca frena la operación de los siete locales.") })}</div>
       </div>`;
@@ -1298,7 +1315,7 @@
         </div>
         ${card({
       title: "Sugerido de compra", hint: "redondeado a la presentación en que se compra · ordenado por cobertura",
-      actions: `<button class="btn sm" id="rpWa">${icon("chat")}Cotizar por WhatsApp</button><button class="btn sm pri" id="rpOc">${icon("truck")}Crear órdenes de compra</button>`,
+      actions: `<button class="btn sm" id="rpWa">${icon("chat")}Cotizar a proveedores</button><button class="btn sm pri" id="rpOc">${icon("truck")}Crear órdenes de compra</button>`,
       body: table({
         h: "calc(100dvh - 420px)",
         cols: [
@@ -1329,9 +1346,30 @@
   function sugeridoWire(v) {
     const leer = () => {
       rp.locId = $("#rpL", v).value; rp.fam = $("#rpF", v).value; rp.dias = +$("#rpD", v).value;
-      rp.provs = $$(".chipck input[value^='P']:checked", v).map(x => x.value);
+      if (!CU()) rp.provs = $$(".chipck input[value^='P']:checked", v).map(x => x.value);
       rp.excluirAtipicas = $("#rpAt", v).checked; rp.temporadas = $("#rpTe", v).checked;
     };
+    const u = CU();
+    if (u) {
+      u.wireBuscador(v, "rpP", {
+        buscar: q => u.buscaProvs(q).filter(p => rp.provs.indexOf(p.id) < 0).map(u.provItem),
+        vacio: q => "Ningún proveedor coincide con «" + q + "».",
+        elegir: r => {
+          leer(); rp.provs.push(r.id); A.refresh();
+          const b = $("#rpP", document); if (b) b.focus();
+        }
+      });
+      const quita = id => { leer(); rp.provs.splice(rp.provs.indexOf(id), 1); A.refresh(); const b = $("#rpP", document); if (b) b.focus(); };
+      $$("[data-rpx]", v).forEach(b => b.addEventListener("click", e => { e.stopPropagation(); quita(b.dataset.rpx); }));
+      const box = $("#rpBox", v), inp = $("#rpP", v);
+      if (box && inp) {
+        /* todo el campo lleva el foco al texto; Retroceso con el texto vacío quita la última etiqueta */
+        box.addEventListener("click", e => { if (!e.target.closest("[data-rpx]") && !e.target.closest("#rpPL")) inp.focus(); });
+        inp.addEventListener("focus", () => { box.style.borderColor = "var(--accent)"; box.style.boxShadow = "0 0 0 3px var(--accent-soft)"; });
+        inp.addEventListener("blur", () => { box.style.borderColor = ""; box.style.boxShadow = ""; });
+        inp.addEventListener("keydown", e => { if (e.key === "Backspace" && !inp.value && rp.provs.length) { e.preventDefault(); quita(rp.provs[rp.provs.length - 1]); } });
+      }
+    }
     $("#rpGen", v).addEventListener("click", () => {
       leer();
       rp.res = I.sugerido(rp);
@@ -1345,6 +1383,12 @@
       A.refresh();
     });
     const wa = $("#rpWa", v); if (wa) wa.addEventListener("click", () => {
+      /* el sugerido pasa a Compras › Cotizar a proveedores como una subasta lista para enviar */
+      if (A.compras && A.compras.nuevaSubasta) {
+        const id = A.compras.nuevaSubasta(rp.res.map(x => ({ artId: x.a.id, cant: x.sug })), rp.locId);
+        toast("Lista para cotizar", id + " · " + rp.res.length + " artículos. Escoja a quién enviarla.", "ok");
+        return A.go("subasta");
+      }
       const n = new Set(rp.res.map(x => x.a.provId)).size;
       toast("Solicitud de cotización enviada", "Por WhatsApp a " + n + " proveedores. Las respuestas llegan a Compras › Cotizar a proveedores.", "ok");
     });

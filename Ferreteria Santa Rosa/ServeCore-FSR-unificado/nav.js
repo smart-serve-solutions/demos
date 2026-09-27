@@ -24,8 +24,8 @@
     // { id: "infra", t: "Infraestructura", ic: "server" },
     { id: "contab", t: "Contabilidad", ic: "scale" },
     { id: "rrhh", t: "Nómina y RRHH", ic: "users" },
-    { id: "logistica", t: "Logística y Transporte", ic: "route" },
     { id: "taller", t: "Taller", ic: "wrench" },
+    { id: "logistica", t: "Logística y Transporte", ic: "route" },
     { id: "produccion", t: "Producción", ic: "factory" },
     { id: "migracion", t: "Migración de Datos", ic: "upload" },
   ];
@@ -860,55 +860,61 @@
         ],
       },
     ],
+    /* Compras en el orden del trabajo: comprar → recibir y registrar →
+       proveedores. Varios requerimientos viven en la misma pantalla. */
     compras: [
       {
-        t: "Órdenes de compra",
-        ic: "truck",
+        t: "Comprar",
+        ic: "scale",
         items: [
           {
+            t: "Cotizar a proveedores",
+            d: "Subasta: lista, respuestas sin digitar y adjudicación por línea",
+            reqs: ["COM-010", "COM-013", "COM-014"],
+            kw: "subasta cotizacion comparativo adjudicar",
+            screen: "subasta",
+          },
+          {
             t: "Órdenes de compra",
-            reqs: ["COM-001", "COM-002", "COM-007", "COM-004"],
+            d: "Bandeja, aprobación, plantilla, copia a otro local, QR y autoconsumo",
+            reqs: ["COM-001", "COM-004", "COM-007", "COM-008", "COM-012", "COM-015", "COM-016", "COM-017", "COM-018", "COM-021"],
+            kw: "orden de compra aprobar anular plantilla copiar qr plazo variacion de costo autoconsumo",
             screen: "ordenes",
           },
         ],
       },
       {
-        t: "Recepción en bodega",
+        t: "Recibir y registrar",
         ic: "scan",
         items: [
           {
             t: "Recepción en bodega",
-            reqs: ["COM-003", "COM-006", "COM-005"],
-            screen: "ordenes",
+            d: "Escáner contra la orden, diferencias, evidencia y reparto a los locales",
+            reqs: ["COM-003", "COM-006", "COM-009", "COM-019", "COM-020"],
+            kw: "recepcion bodega escaner faltantes sobrantes no solicitado placa sello distribucion traslados",
+            screen: "recepcion",
+          },
+          {
+            t: "Registrar compra",
+            d: "Cotejo de tres vías con el XML del proveedor",
+            reqs: ["COM-002", "COM-005"],
+            kw: "compra factura xml cotejo tres vias mensaje de receptor costo promedio",
+            screen: "registrar-compra",
           },
         ],
       },
       {
-        t: "Proveedores y negociación",
+        t: "Proveedores",
         ic: "users",
         items: [
           {
-            t: "Múltiples negociaciones por proveedor",
+            t: "Proveedores",
+            d: "Negociaciones, desempeño, órdenes y estado de cuenta",
             reqs: ["COM-011"],
+            kw: "proveedor ficha negociacion pronto pago desempeño cumplimiento",
             screen: "proveedores",
           },
-          {
-            t: "Solicitud de cotización a varios proveedores",
-            reqs: ["COM-010"],
-            screen: "subasta",
-          },
-        ],
-      },
-      {
-        t: "Costos y distribución",
-        ic: "scale",
-        items: [
-          { t: "Control de variación de costo", reqs: ["COM-008"] },
-          { t: "Autoconsumo", reqs: ["COM-012"] },
-          {
-            t: "Distribución de mercadería entre sucursales",
-            reqs: ["COM-009"],
-          },
+          { t: "Importaciones", reqs: ["COM-022"] },
         ],
       },
     ],
@@ -1864,16 +1870,28 @@
       d: "Comparar precios antes de adjudicar",
     },
     ordenes: {
-      t: "Órdenes y recepción",
+      t: "Órdenes de compra",
       ic: "truck",
       g: "Compras",
-      d: "Orden de compra y recepción en bodega",
+      d: "Bandeja, aprobación, plantilla, copia y QR",
+    },
+    recepcion: {
+      t: "Recepción en bodega",
+      ic: "scan",
+      g: "Compras",
+      d: "Escáner contra la orden, evidencia y reparto",
+    },
+    "registrar-compra": {
+      t: "Registrar compra",
+      ic: "file",
+      g: "Compras",
+      d: "Cotejo de tres vías con el XML",
     },
     proveedores: {
       t: "Proveedores",
       ic: "users",
       g: "Compras",
-      d: "Ficha, plazo y estado de cuenta",
+      d: "Negociaciones, desempeño y estado de cuenta",
     },
     cxp: {
       t: "Análisis de pagos a proveedores",
