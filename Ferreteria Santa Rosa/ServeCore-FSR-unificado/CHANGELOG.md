@@ -1,5 +1,31 @@
 # Cambios
 
+## 2026-09-28 · Integraciones e IA · Agente de WhatsApp real y panel de integraciones
+
+- **El agente de WhatsApp trabaja con el sistema**, no con un guion:
+  - Cotiza con el inventario y los precios reales (con IVA incluido y la exoneración del cliente), y dice dónde
+    hay existencia.
+  - **Aparta** mercadería (compromete la existencia del local, con número de reserva).
+  - **Crea pedidos** reales en Ventas › Pedidos: a crédito si el cliente tiene disponible y no está bloqueado; si
+    no, con enlace de pago.
+  - **Aplica pagos** con su REP y su asiento: primero a un pedido que espera ese monto, si no a las facturas más
+    viejas. Solo toma un monto con signo de colones o separador de miles (no confunde el número de una factura).
+  - Reconoce al cliente por su **cédula** en una conversación nueva.
+  - **Escala a una persona** lo que no le toca: pedidos de más de ₡3,2 M (proveeduría), pagos de más de ₡500 000 o
+    que no calzan (contabilidad), precio por volumen y reclamos (jefatura de piso). Escalada, deja de responder.
+  - **Tomar la conversación** funciona: el agente se calla, la persona de la sesión responde con su nombre (y puede
+    simular al cliente), queda en la bitácora, y la puede devolver al agente.
+  - Las cifras de arriba se calculan de las conversaciones, los pedidos y los pagos.
+  - Las conversaciones del día se generan pasando los mensajes del cliente por el mismo agente: la reserva de
+    teflón, el pedido de la finca, el pago de la transferencia y el recordatorio de cobro son documentos reales.
+    Antes citaban un pedido, una reserva y facturas que no existían.
+- **Panel de integraciones** (Integraciones e IA › Integraciones externas): Hacienda, Banco Nacional, tipo de cambio
+  del BCCR, WhatsApp, correo de comprobantes, datáfonos y nodos locales, cada uno con su estado real, sus cifras,
+  la última actividad y la acción que lo resuelve (reintentar envíos, reenviar correos rebotados, simular la caída
+  del enlace, ir a la conciliación…), más una bitácora de lo que entró y salió por cada conexión.
+
+Archivos: `mod-ia.js`, `nav.js`, `index.html`.
+
 ## 2026-09-28 · Sistema + Reportería y BI · Alertas, permisos y límites pasan a Sistema
 
 Para no duplicar lo que ya existía en Sistema, se movió lo que en Reportería era configuración o bandeja de avisos.

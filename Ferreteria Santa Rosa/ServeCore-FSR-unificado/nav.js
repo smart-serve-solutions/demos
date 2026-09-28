@@ -1160,6 +1160,11 @@
         ic: "bank",
         items: [
           {
+            t: "Panel de integraciones",
+            reqs: ["INT-003", "INT-004"],
+            screen: "integraciones",
+          },
+          {
             t: "Integración con Hacienda",
             reqs: ["INT-003"],
             screen: "fiscal",
@@ -2086,6 +2091,12 @@
       ic: "gear",
       g: "Nómina",
       d: "Tasas, tramos, conceptos y políticas",
+    },
+    integraciones: {
+      t: "Panel de integraciones",
+      ic: "bank",
+      g: "Integraciones",
+      d: "Estado real de Hacienda, bancos, WhatsApp, correo, datáfonos y nodos",
     },
     whatsapp: {
       t: "Agente de WhatsApp",
