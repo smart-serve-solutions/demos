@@ -1085,33 +1085,55 @@
     ],
     bi: [
       {
-        t: "Tableros y reportes",
+        t: "Panorama",
         ic: "chart",
         items: [
           {
-            t: "Tablero de gerencia y alertas críticas",
+            t: "Cómo vamos hoy",
             reqs: ["REP-001", "REP-006"],
-            screen: "inicio",
+            screen: "bi-hoy",
           },
           {
-            t: "Reportes gráficos y comparativos",
+            t: "Comparar",
             reqs: ["REP-002"],
-            screen: "reportes",
-          },
-          {
-            t: "Exportación y límites de consulta",
-            reqs: ["REP-003", "REP-004"],
+            screen: "bi-comparar",
           },
         ],
       },
       {
-        t: "Reportería en lenguaje natural",
-        ic: "sparkle",
+        t: "Reportes",
+        ic: "file",
         items: [
           {
-            t: "Reportería en lenguaje natural",
+            t: "Todos los reportes",
+            reqs: ["REP-007", "REP-008", "REP-009"],
+            screen: "reportes",
+          },
+          {
+            t: "Pregúntele a ServeCore",
             reqs: ["REP-005"],
             screen: "preguntas",
+          },
+        ],
+      },
+      {
+        t: "Seguimiento y control",
+        ic: "shield",
+        items: [
+          {
+            t: "Alertas",
+            reqs: ["REP-006"],
+            screen: "bi-alertas",
+          },
+          {
+            t: "Mis descargas y reportes en curso",
+            reqs: ["REP-003", "REP-004"],
+            screen: "bi-descargas",
+          },
+          {
+            t: "Permisos de exportación y réplica",
+            reqs: ["REP-003", "REP-004"],
+            screen: "bi-gobierno",
           },
         ],
       },
@@ -2067,17 +2089,47 @@
       g: "Inteligencia",
       d: "Atiende consultas con el inventario real",
     },
+    "bi-hoy": {
+      t: "Cómo vamos hoy",
+      ic: "chart",
+      g: "Reportería y BI",
+      d: "Ventas, margen e inventario en tiempo real, con modo pantalla de oficina",
+    },
+    "bi-comparar": {
+      t: "Comparar",
+      ic: "swap",
+      g: "Reportería y BI",
+      d: "Años, locales, vendedores y familias, con gráfico primero",
+    },
     preguntas: {
-      t: "Preguntas en lenguaje natural",
+      t: "Pregúntele a ServeCore",
       ic: "sparkle",
-      g: "Inteligencia",
-      d: "Consulte datos sin un reporte preprogramado",
+      g: "Reportería y BI",
+      d: "Escriba lo que necesita saber y el reporte se arma solo",
     },
     reportes: {
-      t: "Reportes",
-      ic: "chart",
-      g: "Inteligencia",
-      d: "Catálogo de reportes, con gráfico primero",
+      t: "Todos los reportes",
+      ic: "file",
+      g: "Reportería y BI",
+      d: "Un solo lugar: elija el reporte, ajuste los filtros y genere",
+    },
+    "bi-alertas": {
+      t: "Alertas",
+      ic: "bell",
+      g: "Reportería y BI",
+      d: "Cambios de costo, ventas bajo costo, casillas abiertas y fallos con Hacienda",
+    },
+    "bi-descargas": {
+      t: "Mis descargas y reportes en curso",
+      ic: "download",
+      g: "Reportería y BI",
+      d: "Reportes grandes en segundo plano y archivos de Excel",
+    },
+    "bi-gobierno": {
+      t: "Permisos de exportación y réplica",
+      ic: "lock",
+      g: "Reportería y BI",
+      d: "Quién descarga qué, límites de consulta y réplica de lectura",
     },
     usuarios: {
       t: "Usuarios y accesos",

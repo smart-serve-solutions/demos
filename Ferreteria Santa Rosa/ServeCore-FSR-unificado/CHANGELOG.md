@@ -1,5 +1,47 @@
 # Cambios
 
+## 2026-09-28 · Reportería y BI · Módulo rehecho contra la matriz (REP-001 a REP-009)
+
+Revisado con el arquitecto ERP/BI (lógica de negocio) y el consultor UX (pantallas). Antes: 3 pantallas, sin
+pantalla para exportación ni límites de consulta, tablero sin refresco.
+
+- **Menú por tarea** (`nav.js`): Panorama (Cómo vamos hoy · Comparar) → Reportes (Todos los reportes ·
+  Pregúntele a ServeCore) → Seguimiento y control (Alertas · Mis descargas y reportes en curso · Permisos de
+  exportación y réplica). Los REP se reparten entre pantallas, no uno por opción.
+- **Cómo vamos hoy** (`mod-bi.js`, REP-001/006): venta del día, mes con meta, tiquete, margen; cifras
+  secundarias (ventas perdidas, cartera vencida, comprobantes, alertas); curva por hora contra el año pasado;
+  los 7 locales con margen; margen por familia; semáforo de inventario por cobertura; alertas recientes.
+  Refresco automático cada 30 s con contador, «actualizado hace», pausa y destello del número que cambió.
+  Selector Hoy/Semana/Mes. **Modo pantalla de oficina** (fondo oscuro, cifras grandes, 2 vistas que rotan,
+  franja de alertas críticas, Esc para salir). Cada cifra abre el reporte que la explica.
+- **Comparar** (REP-002): frase «Comparar [ventas] del [año] contra [año anterior] por [local]», barras
+  agrupadas o evolución mensual, «lo que dicen los números» en palabras, mapa de calor local × familia y
+  tabla plegada.
+- **Todos los reportes** (REP-007/008/009): un solo acceso con búsqueda por sinónimos, grupos, favoritos,
+  recientes y programados; 34 reportes (los 5 operativos de venta marcados). Flujo **filtros → generar →
+  resultado**: nada se genera al abrir (REP-008), migas y «Volver» en cada nivel, validación de fechas en
+  lenguaje de negocio, resultado con gráfico primero, comparativo con variación (lo malo en rojo aunque suba),
+  tabla ordenable, exportar, favorito, programar, compartir (enlace que no abre sesión) y PDF. «Ver como»
+  Gerencia/Bodega/Mostrador muestra candados por perfil.
+- **Sin tope de período** (REP-003): un período de más de 2 años no se bloquea; se calcula el alcance, pasa
+  a segundo plano en la réplica y aparece en Mis descargas.
+- **Exportación con permiso** (REP-004): permiso aparte de ver; sin permiso, botón con candado y «Solicitar
+  permiso»; con datos sensibles o más de 50 000 filas pide motivo; queda en bitácora.
+- **Pregúntele a ServeCore** (REP-005): muestra «lo que entendí» en fichas, «Ajustar filtros» abre el reporte
+  con esos filtros, exportar con permiso, guardar como reporte y preguntas recientes.
+- **Alertas** (`mod-bi-control.js`, REP-006): pendientes con acción, tomar y resolver con nota; resueltas;
+  reglas con umbral, destinatarios, canales y encendido (costo fuera de rango, venta bajo costo, casilla sin
+  reversar, fallo con Hacienda, exportación masiva, consulta lenta).
+- **Mis descargas**: cola con progreso, listo, cancelar, reintentar y error explicado sin códigos técnicos;
+  historial de exportaciones con las rechazadas por permiso.
+- **Permisos de exportación y réplica**: solicitudes por resolver, matriz perfil × grupo de reportes, reglas
+  (máscara de datos personales, marca de agua, tope de filas, motivo), límites de consultas grandes, estado de
+  la réplica con el recorrido caja → base → réplica, y modelo de datos (hechos y dimensiones).
+- Preguntas y reportes salen de `mod-ia.js` (queda solo el agente de WhatsApp). `index.html` carga los dos
+  archivos nuevos después de `mod-ia.js`.
+
+Archivos: `mod-bi.js` (nuevo), `mod-bi-control.js` (nuevo), `mod-ia.js`, `nav.js`, `index.html`, `README.md`.
+
 ## 2026-09-26 · Inventarios · Campo de proveedores del sugerido más compacto
 
 - `mod-inv.js` (Reposición › Sugerido de compra): las etiquetas de proveedores van dentro del mismo campo,
