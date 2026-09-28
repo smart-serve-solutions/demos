@@ -2270,6 +2270,55 @@
         border: 1px solid var(--accent-line);
         border-bottom-right-radius: 4px;
       }
+      .bub.con-img {
+        max-width: 88%;
+      }
+      .wa-arts {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .wa-art {
+        width: 158px;
+        background: var(--surface);
+        border: 1px solid var(--hair);
+        border-radius: 10px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .wa-art-img {
+        width: 100%;
+        height: 104px;
+        object-fit: cover;
+        display: block;
+        background: var(--surface-2);
+      }
+      .wa-art-b {
+        padding: 7px 9px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 12px;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .wa-art-b .num {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .wa-art-b .wa-art-p {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .wa-foto {
+        display: block;
+        width: 190px;
+        border-radius: 9px;
+        border: 1px solid var(--hair);
+      }
       .bub.per {
         background: var(--surface-2);
         border-color: var(--hair);
@@ -3090,6 +3139,7 @@
 <script src="mod-planilla.js"></script>
 <script src="mod-fiscal.js"></script>
 <script src="mod-conta.js"></script>
+<script src="img-productos.js"></script>
 <script src="mod-ia.js"></script>
 <script src="mod-bi.js"></script>
 <script src="mod-bi-control.js"></script>

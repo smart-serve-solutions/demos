@@ -193,7 +193,7 @@
       e.comp += x.cant;
       const rs = { id: "RS-" + pad(418 + RESERVAS.length, 5), artId: x.a.id, locId: l.id, cant: x.cant, clienteId: cli.id, fecha: D.ahora(), conversacion: th.id };
       RESERVAS.push(rs);
-      out.push({ de: "bot", t: `Listo. Aparté ${x.cant} × ${x.a.desc} en ${l.nom} a nombre suyo, reserva ${rs.id}, vence hoy a las ${REGLAS.vence} Total ${c(x.cant * x.a.precio)}.` });
+      out.push({ de: "bot", t: `Listo. Aparté ${x.cant} × ${x.a.desc} en ${l.nom} a nombre suyo, reserva ${rs.id}, vence hoy a las ${REGLAS.vence} Total ${c(x.cant * x.a.precio)}.`, arts: [{ id: x.a.id, cant: x.cant }] });
       out.push({ de: "bot", t: "¿Se lo dejo como pedido para pasar a caja, o le genero el enlace de pago SINPE?" });
       return out;
     }
@@ -202,7 +202,7 @@
     if (lineas.length && /(mand|ocup|necesit|quier|pedido|envi|cotiz|traiga|deme|me da|alist)/.test(n)) {
       const lin = lineas.map(x => ({ artId: x.a.id, cant: x.cant, precio: x.a.precio, desc: 0 }));
       const t = D.totalizar(lin, cli ? { exoneracion: D.exoneracionDe(cli.id) } : {});
-      out.push({ de: "bot", t: lineas.map(x => `${x.cant} × ${x.a.desc} a ${c(x.a.precio)}`).join(" · ") + `. Total ${c(t.total)} con IVA${t.ivaExon ? " (con su exoneración)" : ""}.` });
+      out.push({ de: "bot", t: lineas.map(x => `${x.cant} × ${x.a.desc} a ${c(x.a.precio)}`).join(" · ") + `. Total ${c(t.total)} con IVA${t.ivaExon ? " (con su exoneración)" : ""}.`, arts: lineas.map(x => ({ id: x.a.id, cant: x.cant })) });
       const faltan = lineas.filter(x => dispo(x.a).reduce((s, y) => s + y.d, 0) < x.cant);
       out.push({ de: "bot", t: lineas.map(x => { const d = dispo(x.a); return x.a.desc.split(" ").slice(0, 3).join(" ") + ": " + (d.length ? d.slice(0, 2).map(y => y.l.nom + " " + grp(y.d)).join(" · ") : "sin existencia"); }).join(". ") + "." + (faltan.length ? " No alcanza para todo; un vendedor le confirma plazos." : " Alcanza.") });
       if (t.total > REGLAS.montoEscala || /cotiz/.test(n) && t.total > REGLAS.montoEscala / 2) {
@@ -226,7 +226,8 @@
     if (arts.length) {
       const a = arts[0]; th.ultimoArt = a;
       const d = dispo(a).filter(x => x.l.tipo === "tienda"), agot = D.tiendas.filter(l => D.disp(a.id, l.id) <= 0);
-      out.push({ de: "bot", t: `${a.desc}, código ${a.cod}, a ${c(a.precio)} con IVA incluido.` + (arts.length > 1 ? ` También tengo ${arts.slice(1, 3).map(x => x.desc + " a " + c(x.precio)).join(" y ")}.` : "") });
+      out.push({ de: "bot", t: `${a.desc}, código ${a.cod}, a ${c(a.precio)} con IVA incluido.` + (arts.length > 1 ? ` También tengo ${arts.slice(1, 3).map(x => x.desc + " a " + c(x.precio)).join(" y ")}.` : ""),
+        arts: arts.slice(0, 3).map(x => ({ id: x.id })) });
       out.push({ de: "bot", t: (d.length ? "Disponible ahora: " + d.slice(0, 3).map(x => x.l.nom + " " + grp(x.d)).join(" · ") + "." : "No hay en las tiendas en este momento.") +
         (agot.length ? ` Agotado en ${agot.slice(0, 2).map(x => x.nom).join(", ")}${D.disp(a.id, "CD") > 0 ? ", pero en el CEDI hay " + grp(D.disp(a.id, "CD")) + " y se los bajamos mañana" : ""}.` : "") });
       return out;
@@ -263,7 +264,7 @@
       const k = D.cliById[d3.clienteId];
       Object.assign(t3, { clienteId: k.id, nom: k.nom, tel: k.tel || t3.tel });
       recibir(t3, "Ya hice la transferencia de la factura " + d3.cons.slice(-6), "10:06");
-      t3.msgs.push({ de: "cli", t: "[comprobante_bn.jpg]", h: "10:06", img: true });
+      t3.msgs.push({ de: "cli", t: "Comprobante de transferencia", h: "10:06", img: { tipo: "comprobante", monto: c(d3.saldo), ref: "88301442", nombre: k.nom } });
       recibir(t3, "Le transferí " + c(d3.saldo) + ", referencia 88301442", "10:07");
     }
     /* un recordatorio de cobro de una factura real que vence esta semana */
@@ -307,8 +308,13 @@
       S.waSel = th.id;
       const k = cifras();
       const quien = th.tomada ? th.tomada : null;
+      /* los productos que se mencionan van con su foto (o su ilustración), precio y existencia */
+      const tarjetas = arts => `<div class="wa-arts">${arts.map(x => { const a = D.artById[x.id]; if (!a) return ""; const d = D.tiendas.reduce((s, l) => s + Math.max(0, D.disp(a.id, l.id)), 0);
+        return `<div class="wa-art">${w.PRODIMG ? w.PRODIMG.img(a, "wa-art-img") : ""}<div class="wa-art-b"><b>${esc(a.desc)}</b><span class="num">${esc(a.cod)}</span>
+          <span class="num wa-art-p">${c(a.precio)}${x.cant ? ` <span class="dim">× ${grp(x.cant)}</span>` : ""}</span><span class="dim" style="font-size:11px">${d ? grp(d) + " en tiendas" : "sin existencia en tiendas"}</span></div></div>`; }).join("")}</div>`;
+      const imagen = m => m.img && m.img.tipo === "comprobante" && w.PRODIMG ? `<img class="wa-foto" src="${w.PRODIMG.comprobante(m.img)}" alt="Comprobante de transferencia">` : "";
       const burbuja = m => m.de === "sys" ? `<div class="bub sys">${esc(m.t)}</div>`
-        : `<div class="bub ${m.de === "per" ? "bot per" : m.de}">${m.de === "bot" ? `<div class="botline">${icon("sparkle", 'style="width:12px;height:12px"')}Agente ServeCore</div>` : m.de === "per" ? `<div class="botline">${icon("users", 'style="width:12px;height:12px"')}${esc(m.por)}</div>` : ""}${esc(m.t)}<span class="h">${esc(m.h)}</span></div>`;
+        : `<div class="bub ${m.de === "per" ? "bot per" : m.de}${m.arts || m.img ? " con-img" : ""}">${m.de === "bot" ? `<div class="botline">${icon("sparkle", 'style="width:12px;height:12px"')}Agente ServeCore</div>` : m.de === "per" ? `<div class="botline">${icon("users", 'style="width:12px;height:12px"')}${esc(m.por)}</div>` : ""}${m.img ? imagen(m) : esc(m.t)}${m.arts ? tarjetas(m.arts) : ""}<span class="h">${esc(m.h)}</span></div>`;
       v.innerHTML = `<div class="wrap">
         <div class="grid g4">
           ${stat("Conversaciones hoy", grp(k.conv), { txt: k.solas + " resueltas por el agente sin intervenir", dir: "up" })}

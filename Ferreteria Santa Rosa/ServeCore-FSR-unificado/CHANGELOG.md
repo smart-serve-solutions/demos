@@ -1,5 +1,17 @@
 # Cambios
 
+## 2026-09-28 · Integraciones e IA · Imágenes de producto en las conversaciones
+
+- Cuando el agente de WhatsApp habla de un producto (precio, cotización o reserva), lo muestra en una tarjeta con su
+  imagen, descripción, código, precio (y cantidad pedida) y existencia en tiendas.
+- `img-productos.js`: si existe la foto real en `productos/<código>.jpg` se usa esa; si no, una ilustración del tipo
+  de producto dibujada en el propio demo (saco, montón, varilla, bloque, lámina, tubo, codo, tee, cinta, llave,
+  cable, bombillo, pintura, tornillo, candado, manguera, casco…), con el color y el texto del artículo. Para poner
+  fotos reales basta con copiarlas a esa carpeta con el código como nombre.
+- El comprobante de pago que manda el cliente se ve como imagen, con el monto, la referencia y el titular.
+
+Archivos: `img-productos.js` (nuevo), `mod-ia.js`, `index.html`.
+
 ## 2026-09-28 · Integraciones e IA · Agente de WhatsApp real y panel de integraciones
 
 - **El agente de WhatsApp trabaja con el sistema**, no con un guion:
