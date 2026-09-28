@@ -1,5 +1,33 @@
 # Cambios
 
+## 2026-09-28 · Sistema + Reportería y BI · Alertas, permisos y límites pasan a Sistema
+
+Para no duplicar lo que ya existía en Sistema, se movió lo que en Reportería era configuración o bandeja de avisos.
+
+- Nuevo `mod-sys-bi.js` (carga después de `mod-sys.js`): sobrescribe `sis-alertas` con las pestañas Pendientes,
+  Resueltas y «Qué avisa» (la pantalla de reglas que ya existía); agrega `BI.accesoReportes` (matriz perfil × grupo
+  de reportes) y la pantalla nueva `sis-rendimiento` (exportación y límites, consultas y réplica, modelo de datos).
+- `mod-sys.js` (cambios pequeños): pestaña «Acceso a reportes» en Roles y permisos; la política «Exportar a Excel»
+  apunta a esa pestaña; excepción de ejemplo «Permiso de exportación» y `BI.agregarExcepcion` para que las
+  solicitudes de Reportería lleguen a Autorización de excepciones.
+- `mod-bi.js`: las alertas enlazan a `sis-alertas`; la tarjeta «Alertas recientes» dice que se atienden y configuran
+  en Sistema, con enlace; `BI.pedirPermiso` reemplaza a `BI.SOLIC` (ya no hay lista propia de solicitudes).
+- `mod-bi-control.js`: solo queda Mis descargas y reportes en curso.
+- `nav.js`: Reportería sin «Alertas» ni «Permisos de exportación y réplica»; Sistema con «Acceso a reportes»
+  (REP-003, REP-004), Notificaciones y alertas (REP-006) y «Rendimiento de reportes» en Mantenimiento y preferencias.
+
+Archivos: `mod-sys-bi.js`, `mod-sys.js`, `mod-bi.js`, `mod-bi-control.js`, `nav.js`, `index.html`, `README.md`.
+
+## 2026-09-28 · Reportería y BI · Migas de pan para volver
+
+- `shell.js` (compartido, cambio pequeño): una pantalla puede definir `trail()` con sus propios niveles de
+  migas; los que traen `fn` son botones para volver a ese nivel.
+- `mod-bi.js` (Todos los reportes): las migas quedan «Todos los reportes › [reporte] › Resultado»; el primer
+  nivel vuelve a la lista y el nombre del reporte vuelve a los filtros. El botón «Todos los reportes» /
+  «Volver a los filtros» de arriba a la derecha se conserva.
+
+Archivos: `shell.js`, `mod-bi.js`.
+
 ## 2026-09-28 · Reportería y BI · Módulo rehecho contra la matriz (REP-001 a REP-009)
 
 Revisado con el arquitecto ERP/BI (lógica de negocio) y el consultor UX (pantallas). Antes: 3 pantallas, sin

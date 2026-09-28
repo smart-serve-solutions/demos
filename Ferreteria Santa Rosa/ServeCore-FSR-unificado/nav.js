@@ -151,7 +151,7 @@
           {
             t: "Roles y permisos",
             d: "Por pantalla y acción, acciones especiales, campos sensibles, clonado y segregación",
-            reqs: ["SEG-001", "SEG-002", "SEG-003", "SEG-006"],
+            reqs: ["SEG-001", "SEG-002", "SEG-003", "SEG-006", "REP-003", "REP-004"],
             screen: "seg-roles",
             tabs: [
               {
@@ -168,6 +168,11 @@
                 t: "Vista de conjunto",
                 id: "matriz",
                 kw: "matriz permisos roles",
+              },
+              {
+                t: "Acceso a reportes",
+                id: "reportes",
+                kw: "reporte exportar excel descargar ver permiso clientes extendida enmascarar",
               },
             ],
           },
@@ -382,14 +387,12 @@
           {
             t: "Notificaciones y alertas",
             d: "Qué evento avisa, a quién y por dónde",
-            reqs: [],
+            reqs: ["REP-006"],
             screen: "sis-alertas",
             tabs: [
-              {
-                t: "Notificaciones y alertas",
-                id: "",
-                kw: "alerta aviso notificacion correo whatsapp gerencia evento critico",
-              },
+              { t: "Pendientes", id: "pend", kw: "alerta pendiente evento critico atender casilla costo hacienda" },
+              { t: "Resueltas", id: "res", kw: "alerta resuelta historial" },
+              { t: "Qué avisa", id: "avisa", kw: "alerta aviso notificacion correo whatsapp gerencia regla umbral" },
             ],
           },
           {
@@ -424,6 +427,17 @@
           //     { t: "Respaldos y copia de la base", id: "respaldos", kw: "respaldo backup copia base de datos" },
           //   ],
           // },
+          {
+            t: "Rendimiento de reportes",
+            d: "Límites de exportación y de consultas grandes, réplica de lectura y modelo de datos",
+            reqs: ["REP-003", "REP-004", "INF-003", "INF-005"],
+            screen: "sis-rendimiento",
+            tabs: [
+              { t: "Exportación y límites", id: "limites", kw: "exportar excel tope enmascarar marca agua motivo consulta segundo plano" },
+              { t: "Consultas y réplica", id: "replica", kw: "replica lectura consulta lenta error" },
+              { t: "Modelo de datos", id: "modelo", kw: "hechos dimensiones margen definicion" },
+            ],
+          },
           {
             t: "Este equipo",
             d: "Modo oscuro, terminal y simulación de caída del enlace",
@@ -1121,19 +1135,9 @@
         ic: "shield",
         items: [
           {
-            t: "Alertas",
-            reqs: ["REP-006"],
-            screen: "bi-alertas",
-          },
-          {
             t: "Mis descargas y reportes en curso",
             reqs: ["REP-003", "REP-004"],
             screen: "bi-descargas",
-          },
-          {
-            t: "Permisos de exportación y réplica",
-            reqs: ["REP-003", "REP-004"],
-            screen: "bi-gobierno",
           },
         ],
       },
@@ -1835,7 +1839,7 @@
       t: "Notificaciones y alertas",
       ic: "bell",
       g: "Sistema",
-      d: "Qué evento avisa, a quién y por dónde",
+      d: "Alertas por atender (costos, ventas bajo costo, casillas, Hacienda) y qué evento avisa, a quién y por dónde",
     },
     "sis-integraciones": {
       t: "Conexiones con otros sistemas",
@@ -2113,23 +2117,17 @@
       g: "Reportería y BI",
       d: "Un solo lugar: elija el reporte, ajuste los filtros y genere",
     },
-    "bi-alertas": {
-      t: "Alertas",
-      ic: "bell",
-      g: "Reportería y BI",
-      d: "Cambios de costo, ventas bajo costo, casillas abiertas y fallos con Hacienda",
-    },
     "bi-descargas": {
       t: "Mis descargas y reportes en curso",
       ic: "download",
       g: "Reportería y BI",
       d: "Reportes grandes en segundo plano y archivos de Excel",
     },
-    "bi-gobierno": {
-      t: "Permisos de exportación y réplica",
-      ic: "lock",
-      g: "Reportería y BI",
-      d: "Quién descarga qué, límites de consulta y réplica de lectura",
+    "sis-rendimiento": {
+      t: "Rendimiento de reportes",
+      ic: "server",
+      g: "Sistema",
+      d: "Límites de exportación y consultas grandes, réplica de lectura y modelo de datos",
     },
     usuarios: {
       t: "Usuarios y accesos",

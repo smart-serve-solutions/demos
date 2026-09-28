@@ -522,13 +522,24 @@
       /* en un espacio de trabajo con pestañas, la pestaña activa es el último eslabón */
       const def = APP.screens[S.screen] || {};
       const pest = def.crumb ? def.crumb() : null;
+      /* def.trail() → [{t, fn}]: reemplaza el último tramo por niveles propios;
+         los que traen fn son botones (volver a ese nivel), el último es el actual */
+      const trail = def.trail ? def.trail() : null;
       html +=
         chev +
         `<button class="bc-item" data-openmod="${path.mod.id}">${esc(path.mod.t)}</button>` +
         chev +
         `<button class="bc-item" data-openmod="${path.mod.id}">${esc(path.sec.t)}</button>` +
         chev +
-        (pest
+        (trail
+          ? trail
+              .map((x, i) =>
+                i === trail.length - 1
+                  ? `<span class="bc-item current" aria-current="true"><span>${esc(x.t)}</span></span>`
+                  : `<button class="bc-item" data-trail="${i}">${esc(x.t)}</button>` + chev,
+              )
+              .join("")
+          : pest
           ? `<span class="bc-item"><span>${esc(path.item.t)}</span></span>` +
             chev +
             `<span class="bc-item current" aria-current="true"><span>${esc(pest)}</span></span>`
@@ -540,6 +551,13 @@
     );
     $$("[data-openmod]", el).forEach((b) =>
       b.addEventListener("click", () => APP.abrirMenu(b.dataset.openmod)),
+    );
+    $$("[data-trail]", el).forEach((b) =>
+      b.addEventListener("click", () => {
+        const d = APP.screens[S.screen] || {};
+        const x = d.trail && d.trail()[+b.dataset.trail];
+        if (x && x.fn) x.fn();
+      }),
     );
   }
 

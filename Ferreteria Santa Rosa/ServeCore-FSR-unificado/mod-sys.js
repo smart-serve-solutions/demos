@@ -2648,6 +2648,13 @@
         sub: "Todos los roles contra las acciones especiales",
         render: matrizTab,
       },
+      {
+        id: "reportes",
+        t: "Acceso a reportes",
+        sub: "Quién ve y quién descarga cada grupo de reportes; ver y exportar son permisos distintos",
+        render: (el) => window.BI && window.BI.accesoReportes && window.BI.accesoReportes.render(el),
+        wire: (v) => window.BI && window.BI.accesoReportes && window.BI.accesoReportes.wire(v),
+      },
     ],
     onArg(tab, dato) {
       if (tab === "roles" && dato) {
@@ -2768,7 +2775,7 @@
         { t: "Vigencia del enlace de consulta", v: "30 días" },
         {
           t: "Exportar a Excel",
-          d: "Solo roles con el permiso. Queda en la bitácora con cuántos registros salieron.",
+          d: "Solo roles con el permiso (Roles y permisos › Acceso a reportes). Queda en la bitácora con cuántos registros salieron.",
           v: "Más de 5 000 filas pide autorización",
         },
         { t: "Aviso a TI por exportación grande", on: true },
@@ -2884,6 +2891,20 @@
 
   /* ── AUTORIZACIÓN JERÁRQUICA DE EXCEPCIONES (SEG-005, SEG-009) ── */
   const EXC = [
+    {
+      id: "EX-2292",
+      tipo: "Permiso de exportación",
+      ic: "download",
+      doc: "Reporte «Ventas por vendedor»",
+      pide: "Yendry Chacón",
+      loc: "L5",
+      det: "Jefa de local en Pacayas pide descargar el reporte a Excel; su rol solo puede verlo en pantalla",
+      min: 62,
+      pueden: ["Gerencia", "Hazel Monge"],
+      canal: "Correo y en el sistema",
+      mot: "Comisiones del mes",
+      vence: "hoy",
+    },
     {
       id: "EX-2291",
       tipo: "Venta bajo el margen",
@@ -3120,6 +3141,9 @@
       aviso: "Contabilidad recibe copia",
     },
   ];
+  /* Reportería y BI deja aquí los permisos de exportación que no puede aprobar quien los pide */
+  window.BI = window.BI || {};
+  window.BI.agregarExcepcion = (x) => { EXC.unshift(x); };
   function pendientesTab(el) {
     el.innerHTML = `<div class="wrap">
       <div class="grid g4">
