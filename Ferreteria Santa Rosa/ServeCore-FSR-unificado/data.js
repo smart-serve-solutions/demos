@@ -448,7 +448,7 @@
   };
   const actividadPrincipal = () => emisor.actividades.find(a => a.principal) || emisor.actividades[0];
 
-  const seq = { PROF: 5600, PED: 2400, OC: 4400, TR: 900, AJ: 300, AS: 12000 };
+  const seq = { PROF: 5600, PED: 2400, OC: 4400, BOR: 411, TR: 900, AJ: 300, AS: 12000 };
   const pad = (n, l) => String(n).padStart(l, "0");
 
   /* numeración fiscal: Hacienda exige una serie correlativa por sucursal,
@@ -877,14 +877,25 @@
   }
   /* IVA contenido en un monto que ya lo trae incluido */
   const ivaIncluido = (monto, tarifa) => Math.round(monto - sinIva(monto, tarifa));
-  function crearOC(provId, locId, items, estado, fecha) {
+  /* el consecutivo oficial de la orden de compra se asigna al aprobarla: un borrador lleva un
+     número temporal (BOR-0412) y, si se elimina, no deja hueco en la serie OC-2026-… (SIS-008) */
+  function siguienteOC() {
     seq.OC++;
-    /* el consecutivo nunca se repite (la orden de la demo lleva uno fijo) */
     while (compras.some(c => c.cons === "OC-2026-" + pad(seq.OC, 6))) seq.OC++;
+    return "OC-2026-" + pad(seq.OC, 6);
+  }
+  function consecutivoOC(oc) {
+    if (!/^BOR-/.test(oc.cons)) return oc.cons;
+    oc.borrador = oc.cons;
+    oc.cons = siguienteOC();
+    return oc.cons;
+  }
+  function crearOC(provId, locId, items, estado, fecha) {
+    const cons = (estado || "Registrada") === "Registrada" ? "BOR-" + pad(++seq.BOR, 4) : siguienteOC();
     /* el costo de la línea sale de su variación contra el costo vigente (o viene dado) */
     const lineas = items.map(it => ({ artId: it.a, cant: it.c, costo: it.k || Math.round(artById[it.a].costo * (1 + (it.v || 0) / 100)), var: it.v || 0 }));
     const oc = {
-      id: "OC-" + seq.OC, cons: "OC-2026-" + pad(seq.OC, 6), provId, locId, fecha: fecha || dayAgo(ri(1, 20)),
+      id: cons, cons, provId, locId, fecha: fecha || dayAgo(ri(1, 20)),
       lineas, ...totalesCompra(lineas),
       estado: estado || "Registrada", plazo: provById[provId].plazo, recibido: 0
     };
@@ -907,7 +918,7 @@
     { a: articulos.find(a => a.cod === "FER-03004").id, c: 180, v: 2.9 },
     { a: articulos.find(a => a.cod === "FER-08010").id, c: 90, v: 5.2 }
   ], "Registrada", dayAgo(2));
-  ocPrincipal.cons = "OC-2026-004412";
+  ocPrincipal.principal = true;   /* borrador BOR-0412: la orden del recorrido de la demo */
   ocPrincipal.facturaProv = { num: "00100001010000019887", monto: 0 };
 
   [["P2", "CD"], ["P3", "B1"], ["P4", "CD"], ["P6", "L2"], ["P7", "CD"], ["P8", "B1"]].forEach(([p, l]) => {
@@ -1165,7 +1176,7 @@
     ["Aplicó nota de crédito", "NC 002-00001-03-0000002108", "Media", "", "₡84 300"],
     ["Cerró caja", "Terminal 2 · Turrialba · diferencia ₡0", "Baja", "", ""],
     ["Intento de acceso fallido", "usuario dennis.fallas · 3 intentos", "Alta", "", ""],
-    ["Cambió condición de pago en la orden", "OC-2026-004412 · Amanco", "Media", "30 días", "45 días"],
+    ["Cambió condición de pago en la orden", "BOR-0412 · Amanco", "Media", "30 días", "45 días"],
     ["Generó archivo de pago al banco", "85 transferencias · ₡148 320 900", "Alta", "", ""],
     ["Rechazó comprobante de proveedor", "Clave 50612092631...", "Media", "Sin aceptar", "Rechazado"],
     ["Modificó CABYS de artículo", "FER-01455 Cinta teflón", "Alta", "2431100000000", "2431100000100"],
@@ -1323,7 +1334,7 @@
     cuentas, ctaByCod, asientos, asentar,
     ahora, exigePeriodoAbierto, aceptarRecibido, INICIO, migrados, registrarApertura, get cargando() { return cargando; }, totalesCompra, ivaIncluido, tarifaDeCabys, sinIva, conIva, margenDe, pisoConIva, bloquearHasta, periodoCerrado, get cerradoHasta() { return cerradoHasta; }, PERSONAS, sesion, cambiarSesion, puede, tipoCambio, tcDe, pagadoCon, mediosTxt, TARIFA_COD, tarifaDe, desgloseIva, pctTxt, CUENTA_MEDIO, cuentaMedio, asentarNC, exoneracionDe, emisor, UBICACION, ubicacionTexto, actividadPrincipal, TIPO_COD, puedeEmitir, ultimoConsec, proximoConsec, rangoSerie, sinDocumento,
     documentos, proformas, despachos, emitir, totalizar, consecutivo, clave, costoLineas,
-    compras, recibidos, cxp, crearOC, costoPromedio, cotejoRecibido,
+    compras, recibidos, cxp, crearOC, consecutivoOC, costoPromedio, cotejoRecibido,
     colaboradores, waThreads, roles, PERMISOS, matriz, usuarios, bitacora,
     banco, traslados, ajustes, conteos, rutas, tarifario, seq,
     ventasDelDia, serieSemana, ventaPorLocal, margenPorFamilia, bajoMinimo, quiebres,

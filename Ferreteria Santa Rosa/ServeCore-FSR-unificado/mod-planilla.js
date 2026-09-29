@@ -575,12 +575,7 @@
     const sol = act.filter(e => e.solidarista);
     const destino = o => (o.ent === "Hacienda" ? "nom-obligaciones|renta" : /ingresos y salidas/.test(o.t) ? "nom-personal|mov" : o.ent === "CCSS" ? "nom-obligaciones|ccss" : null);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Entidades que reciben dinero", "9", { txt: "CCSS, FODESAF, IMAS, INA, INS, operadora, BP, Hacienda y juzgados", dir: "" })}
-          ${stat("Pensiones alimentarias", pension.length, { txt: c(pension.reduce((s, e) => s + e.pensionAlim, 0)) + " al mes", dir: "" }, "var(--warn)")}
-          ${stat("Embargos judiciales", embargos.length, { txt: "solo puede correr uno a la vez por persona", dir: "" })}
-          ${stat("Afiliados a la asociación", sol.length, { txt: "ahorro obligatorio del 5 %", dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Entidades que reciben dinero", "9", { txt: "CCSS, FODESAF, IMAS, INA, INS, operadora, BP, Hacienda y juzgados", dir: "" }), U.ts("Pensiones alimentarias", pension.length, { txt: c(pension.reduce((s, e) => s + e.pensionAlim, 0)) + " al mes", dir: "" }, "var(--warn)"), U.ts("Embargos judiciales", embargos.length, { txt: "solo puede correr uno a la vez por persona", dir: "" }), U.ts("Afiliados a la asociación", sol.length, { txt: "ahorro obligatorio del 5 %", dir: "" })])}
         ${card({
       title: "Calendario del mes", hint: "el sistema avisa tres días antes de cada vencimiento",
       body: table({

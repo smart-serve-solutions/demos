@@ -53,3 +53,6 @@ Luego agréguela como `screen` en el árbol de `nav.js`.
 3. Anotar cada cambio en `CHANGELOG.md` (fecha, módulo, qué cambió).
 4. Commit con el módulo al inicio del mensaje: `pos: …`, `conta: …`, `nomina: …`.
 5. No editar el mismo archivo desde dos chats a la vez.
+6. Nada de filas de tarjetas de KPI al inicio de una pantalla de trabajo. Si la cifra cuenta la lista, va como filtro
+   con número (`U.filtrar` + `U.onFiltro`); si es contexto, en una línea (`U.resumen([U.ts(...)])`); si es un dato
+   fijo, no va. Solo los tableros y los estados donde la cifra es el contenido usan `stat()`.

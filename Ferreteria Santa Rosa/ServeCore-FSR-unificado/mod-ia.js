@@ -9,7 +9,7 @@
   "use strict";
   const D = w.DB, A = w.APP, S = w.S, U = w.UI, F = w.FIS, V = w.VENX;
   const { $, $$, esc, norm, grp, c, dec, fecha, fh, hora, icon, tag, card, stat, table,
-    openSheet, closeSheet, toast, locNom, cliNom, ini } = U;
+    openSheet, closeSheet, toast, locNom, cliNom, ini, tira, fchips, onSeg } = U;
 
   /* ══ REGLAS DEL AGENTE ═══════════════════════════════════════
      Lo que el agente resuelve solo y lo que pasa a una persona. */
@@ -297,16 +297,36 @@
     };
   }
 
-  /* ══ AGENTE DE WHATSAPP ══════════════════════════════════════ */
+  /* ══ AGENTE DE WHATSAPP ══════════════════════════════════════
+     Piloto de la revisión UX de KPIs (29-set): las cifras del día van en una línea bajo el título
+     y las que cuentan conversaciones son filtros de la bandeja; el chat queda arriba. */
   let comoCliente = false;
+  const WA_FILTROS = [
+    { v: "todas", t: "Todas", f: () => true },
+    { v: "persona", t: "Con una persona", f: t => !!(t.escalado || t.tomada) },
+    { v: "pedido", t: "Con pedido", f: t => !!(t.pedidos || []).length },
+    { v: "pago", t: "Con pago", f: t => (t.pagos || 0) > 0 }
+  ];
   A.screen("whatsapp", {
     title: "Agente de WhatsApp",
-    sub: () => "Consulta el mismo inventario que la caja · crea pedidos, aparta y aplica pagos · lo que no le toca lo escala",
+    sub: () => {
+      const k = cifras(), sinTomar = D.waThreads.filter(t => t.escalado && !t.tomada).length;
+      return tira([
+        { v: grp(k.conv), l: "conversaciones hoy" },
+        { v: grp(k.solas), l: "resueltas solas por el agente", k: "ok" },
+        { v: grp(k.esc + k.tom), l: sinTomar ? "pasaron a una persona · " + sinTomar + " sin tomar" : "pasaron a una persona", k: sinTomar ? "wa" : "" },
+        { v: grp(k.peds), l: (k.peds === 1 ? "pedido · " : "pedidos · ") + c(k.pedMonto) },
+        { v: grp(k.pagos), l: (k.pagos === 1 ? "pago aplicado · " : "pagos aplicados · ") + c(k.pagoMonto) }
+      ]);
+    },
     pad: "pad-tight",
     render(v) {
+      const fl = WA_FILTROS.find(x => x.v === S.waFiltro) || WA_FILTROS[0];
+      S.waFiltro = fl.v;
+      const lista = D.waThreads.filter(fl.f);
+      if (lista.length && !lista.some(t => t.id === S.waSel)) S.waSel = lista[0].id;
       const th = D.waThreads.find(t => t.id === S.waSel) || D.waThreads[0];
       S.waSel = th.id;
-      const k = cifras();
       const quien = th.tomada ? th.tomada : null;
       /* los productos que se mencionan van con su foto (o su ilustración), precio y existencia */
       const tarjetas = arts => `<div class="wa-arts">${arts.map(x => { const a = D.artById[x.id]; if (!a) return ""; const d = D.tiendas.reduce((s, l) => s + Math.max(0, D.disp(a.id, l.id)), 0);
@@ -315,18 +335,15 @@
       const imagen = m => m.img && m.img.tipo === "comprobante" && w.PRODIMG ? `<img class="wa-foto" src="${w.PRODIMG.comprobante(m.img)}" alt="Comprobante de transferencia">` : "";
       const burbuja = m => m.de === "sys" ? `<div class="bub sys">${esc(m.t)}</div>`
         : `<div class="bub ${m.de === "per" ? "bot per" : m.de}${m.arts || m.img ? " con-img" : ""}">${m.de === "bot" ? `<div class="botline">${icon("sparkle", 'style="width:12px;height:12px"')}Agente ServeCore</div>` : m.de === "per" ? `<div class="botline">${icon("users", 'style="width:12px;height:12px"')}${esc(m.por)}</div>` : ""}${m.img ? imagen(m) : esc(m.t)}${m.arts ? tarjetas(m.arts) : ""}<span class="h">${esc(m.h)}</span></div>`;
+      const sinTomar = D.waThreads.filter(t => t.escalado && !t.tomada).length;
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Conversaciones hoy", grp(k.conv), { txt: k.solas + " resueltas por el agente sin intervenir", dir: "up" })}
-          ${stat("Pasaron a una persona", grp(k.esc + k.tom), { txt: "monto alto, precio, pago grande o reclamo", dir: "" }, "var(--warn)")}
-          ${stat("Pedidos creados por el agente", grp(k.peds), { txt: c(k.pedMonto) + " · están en Ventas › Pedidos", dir: "up" }, "var(--ok)")}
-          ${stat("Pagos aplicados", grp(k.pagos), { txt: c(k.pagoMonto) + " con su REP y su asiento", dir: "" })}
-        </div>
         <div class="split ancho" style="align-items:stretch;min-height:540px">
           ${card({
+        title: "Conversaciones",
         actions: `<button class="btn sm" id="waNueva">${icon("plus")}Nueva</button>`,
-        body: `<div class="mut" style="font-size:12px;margin-bottom:6px">Conversaciones del día</div>
-          <div class="mitems" style="max-height:none">${D.waThreads.map(t => `
+        body: `<div style="margin:-4px 0 10px">${fchips("waf", WA_FILTROS.map(x => ({ v: x.v, t: x.t, n: D.waThreads.filter(x.f).length, k: x.v === "persona" && sinTomar ? "wa" : "" })), fl.v)}</div>
+          ${lista.length ? "" : `<div class="mut" style="font-size:13px;padding:14px 4px">Ninguna conversación ${esc(fl.t.toLowerCase())} hoy.</div>`}
+          <div class="mitems" style="max-height:none">${lista.map(t => `
             <button class="mitem" data-w="${t.id}" aria-selected="${t.id === th.id}" style="align-items:flex-start">
               <span class="avatar" style="margin-top:2px">${esc(ini(t.nom))}</span>
               <span style="flex:1;min-width:0"><span class="itd">${esc(t.nom)}</span>
@@ -360,6 +377,7 @@
     wire(v) {
       const th = () => D.waThreads.find(x => x.id === S.waSel);
       $$("[data-w]", v).forEach(b => b.addEventListener("click", () => { S.waSel = b.dataset.w; comoCliente = false; A.refresh(); }));
+      onSeg(v, "waf", x => { S.waFiltro = x; comoCliente = false; A.refresh(); });
       const vc = $("#verCli", v); if (vc) vc.addEventListener("click", () => A.go("clientes", th().clienteId));
       const vp = $("#verPed", v); if (vp) vp.addEventListener("click", () => A.go("cotizaciones", "pedidos"));
       const t2 = $("#tomar", v);
@@ -460,15 +478,11 @@
     render(v) {
       const X = conexiones();
       const mal = X.filter(x => x.estado[1] !== "ok");
+      const FI = U.filtrar("int", X, [{ v: "todos", t: "Todas", f: () => true }, { v: "mal", t: "Con algo por atender", f: x => x.estado[1] !== "ok", k: "wa" }, { v: "ok", t: "En línea", f: x => x.estado[1] === "ok" }]);
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Conexiones", grp(X.length), { txt: "Hacienda, bancos, WhatsApp, correo, datáfonos y nodos", dir: "" })}
-          ${stat("En línea", grp(X.length - mal.length), { txt: "sin nada pendiente", dir: "up" }, "var(--ok)")}
-          ${stat("Con algo por atender", grp(mal.length), { txt: mal.map(x => x.t.split(" ·")[0]).join(", ") || "nada", dir: mal.length ? "down" : "up" }, mal.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Integraciones simuladas", "Demo", { txt: "en producción son servicios reales; aquí los datos salen del sistema", dir: "" })}
-        </div>
+        <div class="ffila">${FI.chips}</div>
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr));align-items:stretch">
-          ${X.map(x => card({
+          ${FI.rows.map(x => card({
         title: x.t, hint: x.d, chip: " " + tag(x.estado[0], x.estado[1], x.estado[1] === "ok" ? "check" : "alert"),
         body: `<dl class="kv">${x.datos.map(d => `<dt>${esc(d[0])}</dt><dd class="num">${esc(String(d[1]))}</dd>`).join("")}
             <dt>Última actividad</dt><dd class="num">${x.ult ? fh(x.ult) : "—"}</dd></dl>
@@ -489,6 +503,7 @@
       })}</div>`;
     },
     wire(v) {
+      U.onFiltro(document, "int");
       $$("[data-int]", v).forEach(b => b.addEventListener("click", () => {
         const a = b.dataset.int;
         if (a.indexOf("go:") === 0) { const [scr, arg] = a.slice(3).split("|"); return A.go(scr, arg); }

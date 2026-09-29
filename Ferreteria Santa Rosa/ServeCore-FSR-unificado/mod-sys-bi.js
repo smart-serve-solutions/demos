@@ -43,12 +43,10 @@
   function pintaAlertas(el) {
     const pend = BI.ALERTAS.filter(a => a.est !== "Resuelta");
     if (!pend.length) { el.innerHTML = card({ body: empty("check", "Todo en orden", "Sin eventos críticos por atender. Las alertas nuevas aparecen aquí, en «Cómo vamos hoy» y en la pantalla de oficina.") }); return; }
+    const FL = U.filtrar("alr", pend, [{ v: "todos", t: "Todas", f: () => true }, { v: "crit", t: "Críticas", f: a => a.sev === "crit", k: "cr" }, { v: "warn", t: "De atención", f: a => a.sev === "warn", k: "wa" }, { v: "aten", t: "En atención", f: a => a.est === "En atención" }]);
     el.innerHTML = `<div class="wrap">
-      <div class="grid g4">${stat("Críticas", String(pend.filter(a => a.sev === "crit").length), { txt: "requieren acción hoy", dir: "down" }, "var(--crit)")}
-        ${stat("De atención", String(pend.filter(a => a.sev === "warn").length), { txt: "con plazo corto", dir: "" }, "var(--warn)")}
-        ${stat("En atención", String(pend.filter(a => a.est === "En atención").length), { txt: "alguien ya las tomó", dir: "" })}
-        ${stat("Resueltas esta semana", String(BI.RESUELTAS.length + 9), { txt: "tiempo medio 12 min", dir: "up" }, "var(--ok)")}</div>
-      ${pend.map(a => `<div class="card"><div class="bi-al ${a.sev === "warn" ? "warn" : ""}" data-al="${a.id}">
+      <div class="ffila">${FL.chips}${U.tira([U.ts("Resueltas esta semana", String(BI.RESUELTAS.length + 9), { txt: "tiempo medio 12 min" })])}</div>
+      ${FL.rows.map(a => `<div class="card"><div class="bi-al ${a.sev === "warn" ? "warn" : ""}" data-al="${a.id}">
         <div style="flex:1;min-width:0"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${sevTag(a.sev)}<span class="mut" style="font-size:12.5px;font-weight:650">${esc(a.ev)}</span>${tag(a.est, a.est === "En atención" ? "acc" : "mu")}</div>
           <div style="font-size:15px;font-weight:700;line-height:1.35">${esc(a.t)}</div>
           <div class="mut" style="font-size:13px;line-height:1.5;margin-top:4px">${esc(a.d)}</div>
@@ -59,6 +57,7 @@
           <button class="btn" data-res="${a.id}">Marcar resuelta</button>
           <button class="btn sm" data-regla="${a.id}" style="align-self:flex-start">Cambiar esta regla</button></div></div></div>`).join("")}</div>`;
     $$("[data-act]", el).forEach(b => b.addEventListener("click", () => { const a = BI.ALERTAS.find(x => x.id === b.dataset.act); if (a.ir && A.screens[a.ir]) A.go(a.ir); else toast(a.accion, "Se avisó a " + a.quien + " de " + a.loc + ".", "ok"); }));
+    U.onFiltro(el, "alr");
     $$("[data-regla]", el).forEach(b => b.addEventListener("click", () => A.go("sis-alertas|avisa")));
     $$("[data-tom]", el).forEach(b => b.addEventListener("click", () => { BI.ALERTAS.find(x => x.id === b.dataset.tom).est = "En atención"; toast("Alerta tomada", "Quedó a su nombre en la bitácora.", "ok"); A.refresh(); }));
     $$("[data-res]", el).forEach(b => b.addEventListener("click", () => {
@@ -137,10 +136,7 @@
         } },
       { id: "replica", t: "Consultas y réplica", sub: "Ninguna consulta de análisis toca la base de la caja",
         render: el => { el.innerHTML = `<div class="wrap">
-          <div class="grid g4">${stat("Réplica de lectura", "En línea", { txt: "retraso de 1,8 s con la caja", dir: "up" }, "var(--ok)")}
-            ${stat("Consultas de hoy", "214", { txt: "0 sobre la base transaccional", dir: "up" }, "var(--ok)")}
-            ${stat("En ejecución", "2", { txt: "1 en cola · 0 fallidas", dir: "" })}
-            ${stat("Tiempo típico", "1,4 s", { txt: "el más largo hoy: 3 min 10 s", dir: "" })}</div>
+          ${U.resumen([U.ts("Réplica de lectura", "En línea", { txt: "retraso de 1,8 s con la caja", dir: "up" }, "var(--ok)"), U.ts("Consultas de hoy", "214", { txt: "0 sobre la base transaccional", dir: "up" }, "var(--ok)"), U.ts("En ejecución", "2", { txt: "1 en cola · 0 fallidas", dir: "" }), U.ts("Tiempo típico", "1,4 s", { txt: "el más largo hoy: 3 min 10 s", dir: "" })])}
           ${card({ title: "Por dónde viaja cada cosa", body: `<div class="bi-flow">
             <div class="bi-box"><b>Caja de los 7 locales</b><br><span class="mut">Facturar, cobrar, recibir. Nunca espera por un reporte.</span></div><div class="bi-arrow">→</div>
             <div class="bi-box"><b>Base transaccional</b><br><span class="mut">Solo operación. Sin consultas de análisis.</span></div><div class="bi-arrow">↓</div>

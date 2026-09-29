@@ -94,11 +94,39 @@
   }
   const uri = a => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg(a));
 
-  /* la foto real si existe; si no, la ilustración */
+  /* fotos reales de ejemplo, de Wikimedia Commons (licencia libre; autor y licencia en FOTOS[cod]).
+     Orden de búsqueda: productos/<código>.jpg (foto propia) → la de Commons (necesita internet)
+     → la ilustración dibujada aquí (sin internet la demo sigue funcionando). */
+  const FOTOS = {
+    "FER-01042": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Portland_Cement_Bags.jpg/500px-Portland_Cement_Bags.jpg", a: "KVDP", l: "Dominio público", p: "https://commons.wikimedia.org/w/index.php?curid=4271773" },
+    "FER-02218": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/A_bunch_of_rebar_up_close.jpg/500px-A_bunch_of_rebar_up_close.jpg", a: "W.carter", l: "CC BY-SA 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=50617935" },
+    "FER-01880": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Concrete-block%2Cjapan.JPG/500px-Concrete-block%2Cjapan.JPG", a: "katorisi", l: "CC BY 2.5", p: "https://commons.wikimedia.org/w/index.php?curid=2419068" },
+    "FER-01455": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/PTFE_tape01.jpg/500px-PTFE_tape01.jpg", a: "Miya.m", l: "CC BY-SA 3.0", p: "https://commons.wikimedia.org/w/index.php?curid=1771285" },
+    "FER-04220": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/LED-E27-Light-Bulb-1134.jpg/500px-LED-E27-Light-Bulb-1134.jpg", a: "Loadmaster (David R. Tribble)", l: "CC BY-SA 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=101149484" },
+    "FER-04502": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Winkelschleifer_Trennscheibe_Metall.jpg/500px-Winkelschleifer_Trennscheibe_Metall.jpg", a: "Ralf Pfeifer", l: "CC BY-SA 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=114555632" },
+    "FER-04510": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Claw-hammer.jpg/500px-Claw-hammer.jpg", a: "Evan-Amos", l: "Dominio público", p: "https://commons.wikimedia.org/w/index.php?curid=11293857" },
+    "FER-04520": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/Screwdriver_set_with_great_variety_of_bits_and_ratchet_screwdriver.jpg/500px-Screwdriver_set_with_great_variety_of_bits_and_ratchet_screwdriver.jpg", a: "Pittigrilli", l: "CC BY 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=142761832" },
+    "FER-04540": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/B%26Q_Tape_Measure.jpg/500px-B%26Q_Tape_Measure.jpg", a: "多多123", l: "CC BY 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=137396628" },
+    "FER-05120": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Paint_bucket_and_brush.jpg/500px-Paint_bucket_and_brush.jpg", a: "Ionenlaser", l: "CC0", p: "https://commons.wikimedia.org/w/index.php?curid=127866937" },
+    "FER-05310": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Paint_roller_2.jpg/500px-Paint_roller_2.jpg", a: "Maggie", l: "CC BY 2.0", p: "https://commons.wikimedia.org/w/index.php?curid=25192477" },
+    "FER-07040": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Steel_nails.jpg/500px-Steel_nails.jpg", a: "Gausanchennai", l: "CC BY-SA 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=75750348" },
+    "FER-07120": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Solex_99_30_padlock_with_keys_%28DSCF2659%29.jpg/500px-Solex_99_30_padlock_with_keys_%28DSCF2659%29.jpg", a: "Trougnouf", l: "CC BY 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=65582711" },
+    "FER-08010": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Garden_hose.jpg/500px-Garden_hose.jpg", a: "Nandhp", l: "CC BY-SA 3.0", p: "https://commons.wikimedia.org/w/index.php?curid=691443" },
+    "FER-09010": { u: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/White_Hard_hat_and_grey_gloves.jpg/500px-White_Hard_hat_and_grey_gloves.jpg", a: "Peachyeung316", l: "CC BY-SA 4.0", p: "https://commons.wikimedia.org/w/index.php?curid=102803176" },
+    "FER-09020": { u: "https://upload.wikimedia.org/wikipedia/commons/8/8d/Disposable_nitrile_glove.jpg", a: "Autor sin nombre", l: "Dominio público", p: "https://commons.wikimedia.org/w/index.php?curid=146166" }
+  };
+  const foto = a => FOTOS[a && a.cod] || null;
+  const credito = a => { const f = foto(a); return f ? "Foto: " + f.a + " · " + f.l + " · Wikimedia Commons" : ""; };
+  /* los artículos con foto de ejemplo cuentan al menos una foto */
+  ((w.DB && w.DB.articulos) || []).forEach(a => { if (FOTOS[a.cod] && !a.fotos) a.fotos = 1; });
+
+  /* la foto propia si existe; si no, la de ejemplo; si no, la ilustración */
   function img(a, cls, alt) {
-    return `<img class="${cls || ""}" src="productos/${encodeURIComponent(a.cod)}.jpg" data-cod="${esc(a.cod)}" alt="${esc(alt || a.desc)}" loading="lazy" onerror="PRODIMG.falla(this)">`;
+    const f = foto(a);
+    return `<img class="${cls || ""}" src="productos/${encodeURIComponent(a.cod)}.jpg" data-cod="${esc(a.cod)}"${f ? ` data-web="${esc(f.u)}"` : ""} alt="${esc(alt || a.desc)}" loading="lazy" referrerpolicy="no-referrer" onerror="PRODIMG.falla(this)">`;
   }
   function falla(el) {
+    if (el.dataset.web && !el.dataset.webIntento) { el.dataset.webIntento = "1"; el.src = el.dataset.web; return; }
     el.onerror = null;
     const a = (w.DB.articulos || []).find(x => x.cod === el.dataset.cod);
     if (a) el.src = uri(a);
@@ -119,5 +147,5 @@
     return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(s);
   }
 
-  w.PRODIMG = { svg, uri, img, falla, comprobante };
+  w.PRODIMG = { svg, uri, img, falla, comprobante, FOTOS, foto, credito };
 })(window);

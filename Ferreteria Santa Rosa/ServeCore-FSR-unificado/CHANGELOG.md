@@ -1,5 +1,118 @@
 # Cambios
 
+## 2026-09-29 · Todos los módulos · Revisión de KPIs aplicada (sin filas de tarjetas arriba)
+
+Tras aprobar el piloto del Agente de WhatsApp se aplicó la misma regla a las demás pantallas. De las 72 que abrían
+con una fila de 4 tarjetas (122–182 px), hoy ninguna lo hace salvo las que se quedan a propósito. El trabajo sube
+100–150 px en cada una.
+
+- **Filtros con número sobre la lista (14):** Agente de WhatsApp · Integraciones externas · Cola de envío de Hacienda ·
+  Comprobantes recibidos · Despachos · Traslados en camino · Precios que siguen al costo · Proformas · Autorizaciones
+  de venta · Notas de crédito · Ajustes y mermas · Archivos al banco · Alertas pendientes · Sesiones abiertas.
+  Tocar un filtro filtra la lista; ámbar o rojo (con ícono) solo cuando hay algo que atender. Lo que no cuenta la
+  lista (montos, tasas) va en una línea a la derecha.
+- **Una línea de resumen (38):** Rutas, Liquidación de rutas, Líneas y bloqueos, Gestión de cobro, Recibos, Cuentas
+  por pagar, Notas de proveedor, Caja chica (fondos y tarjeta), Nómina (movimientos, puestos, salidas, asistencia,
+  horas extra, vacaciones, incapacidades, calendario), Facturación (inicio, REP, contingencia, consecutivos, CABYS),
+  Conciliaciones (caja e inventario), Saldos y movimientos, Cierre › Impuestos, Kardex, Apartados, Segunda y
+  devoluciones, Códigos y etiquetas, Plan de conteo, Usuarios, Políticas, Autorizaciones de excepción, Bitácora,
+  Ambiente de pruebas, Qué avisa y Rendimiento. El detalle de cada cifra queda al pasar el mouse.
+- **Se quitaron (6)**, eran datos fijos que ya están en la pantalla: Llave criptográfica, Períodos contables,
+  Catálogo de cuentas, Cuentas por familia y proveedor, Reglas de conciliación y Locales y bodegas.
+- **Se quedan (14)** porque la cifra es el contenido: Cómo vamos hoy, estados financieros, por local y familia,
+  presupuesto, activos fijos, resumen y reportes de nómina, CCSS, impuesto al salario, aguinaldo, IVA del período,
+  desempeño de vendedores, productos relacionados y ventas perdidas.
+- `core.js` (compartido): `ts()` recibe los mismos argumentos que `stat()` y arma la línea; `resumen()`, `filtrar()` y
+  `onFiltro()` completan las piezas. La cifra va antes de la etiqueta solo si es una cantidad pura («6
+  conversaciones», pero «semana 37 de 50»). `index.html`: estilos `.resumen`, `.ffila` y filtros en rojo.
+- Recorrido completo: 182 pantallas y pestañas sin errores, y los 56 filtros probados uno por uno.
+
+Archivos: `core.js`, `index.html`, `mod-venta.js`, `mod-venta-gestion.js`, `mod-inv.js`, `mod-cobros.js`,
+`mod-nomina.js`, `mod-planilla.js`, `mod-fiscal.js`, `mod-conta.js`, `mod-ia.js`, `mod-sys.js`, `mod-sys-bi.js`.
+
+## 2026-09-29 · Integraciones e IA · Piloto de la revisión de KPIs en el Agente de WhatsApp
+
+- Se quitó la fila de 4 tarjetas. Las cifras del día van en **una línea bajo el título** (conversaciones, resueltas
+  solas por el agente, pasaron a una persona y cuántas siguen sin tomar, pedidos y pagos con su monto).
+- Las que cuentan conversaciones son **filtros con número** en la bandeja: Todas · Con una persona · Con pedido ·
+  Con pago. Tocar uno filtra la lista; «Con una persona» se marca en ámbar mientras haya alguna sin tomar.
+- La bandeja y el chat suben ~150 px (en 1366 × 768 el chat empieza en 290 px en vez de ~450).
+- Piezas comunes nuevas para aplicar la regla en las demás pantallas si el piloto se aprueba: `tira()` y
+  `fchips()` en `core.js`, con sus estilos `.tira` y `.fchips` en `index.html` (cambios pequeños en compartidos).
+  La regla y la clasificación de las 72 pantallas están en el documento del proyecto «revision-kpis».
+
+Archivos: `mod-ia.js`, `core.js`, `index.html`.
+
+## 2026-09-29 · Compras · El consecutivo de la orden se asigna al aprobar
+
+- Un borrador lleva número temporal (**Borrador 0412**, clave `BOR-0412`) y toma su consecutivo oficial
+  `OC-2026-…` al aprobarse. Eliminar un borrador ya no deja hueco en la serie (SIS-008). La ficha dice «número
+  temporal · el consecutivo se asigna al aprobar» y, ya aprobada, «fue el borrador 0412»; la bitácora y el aviso
+  de aprobación registran el cambio de número.
+- `data.js` (compartido, cambio pequeño): `seq.BOR`, `crearOC` numera los borradores aparte y `consecutivoOC(oc)`
+  asigna el oficial. La orden del recorrido de la demo es ahora `BOR-0412` (marcada `principal`); se ajustaron las
+  referencias en Inicio (bodega), Reportería (alerta de costo) y la bitácora de ejemplo.
+- Las referencias guardadas con el número de borrador (cotizaciones, copias, selección) siguen funcionando:
+  `ocDe` busca por consecutivo o por el borrador que fue.
+
+Archivos: `data.js`, `mod-compra.js`, `mod-inicio.js`, `mod-bi.js`.
+
+## 2026-09-29 · POS · Enter para cobrar y para aplicar sin necesitar el foco
+
+- En la caja, **Enter cobra** estando el foco donde esté (o con el campo de escaneo vacío: escanear, escanear…
+  Enter). Se respeta el Enter propio del escaneo con texto, de las líneas y de un botón enfocado.
+- En el cobro, **Enter aplica** desde el monto, la referencia o sin foco. Si falta dinero, avisa cuánto y sugiere
+  F9 para agregar otro medio. Mantener Enter presionado no aplica dos veces. El botón Aplicar muestra ⏎.
+
+Archivos: `mod-venta.js`.
+
+## 2026-09-29 · Compras · Eliminar el borrador de una orden y estados más claros
+
+- **Eliminar borrador**: una orden que todavía es borrador (registrada, nunca aprobada) se puede eliminar, con
+  confirmación que muestra proveedor, destino, líneas y total. Sale de la lista y queda en la bitácora quién la
+  eliminó y qué tenía. Una orden aprobada no se elimina: se **anula** con motivo (Anular solo aparece en aprobadas).
+  «Copiar a otro local» ahora ofrece eliminar el borrador original en vez de anularlo.
+- **Aprobada no es aplicada.** Aprobar deja la orden firme ante el proveedor (no se edita, se envía con su QR);
+  aplicar es registrar su factura: ahí entra el inventario, la cuenta por pagar y el asiento. Las etiquetas dicen
+  el estado y lo que sigue: Borrador · Aprobada · por recibir · Recibida · falta la factura · Recibida con faltantes ·
+  Aplicada · cerrada · Anulada. El paso 4 del recorrido se llama «Factura aplicada» y las barras de «qué sigue»
+  lo explican. La clave interna de los estados no cambió.
+
+Archivos: `mod-compra.js`.
+
+## 2026-09-29 · POS · Teclas F en el cobro
+
+- En la hoja «Cobro de la factura» los medios de pago se eligen con **F1–F8** en el orden de la cuadrícula
+  (Efectivo, Tarjeta, SINPE móvil, Transferencia, Cheque, Anticipo, Dólares, Crédito) y **F9** agrega el pago para
+  seguir con otro medio. La hoja es modal y la caja de atrás queda inhabilitada, así que las F se reusan sin choque.
+  Se escuchan en captura: aunque el foco quede fuera de un campo, F1 y F9 ya no saltan a la caja o al inicio con la
+  hoja abierta. Crédito deshabilitado avisa por qué. Alt+1–8 queda como alias.
+
+Archivos: `mod-venta.js`.
+
+## 2026-09-29 · Inventario · Fotos de artículos y vista previa grande
+
+- La ficha del artículo muestra la foto en grande (184 × 138, antes un ícono de 64 × 64), con el número de fotos;
+  un clic la amplía con su crédito. Sin foto, el cuadro invita a agregarla.
+- 16 artículos traen foto real de ejemplo de Wikimedia Commons (licencia libre; autor y licencia en `FOTOS` de
+  `img-productos.js`). Orden: `productos/<código>.jpg` → foto de Commons (requiere internet) → ilustración.
+  La misma foto sale en las tarjetas del agente de WhatsApp.
+
+Archivos: `img-productos.js`, `mod-inv.js`, `index.html` (estilos `.foto-prev` y `.foto-grande`).
+
+## 2026-09-29 · Sistema / Ventas · Fondo de apertura por caja
+
+- Validado en la sesión 2 y en VEN-025/027: cada terminal (caja) de cada local tiene su propio fondo («inició con
+  100 000», «dejó el fondo en 50 o 100 000»). Parámetros generales › «Fondo de apertura por caja» abre la lista de
+  todas las cajas, filtrable por local, con el fondo editable de cada una, «mismo fondo a las cajas mostradas», el
+  fondo sugerido para una caja nueva y motivo obligatorio; cada cambio queda en la bitácora con antes y después.
+  Rige desde el próximo turno.
+- `VENX.TERMINALES[].fondo` y `VENX.fondoDe(local, caja)`: los usa la apertura de turno, el retiro sugerido, la
+  columna «Fondo» de Caja y turnos › Terminales y de Sistema › Terminales, la ficha de la terminal (nueva o
+  existente) y el saldo inicial de caja en contabilidad.
+
+Archivos: `ven-auto.js`, `mod-sys.js`, `mod-venta-gestion.js`, `con-data.js`.
+
 ## 2026-09-28 · Integraciones e IA · Imágenes de producto en las conversaciones
 
 - Cuando el agente de WhatsApp habla de un producto (precio, cotización o reserva), lo muestra en una tarjeta con su

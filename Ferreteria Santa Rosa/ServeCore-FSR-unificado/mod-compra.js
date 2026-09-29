@@ -65,15 +65,18 @@
   }
 
   /* ══ ESTADO DE CADA ORDEN ════════════════════════════════════
-     Registrada (se edita) → Aprobada (firme, se envía con QR) →
+     Registrada = borrador (se edita o se elimina; no compromete nada) →
+     Aprobada (firme ante el proveedor, se envía con QR; ya no se edita, solo se anula) →
      Recibida / Recibida parcial (bodega cerró la recepción) →
-     Aplicada (compra registrada con su XML) · Anulada (con motivo). */
+     Aplicada (la factura del proveedor se aplicó: entra inventario, cuenta por pagar y asiento) ·
+     Anulada (con motivo). Aprobada NO es aplicada: aprobar compromete la compra; aplicar la registra.
+     La etiqueta dice el estado y lo que sigue; la clave interna no cambia. */
   const EST = {
-    "Registrada": ["Por aprobar", "mu"],
-    "Aprobada": ["Por recibir", "acc"],
-    "Recibida": ["Por registrar", "wa"],
-    "Recibida parcial": ["Con faltantes", "wa"],
-    "Aplicada": ["Aplicada", "ok"],
+    "Registrada": ["Borrador", "mu"],
+    "Aprobada": ["Aprobada · por recibir", "acc"],
+    "Recibida": ["Recibida · falta la factura", "wa"],
+    "Recibida parcial": ["Recibida con faltantes", "wa"],
+    "Aplicada": ["Aplicada · cerrada", "ok"],
     "Anulada": ["Anulada", "cr"]
   };
   const estTag = oc => tag((EST[oc.estado] || [oc.estado])[0], (EST[oc.estado] || [0, "mu"])[1]);
@@ -129,7 +132,11 @@
     return oc;
   }
   const OCS = () => D.compras.map(prepara);
-  const ocDe = cons => OCS().find(o => o.cons === cons);
+  /* una orden se encuentra por su consecutivo o por el número de borrador que tuvo antes de aprobarse
+     (así no se rompen las referencias guardadas: cotizaciones, copias, selección) */
+  const ocDe = cons => OCS().find(o => o.cons === cons || o.borrador === cons);
+  /* cómo se lee el número: «Borrador 0412» mientras no tenga consecutivo; «OC 004431» después */
+  const nomOC = cons => /^BOR-/.test(cons || "") ? "Borrador " + cons.slice(4) : String(cons || "").replace("OC-2026-", "OC ");
   function nuevaOC(provId, locId, items, estado) {
     const oc = prepara(D.crearOC(provId, locId, items, estado || "Registrada", D.ahora()));
     oc.creadoPor = D.sesion.nom;
@@ -154,9 +161,9 @@
     const rs = recStats(oc);
     const P = [
       { t: "Orden", s: corto(oc.creadoPor) + " · " + fecha(oc.fecha), go: "ordenes" },
-      { t: "Aprobación", s: oc.aprobadoPor ? corto(oc.aprobadoPor) : ap ? "Anulada" : "Falta · Gerencia", go: "ordenes" },
+      { t: "Aprobación", s: oc.aprobadoPor ? corto(oc.aprobadoPor) + " · quedó firme" : ap ? "Anulada" : "Falta · la deja firme", go: "ordenes" },
       { t: "Recepción", s: oc.rec && oc.rec.cerrada ? rs.comp + " de " + rs.n + " líneas completas" : oc.rec ? "En proceso · " + rs.comp + "/" + rs.n : "Bodega", go: "recepcion" },
-      { t: "Compra", s: oc.aplicada ? (oc.aplicada.clave ? "FE …" + oc.aplicada.clave.slice(-6) : "Registrada") : "Contra el XML", go: "registrar-compra" },
+      { t: "Factura aplicada", s: oc.aplicada ? (oc.aplicada.clave ? "FE …" + oc.aplicada.clave.slice(-6) : "Aplicada") : "Entra inventario y CxP", go: "registrar-compra" },
       { t: "Reparto", s: oc.dist ? (oc.dist.traslados && oc.dist.traslados.length ? oc.dist.traslados.length + " traslados" : "Todo queda") : esBodega(oc) && oc.tipo !== "Autoconsumo" ? "A los locales" : "No aplica", go: "recepcion" }
     ];
     return `<ol class="steps" aria-label="Recorrido de la orden">${P.map((x, k) => {
@@ -173,10 +180,10 @@
     if (oc.estado === "Anulada") return bar("Orden anulada", esc((oc.anulada && oc.anulada.motivo) || "Sin motivo registrado") + (oc.anulada ? " · " + esc(oc.anulada.por) : ""), "");
     if (oc.estado === "Registrada") {
       const bl = oc.lineas.filter(bloqueada).length;
-      return bar("Sigue: aprobar la orden", bl ? bl + " línea" + (bl > 1 ? "s" : "") + " con el costo fuera de ±" + POL.topeVar + " %: corrija el costo o pida la autorización antes de aprobar." : oc.lineas.length ? "Al aprobarla queda firme, toma consecutivo y se envía al proveedor con su QR." : "Agregue artículos: uno por uno, desde una plantilla o desde el sugerido de compra.",
+      return bar("Borrador · sigue aprobarla", bl ? bl + " línea" + (bl > 1 ? "s" : "") + " con el costo fuera de ±" + POL.topeVar + " %: corrija el costo o pida la autorización antes de aprobar." : oc.lineas.length ? "Mientras sea borrador se edita o se elimina y no compromete nada. Al aprobarla toma su consecutivo oficial, queda firme (ya no se edita, solo se anula) y se envía al proveedor con su QR." : "Agregue artículos: uno por uno, desde una plantilla o desde el sugerido de compra. Si no la va a usar, elimine el borrador.",
         aqui === "ordenes" ? `<button class="btn pri" id="ocAprobar" ${bl || !oc.lineas.length ? "disabled" : ""}>${icon("check")}Aprobar y enviar</button>` : ir("ordenes", "Ir a la orden"), "aprobar");
     }
-    if (oc.estado === "Aprobada") return bar("Sigue: recibir en bodega", "La bodega escanea la mercadería contra la orden (o escanea el QR y la recepción se abre sola).", aqui === "recepcion" ? "" : ir("recepcion", "Recibir", "scan"), aqui === "recepcion" ? "recibir" : null);
+    if (oc.estado === "Aprobada") return bar("Aprobada · sigue recibir en bodega", "Ya es firme ante el proveedor, pero todavía no es compra: el inventario y la cuenta por pagar entran cuando se aplica su factura. La bodega escanea la mercadería contra la orden (o el QR).", aqui === "recepcion" ? "" : ir("recepcion", "Recibir", "scan"), aqui === "recepcion" ? "recibir" : null);
     if (recibida(oc)) return bar("Sigue: registrar la compra", "Proveeduría coteja orden, recepción y factura electrónica del proveedor; lo que no cuadra se acepta parcial y se pide la nota de crédito.", aqui === "registrar-compra" ? "" : ir("registrar-compra", "Registrar compra", "file"), aqui === "registrar-compra" ? "registrar" : null);
     if (porRepartir(oc)) return bar("Sigue: repartir a los locales", "La mercadería entró a " + esc(locNom(oc.locId)) + ". El sugerido de cada tienda sale de sus mínimos y de lo que tiene.", aqui === "recepcion" ? "" : ir("recepcion", "Repartir", "route"), aqui === "recepcion" ? "repartir" : null);
     return bar("Orden cerrada", "Compra aplicada" + (oc.aplicada && oc.aplicada.por ? " por " + esc(oc.aplicada.por) : "") + (oc.backorder ? " · lo pendiente sigue en " + esc(oc.backorder) : "") + ".", "");
@@ -197,9 +204,9 @@
       <div style="display:flex;align-items:flex-start;gap:6px">
         ${o.check ? `<input type="checkbox" class="ocChk" value="${esc(x.cons)}" aria-label="Seleccionar ${esc(x.cons)}" ${o.check.indexOf(x.cons) >= 0 ? "checked" : ""} style="margin-top:14px">` : ""}
         <button class="mitem" style="flex:1;display:block;text-align:left" data-oc="${esc(x.cons)}" aria-selected="${x.cons === sel}">
-          <span style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span class="itd num" style="white-space:nowrap">${esc(x.cons.replace("OC-2026-", "OC "))}</span><b class="num" style="font-size:12.5px;white-space:nowrap">${grp(x.total)}</b></span>
+          <span style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span class="itd num" style="white-space:nowrap">${esc(nomOC(x.cons))}</span><b class="num" style="font-size:12.5px;white-space:nowrap">${grp(x.total)}</b></span>
           <span class="itc" style="display:block">${esc(provCorto(x.provId))} · ${esc(locNom(x.locId))}</span>
-          <span class="itc" style="display:block">${x.lineas.length} líneas · ${fecha(x.fecha)}${x.origen ? " · de " + esc(x.origen.replace("OC-2026-", "OC ")) : ""}</span>
+          <span class="itc" style="display:block">${x.lineas.length} líneas · ${fecha(x.fecha)}${x.origen ? " · de " + esc(nomOC((ocDe(x.origen) || {}).cons || x.origen)) : ""}</span>
           ${o.estado === false ? "" : `<span style="display:block;margin-top:5px">${estTag(x)}</span>`}
         </button></div>`).join("")}</div>`;
   }
@@ -353,7 +360,7 @@
     { v: "Por registrar", f: o => recibida(o) },
     { v: "Cerradas", f: o => !abierta(o) }
   ];
-  let ocFiltro = "Abiertas", ocSel = "OC-2026-004412", foco = null;
+  let ocFiltro = "Abiertas", ocSel = (D.compras.find(o => o.principal) || D.compras[0]).cons, foco = null;
   const MAS = [];
   const ordenFecha = (a, b) => b.fecha - a.fecha;
 
@@ -363,8 +370,8 @@
     extra: () => `<button class="btn" data-ir="reposicion|sugerido">${icon("sparkle")}Sugerido de compra</button><button class="btn pri" id="ocNueva">${icon("plus")}Nueva orden</button>`,
     prep(arg) {
       if (!arg) return;
-      ocSel = arg; S.arg = null;
       const o = ocDe(arg), f = FILTROS.find(x => x.v === ocFiltro);
+      ocSel = o ? o.cons : arg; S.arg = null;
       if (o && !f.f(o)) ocFiltro = abierta(o) ? "Abiertas" : "Cerradas";
     },
     render(v) {
@@ -441,17 +448,18 @@
       edit ? `<button class="btn sm" id="ocPlant">${icon("upload")}Cargar desde plantilla</button>` : "",
       oc.estado !== "Anulada" ? `<button class="btn sm" id="ocCopia">${icon("copy")}Copiar a otro local</button>` : "",
       oc.aprobadoPor && oc.estado !== "Anulada" ? `<button class="btn sm" id="ocQR">${icon("scan")}QR de la orden</button>` : "",
-      oc.estado === "Registrada" || oc.estado === "Aprobada" ? `<button class="btn sm" id="ocAnula">${icon("x")}Anular</button>` : ""
+      oc.estado === "Registrada" && !oc.aprobadoPor ? `<button class="btn sm" id="ocElimina" style="color:var(--crit)">${icon("trash")}Eliminar borrador</button>` : "",
+      oc.estado === "Aprobada" ? `<button class="btn sm" id="ocAnula">${icon("x")}Anular</button>` : ""
     ].join("");
     return `${pasos(oc)}
       ${siguiente(oc, "ordenes")}
       ${card({
       body: `<div class="ficha" style="margin:-12px -17px -16px">
-          ${fichaCell("Orden", esc(oc.cons) + (oc.tipo === "Autoconsumo" ? " " + tag("Autoconsumo · " + (oc.area || "taller"), "in") : ""))}
+          ${fichaCell("Orden", (/^BOR-/.test(oc.cons) ? `${esc(nomOC(oc.cons))}<span class="sub">número temporal · el consecutivo se asigna al aprobar</span>` : esc(oc.cons) + (oc.borrador ? `<span class="sub">fue el ${esc(nomOC(oc.borrador).toLowerCase())}</span>` : "")) + (oc.tipo === "Autoconsumo" ? " " + tag("Autoconsumo · " + (oc.area || "taller"), "in") : ""))}
           ${fichaCell("Proveedor", `<button id="ocProv" title="Abrir la ficha sin salir de la orden" style="all:unset;cursor:pointer;font-family:var(--ui);font-size:14px;color:var(--accent);text-decoration:underline;text-underline-offset:3px">${esc(p.nom)}</button><span class="sub">${esc(p.ced)} · ver o editar sin salir</span>`)}
           ${fichaCell("Destino", `<span style="font-family:var(--ui);font-size:14px">${esc(locNom(oc.locId))}</span>`)}
           ${fichaCell("Condición de pago", `<span style="font-family:var(--ui);font-size:14px">${oc.plazo} días</span><span class="sub">${esc(neg.t)}${neg.desc ? " · " + dec(neg.desc, neg.desc % 1 ? 1 : 0) + " %" : ""}${oc.plazo !== neg.plazo ? " · plazo especial" : ""}</span>${abierta(oc) ? ` <button class="btn sm" id="ocPlazo" style="margin-top:4px">Cambiar</button>` : ""}`)}
-          ${fichaCell("Estado", estTag(oc))}
+          ${fichaCell("Estado", estTag(oc).replace('class="tag', 'style="white-space:normal;height:auto;line-height:1.35;padding-top:3px;padding-bottom:3px" class="tag'))}
         </div>`
     })}
       ${card({
@@ -487,6 +495,7 @@
     const cp = $("#ocCopia", v); if (cp) cp.addEventListener("click", () => copiarSheet(oc));
     const qr = $("#ocQR", v); if (qr) qr.addEventListener("click", () => qrSheet(oc));
     const an = $("#ocAnula", v); if (an) an.addEventListener("click", () => anularSheet(oc));
+    const el = $("#ocElimina", v); if (el) el.addEventListener("click", () => eliminarSheet(oc));
     $$("[data-aut]", v).forEach(b => b.addEventListener("click", () => autorizarLinea(oc, oc.lineas[+b.dataset.aut])));
     $$("[data-del]", v).forEach(b => b.addEventListener("click", () => {
       if (!exige("comprar", "Editar la orden")) return;
@@ -568,9 +577,14 @@
     if (m) { if (avisa) toast("No se aprobó " + oc.cons, m + ".", "cr"); return false; }
     oc.estado = "Aprobada";
     oc.aprobadoPor = D.sesion.nom;
-    anotar("Aprobó orden de compra", oc.cons + " · " + provNom(oc.provId) + " · ₡" + grp(oc.total), oc, "Registrada", "Aprobada");
+    /* aquí, y no antes, toma el consecutivo oficial: un borrador eliminado no deja hueco */
+    const antes = oc.cons;
+    D.consecutivoOC(oc);
+    if (ocSel === antes) { ocSel = oc.cons; if (avisa && ocFiltro === "Por aprobar") ocFiltro = "Abiertas"; }
+    const im = MAS.indexOf(antes); if (im >= 0) MAS[im] = oc.cons;
+    anotar("Aprobó orden de compra", oc.cons + (oc.borrador ? " (era " + nomOC(oc.borrador).toLowerCase() + ")" : "") + " · " + provNom(oc.provId) + " · ₡" + grp(oc.total), oc, "Borrador", "Aprobada");
     if (avisa) {
-      toast("Orden aprobada y enviada", oc.cons + " quedó firme y salió a " + provNom(oc.provId) + " por correo y WhatsApp, con el QR que usa la bodega.", "ok");
+      toast("Orden aprobada · " + oc.cons, (oc.borrador ? "El " + nomOC(oc.borrador).toLowerCase() + " tomó el consecutivo " + oc.cons + ". " : "") + "Quedó firme y salió a " + provNom(oc.provId) + " por correo y WhatsApp, con el QR que usa la bodega.", "ok");
       A.refresh();
     }
     return true;
@@ -583,7 +597,7 @@
       title: "Aprobar " + sel.length + " órdenes", sub: "Revise el resumen antes de confirmar",
       body: table({
         cols: [
-          { t: "Orden", cls: "mono", fmt: o => esc(o.cons) },
+          { t: "Borrador", cls: "mono", fmt: o => esc(nomOC(o.cons)) },
           { t: "Proveedor", fmt: o => esc(provNom(o.provId)) },
           { t: "Total", r: true, cls: "mono", fmt: o => grp(o.total) },
           { t: "", fmt: o => { const m = motivoNoAprueba(o); return m ? tag(m, "cr", "alert") : tag("Se aprueba", "ok", "check"); } }
@@ -596,7 +610,7 @@
         $("#mOk", r).addEventListener("click", () => {
           ok.forEach(o => aprobar(o, false));
           MAS.length = 0; closeSheet();
-          toast(ok.length + " órdenes aprobadas", "Quedaron firmes y salieron a sus proveedores. " + (no.length ? no.length + " quedaron registradas por su motivo." : ""), "ok");
+          toast(ok.length + " órdenes aprobadas", "Tomaron su consecutivo, quedaron firmes y salieron a sus proveedores. " + (no.length ? no.length + " quedaron registradas por su motivo." : ""), "ok");
           A.refresh();
         });
       }
@@ -715,7 +729,7 @@
     openSheet({
       title: "Copiar " + oc.cons + " a otro local", sub: "Sale una orden nueva, registrada, con las mismas líneas y costos (COM-016)",
       body: `${field("Local de destino", `<select class="inp" id="cpL">${D.locales.filter(l => l.id !== oc.locId).map(l => `<option value="${l.id}">${esc(l.nom)}</option>`).join("")}</select>`)}
-        <label class="chipck" style="margin-top:12px"><input type="checkbox" id="cpA" ${oc.estado === "Registrada" ? "" : "disabled"}><span>Anular la original (solo si todavía está registrada)</span></label>`,
+        <label class="chipck" style="margin-top:12px"><input type="checkbox" id="cpA" ${oc.estado === "Registrada" ? "" : "disabled"}><span>Eliminar el borrador original (solo si todavía es borrador)</span></label>`,
       footer: `<div style="flex:1"></div><button class="btn" id="cpX">Cancelar</button><button class="btn pri" id="cpOk">${icon("copy")}Copiar</button>`,
       after: r => {
         $("#cpX", r).addEventListener("click", closeSheet);
@@ -725,10 +739,7 @@
           n.tipo = oc.tipo; n.area = oc.area; n.neg = oc.neg; n.plazo = oc.plazo; n.origen = oc.cons;
           n.hist[0].acc = "Registró la orden copiando " + oc.cons;
           anotar("Copió orden de compra", oc.cons + " → " + n.cons + " · " + locNom(loc), oc);
-          if ($("#cpA", r).checked && oc.estado === "Registrada") {
-            oc.estado = "Anulada"; oc.anulada = { por: D.sesion.nom, f: D.ahora(), motivo: "Se copió a " + locNom(loc) + " (" + n.cons + ")" };
-            anotar("Anuló orden de compra", oc.cons + " · " + oc.anulada.motivo, oc, "Registrada", "Anulada");
-          }
+          if ($("#cpA", r).checked && oc.estado === "Registrada") eliminarOC(oc, "se copió a " + locNom(loc) + " (" + n.cons + ")");
           ocSel = n.cons; ocFiltro = "Por aprobar";
           closeSheet(); toast("Orden copiada", n.cons + " para " + locNom(loc) + ", lista para revisar.", "ok"); A.refresh();
         });
@@ -746,6 +757,37 @@
       after: r => {
         $("#qrX", r).addEventListener("click", closeSheet);
         $("#qrR", r).addEventListener("click", () => A.go("recepcion", oc.cons));
+      }
+    });
+  }
+
+  /* Eliminar: solo un borrador que nunca se aprobó. No deja rastro en la lista, sí en la bitácora
+     (quién, cuándo, proveedor, líneas y total). Una orden aprobada no se elimina: se anula. */
+  function eliminarOC(oc, motivo) {
+    const i = D.compras.indexOf(oc);
+    if (i < 0) return;
+    D.compras.splice(i, 1);
+    const m = MAS.indexOf(oc.cons); if (m >= 0) MAS.splice(m, 1);
+    if (ocSel === oc.cons) ocSel = null;
+    anotar("Eliminó borrador de orden de compra", oc.cons + " · " + provNom(oc.provId) + " · " + oc.lineas.length + " líneas · ₡" + grp(oc.total) + (motivo ? " · " + motivo : ""), oc, "Borrador", "Eliminado");
+  }
+  function eliminarSheet(oc) {
+    if (!exige("comprar", "Eliminar un borrador de orden")) return;
+    if (oc.estado !== "Registrada" || oc.aprobadoPor) return toast("Ya no es borrador", "Una orden aprobada no se elimina: se anula, con motivo.", "cr");
+    openSheet({
+      title: "¿Eliminar el " + nomOC(oc.cons).toLowerCase() + "?", sub: "Todavía no se envió al proveedor, así que no compromete nada",
+      body: `<div style="display:flex;flex-direction:column;gap:12px">
+          <dl class="kv"><dt>Proveedor</dt><dd>${esc(provNom(oc.provId))}</dd><dt>Destino</dt><dd>${esc(locNom(oc.locId))}</dd><dt>Líneas</dt><dd class="num">${oc.lineas.length}</dd><dt>Total</dt><dd class="num">${c(oc.total)}</dd></dl>
+          <div style="display:flex;gap:10px;padding:11px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);font-size:12.5px;color:var(--ink-2);line-height:1.55">${icon("history", 'style="flex:none;color:var(--accent)"')}<div>Se quita de la lista y no se puede recuperar. No deja hueco en los consecutivos: el número oficial se asigna al aprobar. Queda en la bitácora quién la eliminó y qué tenía.${oc.origen ? " Venía de " + esc(oc.origen) + "." : ""}</div></div></div>`,
+      footer: `<div style="flex:1"></div><button class="btn" id="elX">Conservar</button><button class="btn pri" id="elOk" style="background:var(--crit);border-color:var(--crit)">${icon("trash")}Eliminar borrador</button>`,
+      after: r => {
+        $("#elX", r).addEventListener("click", closeSheet);
+        $("#elOk", r).addEventListener("click", () => {
+          eliminarOC(oc);
+          closeSheet();
+          toast("Borrador eliminado", nomOC(oc.cons) + " de " + provNom(oc.provId) + " ya no está en la lista. Quedó anotado en la bitácora.", "ok");
+          A.refresh();
+        });
       }
     });
   }
@@ -1532,7 +1574,7 @@
           : bar("Lista para enviar", s.items.length + " artículos a " + s.provs.length + " proveedores, por correo y WhatsApp, con cantidad y destino.", `<button class="btn pri" id="sub1">${icon("file")}Enviar a ${s.provs.length} proveedores</button>`, "comprar"))
       : s.paso === 1 ? bar("Sigue: cargar las respuestas", "Cada proveedor devuelve la misma lista con su precio. Se carga el archivo y el cuadro se arma solo; nadie digita precios.", `<button class="btn pri" id="sub2">${icon("arrowdown")}Cargar respuestas</button>`, "comprar")
         : s.paso === 2 ? bar("Sigue: adjudicar", "Toque un precio para adjudicar esa línea, o use la sugerencia y ajuste lo que haga falta.", `<button class="btn" id="adjSug">${icon("sparkle")}Sugerencia</button><button class="btn" id="adjPrecio">Solo por precio</button><button class="btn pri" id="adjOk">${icon("check")}Adjudicar y crear órdenes</button>`, "comprar")
-          : bar("Adjudicada", "Las órdenes quedaron registradas, una por proveedor, y van a aprobación.", s.ocs.map(cn => `<button class="btn sm" data-paso="ordenes|${esc(cn)}">${esc(cn)}</button>`).join(""));
+          : bar("Adjudicada", "Las órdenes quedaron registradas, una por proveedor, y van a aprobación.", s.ocs.map(cn => { const o = ocDe(cn); return `<button class="btn sm" data-paso="ordenes|${esc(cn)}">${esc(nomOC(o ? o.cons : cn))}</button>`; }).join(""));
 
     const datos = card({
       title: s.id, actions: subTag(s) + (edit ? ` <button class="btn sm" id="sDesc">${icon("x")}Descartar</button>` : ""),
@@ -1892,7 +1934,7 @@
         body: table({
           h: "320px",
           cols: [
-            { t: "Orden", cls: "mono", fmt: r => `<button class="btn sm" data-paso="ordenes|${esc(r.cons)}" style="font-family:var(--num)">${esc(r.cons.replace("OC-2026-", "OC "))}</button>` },
+            { t: "Orden", cls: "mono", fmt: r => `<button class="btn sm" data-paso="ordenes|${esc(r.cons)}" style="font-family:var(--num)">${esc(nomOC(r.cons))}</button>` },
             { t: "Destino", fmt: r => esc(locNom(r.locId)) },
             { t: "Total", r: true, cls: "mono", fmt: r => grp(r.total) },
             { t: "Estado", fmt: r => estTag(r) }

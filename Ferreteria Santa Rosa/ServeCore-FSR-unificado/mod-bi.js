@@ -259,7 +259,7 @@
       sev: "crit",
       ev: "Cambio de costo fuera de rango",
       t: "Costo de «" + artFon.desc + "» pasó de ₡4 100 a ₡41 (−99 %)",
-      d: "Se digitó en la compra OC-2026-004412. Con ese costo el artículo se vendería por debajo de lo que costó traerlo.",
+      d: "Se digitó en el borrador de orden BOR-0412; no se puede aprobar hasta corregirlo. Con ese costo el artículo se vendería por debajo de lo que costó traerlo.",
       loc: "Proveeduría",
       quien: "Compras",
       hace: "hace 6 min",

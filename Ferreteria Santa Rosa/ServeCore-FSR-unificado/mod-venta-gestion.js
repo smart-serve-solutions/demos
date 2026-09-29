@@ -180,7 +180,7 @@
     const hab = (V.HABILITADOS[t.locId] || []).filter(h => /Admin/.test(h[1]));
     openSheet({
       title: "Retiro de efectivo", sub: cajaNom(t) + " · hay " + c(r.efectivo) + " en efectivo",
-      body: `<div class="field"><label for="retMonto">Monto</label><input id="retMonto" class="num" style="font-size:20px;text-align:right" value="${grp(Math.max(0, Math.floor((r.efectivo - V.PARAM.fondoCaja) / 50000) * 50000))}"></div>
+      body: `<div class="field"><label for="retMonto">Monto</label><input id="retMonto" class="num" style="font-size:20px;text-align:right" value="${grp(Math.max(0, Math.floor((r.efectivo - t.fondo) / 50000) * 50000))}"></div>
         <div class="field"><label for="retMot">Motivo</label><select id="retMot"><option>Retiro a la bóveda</option><option>Depósito al banco</option><option>Pago a proveedor de contado</option><option>Cambio para otra caja</option></select></div>
         <div class="field"><label for="retRec">Recibe</label><select id="retRec">${(hab.length ? hab : [["Administrador", ""]]).map(h => `<option>${esc(h[0])}</option>`).join("")}</select></div>
         ${nota("El retiro baja el efectivo esperado de la caja y queda en la bitácora con quién lo recibió. Al cierre ya no aparece como faltante.", "shield")}`,
@@ -204,7 +204,7 @@
       v.innerHTML = `<div class="wrap">${card({
         body: `${empty("cash", "La caja " + S.term + " está cerrada", "Para cobrar hay que abrirla con su fondo. Queda a su nombre hasta el cierre o el cambio de turno.")}
           <div style="display:flex;gap:10px;justify-content:center;align-items:flex-end;margin-top:6px">
-            <div class="field" style="margin:0;width:180px"><label for="fondo">Fondo de apertura</label><input id="fondo" class="num" style="text-align:right" value="${grp(V.PARAM.fondoCaja)}"></div>
+            <div class="field" style="margin:0;width:180px"><label for="fondo">Fondo de apertura</label><input id="fondo" class="num" style="text-align:right" value="${grp(V.fondoDe(S.locId, S.term))}"></div>
             <button class="btn pri" id="abrirCaja">${icon("check")}Abrir caja</button></div>`
       })}</div>`;
       return;
@@ -330,6 +330,7 @@
         cols: [
           { t: "Caja", fmt: x => `<b>Caja ${x.n}</b><span class="sub ui">${esc(x.equipo)}</span>` },
           { t: "Consecutivo", cls: "mono", fmt: x => esc(x.cons) },
+          { t: "Fondo", r: true, cls: "mono", fmt: x => grp(x.fondo) },
           { t: "Ahora", fmt: x => { const t = V.turnoDe(x.locId, x.n); return t ? tag(t.cajero, "ok", "users") : tag("Cerrada", "mu"); } }
         ], rows: V.TERMINALES.filter(x => x.locId === l.id)
       })}
@@ -435,13 +436,9 @@
       .sort((a, b) => (a.estado === "Vencida") - (b.estado === "Vencida") || a.vence - b.vence);
     const vig = lista.filter(p => p.estado === "Vigente");
     const porVencer = vig.filter(p => venceEn(p) <= 3);
+    const FP = U.filtrar("prof", lista, [{ v: "todos", t: "Todas", f: () => true }, { v: "vig", t: "Vigentes", f: p => p.estado === "Vigente" }, { v: "vencen", t: "Vencen en 3 días o menos", f: p => p.estado === "Vigente" && venceEn(p) <= 3, k: "wa" }, { v: "vencidas", t: "Vencidas", f: p => p.estado === "Vencida" }]);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Vigentes", grp(vig.length), { txt: c(vig.reduce((s, p) => s + p.total, 0)) + " cotizados" })}
-        ${stat("Vencen en 3 días o menos", grp(porVencer.length), { txt: "llamar antes de que se pierdan" }, "var(--warn)")}
-        ${stat("Tasa de conversión", "63,4 %", { txt: "proformas que terminan en factura", dir: "up" }, "var(--ok)")}
-        ${stat("Peso cotizado", kg(vig.reduce((s, p) => s + p.peso, 0)), { txt: "con el flete de cada zona ya calculado" })}
-      </div>
+      <div class="ffila">${FP.chips}${U.tira([U.ts("Tasa de conversión", "63,4 %", { txt: "proformas que terminan en factura" }), U.ts("Peso cotizado", kg(vig.reduce((s, p) => s + p.peso, 0)), { txt: "de las vigentes, con el flete de cada zona ya calculado" }), U.ts("Cotizado", c(vig.reduce((s, p) => s + p.total, 0)), { txt: "monto de las proformas vigentes" })])}</div>
       ${card({
       title: "Proformas", hint: "clic para ver, enviar o convertir en factura",
       actions: seg("pfa", [{ v: "local", t: locNom(S.locId) }, { v: "todos", t: "Todos" }], pfAmbito),
@@ -456,14 +453,15 @@
           { t: "Total", r: true, cls: "mono", fmt: p => `<b>${grp(p.total)}</b>` },
           { t: "Estado", fmt: estadoProf },
           { t: "", r: true, fmt: (p, i) => (p.estado === "Vigente" ? `<button class="btn sm pri" data-conv="${i}">Convertir</button>` : "") }
-        ], rows: lista, rowCls: p => (p.estado === "Vencida" ? "wa" : "")
+        ], rows: FP.rows, rowCls: p => (p.estado === "Vencida" ? "wa" : "")
       })
     })}</div>`;
-    v._lista = lista;
+    v._lista = FP.rows;
   }
   function proformasWire(v) {
     const p = $("#tp-cotizaciones", v);
     onSeg(document, "pfa", x => { pfAmbito = x; A.refresh(); });
+    U.onFiltro(document, "prof");
     $$("[data-conv]", p).forEach(b => b.addEventListener("click", e => { e.stopPropagation(); aCaja(p._lista[+b.dataset.conv]); }));
     $$("tr.clickable", p).forEach(tr => tr.addEventListener("click", () => detalleProf(p._lista[+tr.dataset.i])));
   }
@@ -680,13 +678,9 @@
     const L = D.despachos.filter(x => (x.estado === "Pendiente de alistar" || x.estado === "Alistado") && x.modalidad !== "Retiro en otro local" && deLoc(x.locId, dsAmbito))
       .sort((a, b) => a.fecha - b.fecha);
     const pa = L.filter(x => x.estado === "Pendiente de alistar");
+    const FD = U.filtrar("desp", L, [{ v: "todos", t: "Todos", f: () => true }, { v: "alistar", t: "Por alistar", f: x => x.estado === "Pendiente de alistar", k: "wa" }, { v: "alistados", t: "Alistados", f: x => x.estado === "Alistado" }, { v: "peso", t: "Marcados por peso", f: x => !!x.auto }, { v: "viejos", t: "Con más de 2 días", f: x => V.diasEntre(x.fecha, D.HOY) >= 2, k: "cr" }]);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Por alistar", grp(pa.length), { txt: "facturado y todavía en la tienda" }, "var(--warn)")}
-        ${stat("Alistados", grp(L.length - pa.length), { txt: "esperan ruta o al cliente" })}
-        ${stat("Marcados por peso", grp(L.filter(x => x.auto).length), { txt: "por peso: más de " + V.PARAM.pesoNoDespacho + " kg" })}
-        ${stat("Con más de 2 días", grp(L.filter(x => V.diasEntre(x.fecha, D.HOY) >= 2).length), { txt: "revisar si el cliente ya viene" }, "var(--crit)")}
-      </div>
+      <div class="ffila">${FD.chips}</div>
       ${card({
       title: "Mercadería facturada sin entregar", hint: "clic para ver el detalle",
       actions: seg("dsa", [{ v: "local", t: locNom(S.locId) }, { v: "todos", t: "Todos" }], dsAmbito),
@@ -700,15 +694,16 @@
           { t: "Facturado", cls: "mono", fmt: x => hace(x.fecha) },
           { t: "Estado", fmt: estDesp },
           { t: "", r: true, fmt: x => accionDesp(x) }
-        ], rows: L, rowCls: x => (V.diasEntre(x.fecha, D.HOY) >= 2 && x.estado === "Pendiente de alistar" ? "wa" : "")
+        ], rows: FD.rows, rowCls: x => (V.diasEntre(x.fecha, D.HOY) >= 2 && x.estado === "Pendiente de alistar" ? "wa" : "")
       })
     })}
       <div style="display:flex;gap:8px">${nota("Lo apartado sin factura y lo vendido contra pedido se sigue en Inventario › Existencias › Apartados y contra pedido.", "box")}<button class="btn sm" data-ir="existencias|comprometido" style="flex:none;align-self:center">Ir a apartados</button></div></div>`;
-    v._L = L;
+    v._L = FD.rows;
   }
   function porDespacharWire(v) {
     const p = $("#tp-despachos", v);
     onSeg(document, "dsa", x => { dsAmbito = x; A.refresh(); });
+    U.onFiltro(document, "desp");
     A.wireIr(p); wireDesp(p);
     $$("tr.clickable", p).forEach(tr => tr.addEventListener("click", () => detalleDesp(p._L[+tr.dataset.i])));
   }
@@ -1021,14 +1016,10 @@
     const nc = D.documentos.filter(d => d.tipo === "NC");
     const mes = nc.filter(d => d.fecha >= inicio);
     const fact = D.documentos.filter(d => d.tipo !== "NC" && d.fecha >= inicio).length;
+    const FN = U.filtrar("nc", nc, [{ v: "todos", t: "Todas", f: () => true }, { v: "mes", t: "Del mes", f: d => d.fecha >= inicio }, { v: "firma", t: "Con firma del cliente", f: d => !!d.firma }, { v: "cola", t: "En cola para Hacienda", f: d => d.hacienda !== "Aceptado", k: "wa" }]);
     const porC = V.CONCEPTOS.map(k => ({ n: k.id, v: mes.filter(d => d.concepto === k.id).reduce((s, d) => s + d.total, 0) })).filter(x => x.v);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Notas del mes", grp(mes.length), { txt: c(mes.reduce((s, d) => s + d.total, 0)) })}
-        ${stat("Sobre las facturas", dec(fact ? (mes.length / fact) * 100 : 0) + " %", { txt: "en la operación real ronda el 4,7 %" })}
-        ${stat("Con firma del cliente", grp(mes.filter(d => d.firma).length), { txt: "boleta digital, sin papel" }, "var(--ok)")}
-        ${stat("En cola para Hacienda", grp(mes.filter(d => d.hacienda !== "Aceptado").length), { txt: "salen solas al volver el enlace" })}
-      </div>
+      <div class="ffila">${FN.chips}${U.tira([U.ts("Del mes sobre las facturas", dec(fact ? (mes.length / fact) * 100 : 0) + " %", { txt: "en la operación real ronda el 4,7 % · " + c(mes.reduce((s, d) => s + d.total, 0)) + " en notas del mes" })])}</div>
       <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.8fr);align-items:start">
         ${card({ title: "Por concepto", hint: "monto del mes", body: porC.length ? bars(porC.map(x => ({ n: x.n, v: x.v, lab: c(x.v) }))) : '<div class="mut">Sin notas este mes.</div>' })}
         ${card({
@@ -1042,12 +1033,12 @@
           { t: "Reintegro", fmt: d => `<span class="mut">${esc(d.reintegro || "—")}</span>` },
           { t: "Total", r: true, cls: "mono", fmt: d => `<b>${grp(d.total)}</b>` },
           { t: "Hacienda", fmt: hacTag }
-        ], rows: nc
+        ], rows: FN.rows
       })
     })}</div></div>`;
-    v._nc = nc;
+    v._nc = FN.rows;
   }
-  function notasWire(v) { const p = $("#tp-documentos", v); $$("tr.clickable", p).forEach(tr => tr.addEventListener("click", () => detalleDoc(p._nc[+tr.dataset.i]))); }
+  function notasWire(v) { const p = $("#tp-documentos", v); U.onFiltro(document, "nc"); $$("tr.clickable", p).forEach(tr => tr.addEventListener("click", () => detalleDoc(p._nc[+tr.dataset.i]))); }
 
   A.workspace("documentos", {
     title: "Documentos y devoluciones",
@@ -1472,13 +1463,9 @@
   function autorizaciones(v) {
     const L = V.autorizaciones();
     const sem = L.filter(x => V.diasEntre(x.fecha, D.HOY) <= 7);
+    const FA = U.filtrar("vaut", L, [{ v: "todos", t: "Todas", f: () => true }, { v: "pend", t: "Pendientes", f: x => x.estado === "Pendiente", k: "wa" }, { v: "aut", t: "Autorizadas sin usar", f: x => x.estado === "Autorizada" }, { v: "cons", t: "Consumidas", f: x => x.estado === "Consumida" }, { v: "rev", t: "Cerradas por el barrido", f: x => x.estado === "Revertida" }]);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Pendientes", grp(L.filter(x => x.estado === "Pendiente").length), { txt: "esperan a quien puede autorizar" }, "var(--warn)")}
-        ${stat("Consumidas esta semana", grp(sem.filter(x => x.estado === "Consumida").length), { txt: "cada una en una sola factura" }, "var(--ok)")}
-        ${stat("Utilidad cedida", c(sem.reduce((s, x) => s + (x.estado === "Consumida" ? x.cedido : 0), 0)), { txt: "lo que costó autorizar esta semana" })}
-        ${stat("Abiertas tras el barrido", grp(V.BARRIDO.abiertas), { txt: "ninguna casilla queda activa" }, "var(--ok)")}
-      </div>
+      <div class="ffila">${FA.chips}${U.tira([U.ts("Utilidad cedida esta semana", c(sem.reduce((s, x) => s + (x.estado === "Consumida" ? x.cedido : 0), 0)), { txt: "lo que costó autorizar esta semana" })])}</div>
       <div class="stepbar"><div class="sbt"><b>${icon("history")} Barrido de anoche a las ${V.PARAM.barrido}: ${V.BARRIDO.terminales} cajas revisadas, 0 autorizaciones abiertas</b>
         <span>La autorización es de un solo uso: se consume al aplicar la factura. Si la factura no se aplica, el barrido del cierre la desactiva. Esta semana cerró ${V.BARRIDO.revertidasSemana}.</span></div></div>
       ${card({
@@ -1493,13 +1480,14 @@
           { t: "Autorizó", fmt: x => (x.autoriza ? esc(x.autoriza) : '<span class="dim">—</span>') },
           { t: "Estado", fmt: estAut },
           { t: "", r: true, fmt: x => (x.estado === "Pendiente" && esGerencia() ? `<button class="btn sm pri" data-aut="ok:${x.id}">Autorizar</button> <button class="btn sm" data-aut="no:${x.id}">Rechazar</button>` : "") }
-        ], rows: L, rowCls: x => (x.estado === "Pendiente" ? "wa" : "")
+        ], rows: FA.rows, rowCls: x => (x.estado === "Pendiente" ? "wa" : "")
       })
     })}</div>`;
-    v._L = L;
+    v._L = FA.rows;
   }
   function autorizacionesWire(v) {
     const p = $("#tp-ven-precios", v);
+    U.onFiltro(document, "vaut");
     $$("[data-aut]", p).forEach(b => b.addEventListener("click", e => {
       e.stopPropagation();
       const [acc, id] = b.dataset.aut.split(":");

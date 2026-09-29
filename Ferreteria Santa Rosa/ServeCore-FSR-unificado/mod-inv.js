@@ -104,6 +104,20 @@
      ═════════════════════════════════════════════════════════════ */
   if (!S.catTab) S.catTab = "Producto";
   if (S.catQ == null) S.catQ = "";
+  /* vista previa de la ficha: la foto (o la ilustración si no hay archivo) en grande; clic para ampliarla */
+  const fotoPrev = a => {
+    if (a.tipo === "Servicio") return `<span class="foto-prev vacia" aria-label="Servicio, sin foto">${icon("wrench")}<span>Servicio</span></span>`;
+    if (!a.fotos || !w.PRODIMG) return `<button type="button" class="foto-prev vacia" id="fotoAdd" aria-label="Agregar foto de ${esc(a.desc)}">${icon("upload")}<span>Sin foto<br><u>Agregar</u></span></button>`;
+    return `<button type="button" class="foto-prev" id="fotoVer" aria-label="Ver la foto de ${esc(a.desc)} en grande">${w.PRODIMG.img(a, "", a.desc)}<b>${a.fotos} ${a.fotos === 1 ? "foto" : "fotos"}</b></button>`;
+  };
+  function verFoto(a) {
+    openSheet({
+      title: a.desc, sub: a.cod + " · " + a.fotos + (a.fotos === 1 ? " foto" : " fotos") + " · la usan el vendedor, el catálogo y el agente de WhatsApp",
+      body: `<div class="foto-grande">${w.PRODIMG.img(a, "", a.desc)}</div>${w.PRODIMG.credito(a) ? `<div class="mut" style="font-size:11.5px;margin-top:8px">${esc(w.PRODIMG.credito(a))} · <a href="${esc(w.PRODIMG.foto(a).p)}" target="_blank" rel="noopener">ver la ficha</a></div>` : ""}`,
+      footer: `<button class="btn" id="fgCerrar">Cerrar</button>`,
+      after(el) { $("#fgCerrar", el).addEventListener("click", closeSheet); }
+    });
+  }
   const fotoTile = (a, big) => `<span class="foto ${big ? "big" : ""} ${a.fotos ? "" : "vacia"}" aria-label="${a.fotos ? a.fotos + " fotos" : "sin foto"}">${icon(a.tipo === "Servicio" ? "wrench" : "box")}${a.fotos ? `<b>${a.fotos}</b>` : ""}</span>`;
 
   function articulos(v) {
@@ -143,7 +157,7 @@
         <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
           ${card({
       body: `<div style="display:flex;gap:15px;align-items:flex-start;flex-wrap:wrap">
-            ${fotoTile(a, true)}
+            ${fotoPrev(a)}
             <div style="flex:1;min-width:220px">
               <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
                 ${tag(a.tipo, "acc", esServicio ? "wrench" : "box")}
@@ -259,7 +273,10 @@
     const a = D.artById[S.catSel];
     const on = (id, fn) => { const b = $("#" + id, v); if (b) b.addEventListener("click", fn); };
     on("btnEtiqueta", () => toast("Etiqueta enviada a la impresora", a.desc + " · código de barras, precio y ubicación del " + fecha(D.HOY) + ".", "ok"));
-    on("btnFoto", () => { I.agregarFoto(a.id); toast("Foto agregada", "La usan el vendedor, el catálogo de autogestión y el agente de WhatsApp.", "ok"); A.refresh(); });
+    const addFoto = () => { I.agregarFoto(a.id); toast("Foto agregada", "La usan el vendedor, el catálogo de autogestión y el agente de WhatsApp.", "ok"); A.refresh(); };
+    on("btnFoto", addFoto);
+    on("fotoAdd", addFoto);
+    on("fotoVer", () => verFoto(a));
     on("btnCopiar", () => nuevoArticulo({ desde: a }));
     on("genCod", () => { const e = I.generarCodigo(a.id); toast("Código " + e + " generado", "La etiqueta quedó en la cola de impresión de cada local donde existe.", "ok"); A.refresh(); });
     on("habLoc", () => habilitarLocal(a));
@@ -427,13 +444,9 @@
   function precios(v) {
     const P = I.PRECIOS, pend = P.filter(p => p.estado === "Por aprobar");
     const prev = I.previaMasivo(pmFam, pmPct);
+    const FP = U.filtrar("prec", P, [{ v: "todos", t: "Todos", f: () => true }, { v: "rev", t: "Por revisar", f: p => p.estado === "Por aprobar", k: "wa" }, { v: "apr", t: "Aprobados", f: p => p.estado === "Aprobado" }, { v: "man", t: "Se mantienen", f: p => p.estado === "Se mantiene" }]);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Por revisar", pend.length, { txt: "la compra entró con otro costo", dir: "" }, pend.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Aprobados", P.filter(p => p.estado === "Aprobado").length, { txt: "con su etiqueta en la cola de impresión", dir: "" }, "var(--ok)")}
-          ${stat("Se mantienen", P.filter(p => p.estado === "Se mantiene").length, { txt: "el margen absorbe el cambio", dir: "" })}
-          ${stat("Etiquetas en cola", I.ETIQ.length, { txt: "precios, códigos y ubicaciones nuevos", dir: "" })}
-        </div>
+        <div class="ffila">${FP.chips}${U.tira([U.ts("Etiquetas en cola", I.ETIQ.length, { txt: "precios, códigos y ubicaciones nuevos" })])}</div>
         ${card({
       title: "Costo nuevo, precio propuesto", hint: "el precio propuesto conserva el margen que tenía el artículo",
       actions: pend.length > 1 ? `<button class="btn sm pri" id="prTodos">${icon("check")}Aprobar los ${pend.length}</button>` : "",
@@ -444,7 +457,7 @@
           { t: "Precio", r: true, cls: "mono", fmt: p => `${grp(p.precioAntes)} → <b>${grp(p.precioNuevo)}</b>` },
           { t: "Margen", r: true, cls: "mono", fmt: p => dec(D.artById[p.artId].margen, 1) + " %" },
           { t: "", r: true, fmt: p => p.estado === "Por aprobar" ? `<span style="display:inline-flex;gap:6px"><button class="btn sm" data-pm="${p.id}">Mantener</button><button class="btn sm pri" data-pa="${p.id}">Aprobar</button></span>` : tag(p.estado + (p.por ? " · " + nombre(p.por) : ""), p.estado === "Aprobado" ? "ok" : "mu", "check") }
-        ], rows: P, rowCls: p => p.estado === "Por aprobar" ? "" : ""
+        ], rows: FP.rows, rowCls: p => p.estado === "Por aprobar" ? "" : ""
       })
     })}
         <div class="grid" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:start">
@@ -475,6 +488,7 @@
         </div></div>`;
   }
   function preciosWire(v) {
+    U.onFiltro(document, "prec");
     $$("[data-pa]", v).forEach(b => b.addEventListener("click", () => { const p = I.aprobarPrecio(b.dataset.pa); toast("Precio aprobado", D.artById[p.artId].desc + " · ₡" + grp(p.precioNuevo) + ". La etiqueta quedó en la cola de cada tienda.", "ok"); A.refresh(); }));
     $$("[data-pm]", v).forEach(b => b.addEventListener("click", () => { I.mantenerPrecio(b.dataset.pm); toast("Se mantiene el precio", "El margen baja por el costo nuevo; queda en la bitácora.", "in"); A.refresh(); }));
     const t = $("#prTodos", v); if (t) t.addEventListener("click", () => { const n = I.PRECIOS.filter(p => p.estado === "Por aprobar").map(p => I.aprobarPrecio(p.id)).length; toast(n + " precios aprobados", "Las etiquetas quedaron en la cola de impresión.", "ok"); A.refresh(); });
@@ -490,12 +504,7 @@
     const et = {};
     I.ETIQ.forEach(e => { (et[e.locId] = et[e.locId] || []).push(e); });
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Sin código de barras", sc.length, { txt: "de " + D.articulos.filter(a => a.tipo === "Producto").length + " en la demo · cerca de 800 en producción", dir: "" }, sc.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Sin ubicación", su.length, { txt: "en alguna tienda: el vendedor no los encuentra", dir: "" }, su.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Sin foto", sf.length, { txt: "la necesitan el vendedor y el agente de WhatsApp", dir: "" })}
-          ${stat("CABYS", "Al día", { txt: "revisado contra Hacienda el " + I.CABYS_ACT.fecha, dir: "up" }, "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Sin código de barras", sc.length, { txt: "de " + D.articulos.filter(a => a.tipo === "Producto").length + " en la demo · cerca de 800 en producción", dir: "" }, sc.length ? "var(--warn)" : "var(--ok)"), U.ts("Sin ubicación", su.length, { txt: "en alguna tienda: el vendedor no los encuentra", dir: "" }, su.length ? "var(--warn)" : "var(--ok)"), U.ts("Sin foto", sf.length, { txt: "la necesitan el vendedor y el agente de WhatsApp", dir: "" }), U.ts("CABYS", "Al día", { txt: "revisado contra Hacienda el " + I.CABYS_ACT.fecha, dir: "up" }, "var(--ok)")])}
         <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start">
           ${card({
       title: "Etiquetas por imprimir", hint: "precios, códigos y ubicaciones nuevos",
@@ -670,12 +679,7 @@
     rows = rows.slice().reverse();
     const ent = rows.reduce((s, r) => s + r.entrada, 0), sal = rows.reduce((s, r) => s + r.salida, 0);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Artículo", `<span style="font-size:15px;font-family:var(--ui);letter-spacing:0">${esc(art.desc)}</span>`, { txt: art.cod + " · " + D.famById[art.fam].nom, dir: "" })}
-          ${stat("Entradas", "+" + cant(ent, art), { txt: "compras, traslados y devoluciones", dir: "" }, "var(--ok)")}
-          ${stat("Salidas", "−" + cant(sal, art), { txt: "ventas, traslados y merma", dir: "" }, "var(--crit)")}
-          ${stat("Existencia total", cant(D.stockTotal(art.id), art), { txt: art.unidad + " en todos los locales", dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Artículo", `<span style="font-size:15px;font-family:var(--ui);letter-spacing:0">${esc(art.desc)}</span>`, { txt: art.cod + " · " + D.famById[art.fam].nom, dir: "" }), U.ts("Entradas", "+" + cant(ent, art), { txt: "compras, traslados y devoluciones", dir: "" }, "var(--ok)"), U.ts("Salidas", "−" + cant(sal, art), { txt: "ventas, traslados y merma", dir: "" }, "var(--crit)"), U.ts("Existencia total", cant(D.stockTotal(art.id), art), { txt: art.unidad + " en todos los locales", dir: "" })])}
         ${card({
       title: "Kardex", hint: "cada movimiento con su documento de origen",
       actions: `<select class="inp" id="kloc" style="width:auto"><option>Todos</option>${locOpts(kx.loc)}</select>
@@ -718,12 +722,7 @@
     const AP = I.APARTADOS, CP = I.CONTRA;
     const vig = AP.filter(p => p.estado === "Apartado");
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Apartados", vig.length, { txt: "pagados, esperando que el cliente los recoja", dir: "" })}
-          ${stat("Vencidos", AP.filter(I.vencido).length, { txt: "pasaron la fecha de retiro", dir: "" }, AP.some(I.vencido) ? "var(--warn)" : "var(--ok)")}
-          ${stat("Contra pedido", CP.filter(x => x.estado !== "Despachado").length, { txt: "vendidos sin existencia, con su compra ligada", dir: "" })}
-          ${stat("En negativo", I.negativos().length, { txt: "el costo promedio cuenta el negativo como cero", dir: "" }, I.negativos().length ? "var(--crit)" : "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Apartados", vig.length, { txt: "pagados, esperando que el cliente los recoja", dir: "" }), U.ts("Vencidos", AP.filter(I.vencido).length, { txt: "pasaron la fecha de retiro", dir: "" }, AP.some(I.vencido) ? "var(--warn)" : "var(--ok)"), U.ts("Contra pedido", CP.filter(x => x.estado !== "Despachado").length, { txt: "vendidos sin existencia, con su compra ligada", dir: "" }), U.ts("En negativo", I.negativos().length, { txt: "el costo promedio cuenta el negativo como cero", dir: "" }, I.negativos().length ? "var(--crit)" : "var(--ok)")])}
         ${card({
       title: "Apartados", hint: "la mercadería queda reservada y no se le vende a otro cliente",
       body: table({
@@ -767,12 +766,7 @@
   function segunda(v) {
     const SG = I.SEGUNDA, DV = I.DEVOL;
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Por aprobar", SG.filter(s => s.estado === "Por aprobar").length, { txt: "producto de segunda esperando su precio", dir: "" }, SG.some(s => s.estado === "Por aprobar") ? "var(--warn)" : "var(--ok)")}
-          ${stat("A la venta", SG.filter(s => s.estado === "A la venta").length, { txt: "se venden como «de segunda» en la caja", dir: "" })}
-          ${stat("Por devolver", DV.filter(d => d.estado === "Por devolver").length, { txt: "en la bodega de devoluciones del CEDI", dir: "" })}
-          ${stat("Esperando nota de crédito", c(DV.filter(d => /esperando/.test(d.estado)).reduce((s, d) => s + d.monto, 0)), { txt: "mercadería devuelta al proveedor", dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Por aprobar", SG.filter(s => s.estado === "Por aprobar").length, { txt: "producto de segunda esperando su precio", dir: "" }, SG.some(s => s.estado === "Por aprobar") ? "var(--warn)" : "var(--ok)"), U.ts("A la venta", SG.filter(s => s.estado === "A la venta").length, { txt: "se venden como «de segunda» en la caja", dir: "" }), U.ts("Por devolver", DV.filter(d => d.estado === "Por devolver").length, { txt: "en la bodega de devoluciones del CEDI", dir: "" }), U.ts("Esperando nota de crédito", c(DV.filter(d => /esperando/.test(d.estado)).reduce((s, d) => s + d.monto, 0)), { txt: "mercadería devuelta al proveedor", dir: "" })])}
         ${card({
       title: "Producto de segunda", hint: "misma existencia, marcada como dañada, con un precio aprobado una sola vez",
       actions: `<button class="btn sm pri" id="sgNuevo">${icon("plus")}Marcar producto de segunda</button>`,
@@ -935,17 +929,13 @@
   function enCamino(v) {
     const rows = D.traslados.filter(t => t.estado === "En tránsito" || t.estado === "Registrado");
     const difs = I.DIFS;
-    A._tcRows = rows;
+    const FT = U.filtrar("tras", rows, [{ v: "todos", t: "Todos", f: () => true }, { v: "camino", t: "En camino", f: t => t.estado === "En tránsito", k: "wa" }, { v: "desp", t: "Por despachar", f: t => t.estado === "Registrado" }]);
+    A._tcRows = FT.rows;
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("En camino", rows.filter(t => t.estado === "En tránsito").length, { txt: "salieron y la tienda no los ha recibido", dir: "" }, "var(--warn)")}
-          ${stat("Por despachar", rows.filter(t => t.estado === "Registrado").length, { txt: "registrados, todavía en el origen", dir: "" })}
-          ${stat("Diferencias por aclarar", difs.filter(d => d.estado === "Por aclarar").length, { txt: "llegó menos de lo que salió", dir: "" }, difs.some(d => d.estado === "Por aclarar") ? "var(--crit)" : "var(--ok)")}
-          ${stat("Recibidos esta semana", D.traslados.filter(t => /^Recibido/.test(t.estado)).length, { txt: "con quién recibió y a qué hora", dir: "" }, "var(--ok)")}
-        </div>
+        <div class="ffila">${FT.chips}${U.tira([U.ts("Diferencias por aclarar", difs.filter(d => d.estado === "Por aclarar").length, { txt: "llegó menos de lo que salió" }, "var(--crit)"), U.ts("Recibidos esta semana", D.traslados.filter(t => /^Recibido/.test(t.estado)).length, { txt: "con quién recibió y a qué hora" })])}</div>
         ${card({
       title: "Traslados por recibir", hint: "la tienda escanea lo que llega; lo que no cuadra queda como diferencia",
-      body: rows.length ? table({
+      body: FT.rows.length ? table({
         cols: [
           { t: "Traslado", cls: "mono", fmt: t => `<b>${esc(t.cons)}</b>${t.sugerido ? '<span class="sub ui">sugerido del CEDI</span>' : ""}` },
           { t: "Origen → destino", fmt: t => `${esc(locNom(t.origen))} → <b>${esc(locNom(t.destino))}</b>` },
@@ -955,7 +945,7 @@
           { t: "Peso", r: true, cls: "mono", fmt: t => kg(I.peso(t.lineas)) },
           { t: "Estado", fmt: t => tag(t.estado, t.estado === "En tránsito" ? "acc" : "wa") },
           { t: "", r: true, fmt: (t, i) => `<button class="btn sm pri" data-rec="${i}">${icon("scan")}Recibir</button>` }
-        ], rows
+        ], rows: FT.rows
       }) : empty("check", "Nada en camino", "Todos los traslados están recibidos.")
     })}
         ${card({
@@ -973,6 +963,7 @@
     })}</div>`;
   }
   function enCaminoWire(v) {
+    U.onFiltro(document, "tras");
     $$("[data-rec]", v).forEach(b => b.addEventListener("click", () => recibirSheet(A._tcRows[+b.dataset.rec])));
     $$("[data-dfo]", v).forEach(b => b.addEventListener("click", () => { I.aclararDiferencia(b.dataset.dfo, "origen"); toast("Aclarado", "La mercadería no salió del origen: vuelve a su existencia.", "ok"); A.refresh(); }));
     $$("[data-dfm]", v).forEach(b => b.addEventListener("click", () => { I.aclararDiferencia(b.dataset.dfm, "merma"); toast("Faltante registrado", "Con su asiento de merma y el acta del chofer.", "ok"); A.refresh(); }));
@@ -1152,13 +1143,9 @@
   function ajustes(v) {
     const merma = D.ajustes.filter(a => a.cant < 0 && a.estado === "Aplicado");
     const pend = D.ajustes.filter(a => a.estado === "Por aprobar");
+    const FJ = U.filtrar("aju", D.ajustes, [{ v: "todos", t: "Todos", f: () => true }, { v: "apr", t: "Por aprobar", f: a => a.estado === "Por aprobar", k: "wa" }, { v: "sinev", t: "Sin evidencia", f: a => a.evidencia === "Sin evidencia", k: "wa" }, { v: "merma", t: "Mermas aplicadas", f: a => a.cant < 0 && a.estado === "Aplicado" }]);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Merma del mes", c(merma.reduce((s, a) => s + a.costo, 0)), { txt: merma.length + " ajustes de salida, todos con motivo", dir: "down" }, "var(--crit)")}
-          ${stat("Por aprobar", pend.length, { txt: "ajustes de más de ₡" + grp(I.POL.aprobarAjusteDesde), dir: "" }, pend.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Sin evidencia", D.ajustes.filter(a => a.evidencia === "Sin evidencia").length, { txt: "quedaron sin foto ni acta", dir: "" }, "var(--warn)")}
-          ${stat("Regla", "Foto y motivo", { txt: "ninguna merma entra sin evidencia", dir: "" })}
-        </div>
+        <div class="ffila">${FJ.chips}${U.tira([U.ts("Merma del mes", c(merma.reduce((s, a) => s + a.costo, 0)), { txt: merma.length + " ajustes de salida, todos con foto y motivo" })])}</div>
         ${card({
       title: "Ajustes de inventario", hint: "cada uno con su motivo, su evidencia y quién lo autorizó",
       body: table({
@@ -1171,11 +1158,12 @@
           { t: "Evidencia", fmt: r => (r.evidencia === "Sin evidencia" ? tag("Sin evidencia", "wa", "alert") : tag(r.evidencia, "ok", "check")) },
           { t: "Costo", r: true, cls: "mono", fmt: r => grp(r.costo) },
           { t: "", r: true, fmt: r => r.estado === "Por aprobar" ? `<span style="display:inline-flex;gap:6px"><button class="btn sm" data-ajr="${r.cons}">Recontar</button><button class="btn sm pri" data-aja="${r.cons}">Aprobar</button></span>` : `<span class="mut" style="font-size:12.5px">${esc(r.estado || "Aplicado")}${r.autoriza ? " · " + esc(nombre(r.autoriza)) : ""}</span>` }
-        ], rows: D.ajustes, rowCls: r => r.estado === "Por aprobar" ? "wa" : r.evidencia === "Sin evidencia" ? "wa" : ""
+        ], rows: FJ.rows, rowCls: r => r.estado === "Por aprobar" ? "wa" : r.evidencia === "Sin evidencia" ? "wa" : ""
       })
     })}</div>`;
   }
   function ajustesWire(v) {
+    U.onFiltro(document, "aju");
     $$("[data-aja]", v).forEach(b => b.addEventListener("click", () => { I.aprobarAjuste(b.dataset.aja); toast("Ajuste aprobado", "Por " + I.GENTE.gerente.nom + ". Generó su asiento de merma.", "ok"); A.refresh(); }));
     $$("[data-ajr]", v).forEach(b => b.addEventListener("click", () => { I.rechazarAjuste(b.dataset.ajr); toast("Se pidió recontar", "El ajuste no se aplica; el artículo vuelve a la lista de conteo.", "in"); A.refresh(); }));
   }
@@ -1224,12 +1212,7 @@
     fams.forEach((f, i) => { color[f.id] = PAL[i % PAL.length]; });
     const hechas = new Set(I.PLAN.filter(p => p.semana < I.SEMANA && p.semana >= I.SEMANA - 25).map(p => p.fam));
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Semana", I.SEMANA + " de 50", { txt: "familia: " + D.famById[I.famSemana()].nom, dir: "" })}
-          ${stat("Familias prioritarias", I.PRIORITARIAS.length, { txt: I.PRIORITARIAS.map(f => D.famById[f].nom).join(", ") + " · dos veces por vuelta", dir: "" })}
-          ${stat("Vueltas al año", "≈ " + dec(50 / (fams.length + I.PRIORITARIAS.length), 1).replace(",0", ""), { txt: "como lo hace hoy el equipo de inventarios", dir: "" })}
-          ${stat("Cubiertas este semestre", hechas.size + " de " + fams.length, { txt: "familias contadas en las últimas 25 semanas", dir: "" }, "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Semana", I.SEMANA + " de 50", { txt: "familia: " + D.famById[I.famSemana()].nom, dir: "" }), U.ts("Familias prioritarias", I.PRIORITARIAS.length, { txt: I.PRIORITARIAS.map(f => D.famById[f].nom).join(", ") + " · dos veces por vuelta", dir: "" }), U.ts("Vueltas al año", "≈ " + dec(50 / (fams.length + I.PRIORITARIAS.length), 1).replace(",0", ""), { txt: "como lo hace hoy el equipo de inventarios", dir: "" }), U.ts("Cubiertas este semestre", hechas.size + " de " + fams.length, { txt: "familias contadas en las últimas 25 semanas", dir: "" }, "var(--ok)")])}
         ${card({
       title: "Plan de conteo del año", hint: "50 semanas por familia; cada día se suma lo que muestra señales raras",
       body: `<div class="semanas">${I.PLAN.map(p => `<span class="sem ${p.semana === I.SEMANA ? "hoy" : p.semana < I.SEMANA ? "hecha" : ""}" style="--c:${color[p.fam]}" title="Semana ${p.semana}: ${esc(D.famById[p.fam].nom)}"><b>${p.semana}</b><i>${esc(p.fam)}</i></span>`).join("")}</div>

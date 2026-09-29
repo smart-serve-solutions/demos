@@ -182,6 +182,40 @@
   /* ── controles segmentados ──────────────────────────────────── */
   const seg = (id, opts, cur) =>
     `<div class="seg" data-seg="${id}">${opts.map(o => `<button type="button" data-v="${esc(o.v || o)}" aria-pressed="${(o.v || o) === cur}">${esc(o.t || o)}</button>`).join("")}</div>`;
+  /* tira(items) — resumen de una línea que reemplaza la fila de tarjetas de KPI (revisión UX del 29-set).
+     items: [{v, l, k}] · k = "wa" | "cr" | "ok" pinta la cifra con su color, siempre con ícono (nunca color solo) */
+  const TIRA_IC = { wa: "alert", cr: "alert", ok: "check" };
+  /* la cifra va primero («6 conversaciones»); si el valor es texto («Disponible») va la etiqueta primero */
+  const tira = items => `<span class="tira">${items.filter(Boolean).map(x => {
+    const ic = x.k && TIRA_IC[x.k] ? icon(TIRA_IC[x.k]) : "";
+    const txt = x.pre ? `${esc(x.l)} <b class="num">${x.v}</b>` : `<b class="num">${x.v}</b> ${esc(x.l)}`;
+    return `<span class="ti ${x.k ? KIND[x.k] || "" : ""}"${x.t ? ` title="${esc(x.t)}"` : ""}>${ic}${txt}</span>`;
+  }).join('<span class="tsep" aria-hidden="true">·</span>')}</span>`;
+  /* la cifra va antes de la etiqueta solo si es una cantidad pura (₡, %, h, km…); «37 de 50» o «12 set» van después */
+  /* ts(): mismo orden de argumentos que stat(), para pasar una fila de tarjetas a tira sin reescribirla.
+     El detalle queda como texto al pasar el mouse; el color solo si la cifra no es cero y era de atención o crítica */
+  const sinHtml = s => String(s == null ? "" : s).replace(/<[^>]+>/g, "").trim();
+  const ts = (label, val, delta, tint) => {
+    const v = sinHtml(val), l = String(label || "");
+    const cero = /^[₡$]?\s*0([,.]0+)?\s*(%|h|días?)?$/.test(v);
+    const k = cero ? "" : /crit/.test(tint || "") ? "cr" : /warn/.test(tint || "") ? "wa" : "";
+    return { v: val, l: /^[A-ZÁÉÍÓÚÑ]{2}/.test(l) ? l : l.charAt(0).toLowerCase() + l.slice(1), k, t: delta && delta.txt ? sinHtml(delta.txt) : "", pre: !/^[₡$+\-−≈~]?\s*\d[\d\s.,]*\s?(%|h|km|kg|min|s|d)?$/.test(v) };
+  };
+  /* resumen([ts(...), ...]) — la fila de una línea que va donde estaban las tarjetas */
+  const resumen = items => `<div class="resumen">${tira(items)}</div>`;
+  /* filtrar(id, filas, [{v, t, f, k}]) — filtros con número sobre una lista. Recuerda la opción elegida por id.
+     Devuelve {rows, chips, cur}; se conecta en wire con onFiltro(v, id). La primera opción es «Todos» */
+  const FSEL = {};
+  const filtrar = (id, rows, defs) => {
+    const cur = defs.find(d => d.v === FSEL[id]) || defs[0];
+    FSEL[id] = cur.v;
+    return { rows: rows.filter(cur.f), cur, chips: fchips(id, defs.map(d => ({ v: d.v, t: d.t, k: d.k, n: rows.filter(d.f).length })), cur.v) };
+  };
+  const onFiltro = (root, id) => onSeg(root, id, x => { FSEL[id] = x; w.APP.refresh(); });
+  /* fchips(id, [{v, t, n, k}], actual) — filtros con número sobre una lista: la cifra filtra.
+     Se conectan con onSeg(root, id, fn), igual que seg() */
+  const fchips = (id, opts, cur) =>
+    `<div class="fchips" role="group" data-seg="${id}">${opts.map(o => `<button type="button" data-v="${esc(o.v)}" aria-pressed="${o.v === cur}" class="${o.k && o.n ? KIND[o.k] || "" : ""}">${o.k && o.n && TIRA_IC[o.k] ? icon(TIRA_IC[o.k]) : ""}<span>${esc(o.t)}</span><b class="num">${o.n}</b></button>`).join("")}</div>`;
   function onSeg(root, id, fn) {
     const el = (root || document).querySelector(`[data-seg="${id}"]`) || document.querySelector(`[data-seg="${id}"]`);
     if (!el) return;
@@ -330,7 +364,7 @@
     $, $$, icon, esc, norm, grp, n0, c, c0, dec, pct, kg, MES, DIA, p2,
     fecha, fechaL, hora, fh, fechaLarga, ini, locNom, locEtiqueta, cliNom, provNom, artOf, famNom,
     card, panel, stat, kpi, tag, chip, pageHead, empty, fichaCell, field, selectField, prog,
-    table, dt, seg, onSeg, barRow, bars, lineChart, line, donut,
+    table, dt, seg, onSeg, tira, fchips, ts, resumen, filtrar, onFiltro, barRow, bars, lineChart, line, donut,
     openSheet, sheet, closeSheet, popover, toast,
     rectZ, anchoZ
   };

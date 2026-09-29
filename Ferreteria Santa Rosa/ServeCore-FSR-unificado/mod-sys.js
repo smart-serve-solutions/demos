@@ -851,12 +851,7 @@
   function usuariosTab(el) {
     const act = USERS.filter((u) => u.estado !== "Inactivado");
     el.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Usuarios activos", act.length, { txt: "en 7 locales, el CEDI y las bodegas; sin costo por usuario" })}
-        ${stat("Doble factor", act.filter((u) => exige2f(u) && u.doble).length + " de " + act.filter(exige2f).length, { txt: "los que su rol lo exige" }, act.filter((u) => exige2f(u) && !u.doble).length ? "var(--crit)" : "var(--ok)")}
-        ${stat("Accesos temporales", act.filter((u) => u.vence).length, { txt: "se retiran solos en la fecha" }, "var(--warn)")}
-        ${stat("Inactivados", USERS.length - act.length, { txt: "nunca se eliminan: su nombre sigue en la bitácora" }, "var(--ink-4)")}
-      </div>
+      ${U.resumen([U.ts("Usuarios activos", act.length, { txt: "en 7 locales, el CEDI y las bodegas; sin costo por usuario" }), U.ts("Doble factor", act.filter((u) => exige2f(u) && u.doble).length + " de " + act.filter(exige2f).length, { txt: "los que su rol lo exige" }, act.filter((u) => exige2f(u) && !u.doble).length ? "var(--crit)" : "var(--ok)"), U.ts("Accesos temporales", act.filter((u) => u.vence).length, { txt: "se retiran solos en la fecha" }, "var(--warn)"), U.ts("Inactivados", USERS.length - act.length, { txt: "nunca se eliminan: su nombre sigue en la bitácora" }, "var(--ink-4)")])}
       ${card({
         title: "Usuarios",
         hint: "cada persona con su propio usuario; ninguno compartido",
@@ -1301,13 +1296,9 @@
   }
 
   function sesionesTab(el) {
+    const FS = U.filtrar("ses", SES, [{ v: "todos", t: "Todas", f: () => true }, { v: "caja", t: "En caja", f: (s) => /Caja/.test(s.eq) }, { v: "inact", t: "Sin actividad", f: (s) => s.act >= 30, k: "wa" }]);
     el.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Sesiones abiertas", SES.length, { txt: "cada una atada a su equipo" })}
-        ${stat("En caja", SES.filter((s) => /Caja/.test(s.eq)).length, { txt: "se cierran solas al cerrar el turno" })}
-        ${stat("Sin actividad", SES.filter((s) => s.act >= 30).length, { txt: "30 minutos o más" }, "var(--warn)")}
-        ${stat("Compartidas por enlace", "0", { txt: "la sesión no viaja en la dirección" }, "var(--ok)")}
-      </div>
+      <div class="ffila">${FS.chips}${U.tira([U.ts("Compartidas por enlace", "0", { txt: "la sesión no viaja en la dirección" })])}</div>
       ${card({
         title: "Quién está dentro ahora",
         hint: "cerrar una sesión la mata en el servidor",
@@ -1356,12 +1347,13 @@
                   : `<button class="btn sm" data-sesx="${s.u}|${esc(s.eq)}">${icon("x")}Cerrar sesión</button>`,
             },
           ],
-          rows: SES,
+          rows: FS.rows,
         }),
       })}
       ${nota("Al cerrar sesión, al cambiar de cajero o al vencer el tiempo sin uso, el acceso muere en el servidor. Copiar la dirección y abrirla en otro equipo pide usuario y contraseña (hallazgo HAL-01 del sistema actual).", "lock")}</div>`;
   }
   function sesionesWire(v) {
+    U.onFiltro(document, "ses");
     $$("[data-sesx]", v).forEach((b) =>
       b.addEventListener("click", () => {
         const [u, eq] = b.dataset.sesx.split("|"),
@@ -2816,21 +2808,14 @@
       "Lo que el sistema exige a todos; lo marcado «Siempre» no se puede apagar",
     render(v) {
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Sesiones compartidas por enlace", "0", { txt: "la sesión no viaja en la dirección" }, "var(--ok)")}
-          ${stat("Documentos con credenciales", "0", { txt: "el PDF abre una copia pública" }, "var(--ok)")}
-          ${stat("Intentos fallidos hoy", "3", { txt: "dennis.fallas · bloqueado 15 min" }, "var(--warn)")}
-          ${stat(
-            "Reglas que no se apagan",
+        ${U.resumen([U.ts("Sesiones compartidas por enlace", "0", { txt: "la sesión no viaja en la dirección" }, "var(--ok)"), U.ts("Documentos con credenciales", "0", { txt: "el PDF abre una copia pública" }, "var(--ok)"), U.ts("Intentos fallidos hoy", "3", { txt: "dennis.fallas · bloqueado 15 min" }, "var(--warn)"), U.ts("Reglas que no se apagan",
             POL.reduce((k, g) => k + g.items.filter((x) => x.lock).length, 0),
             {
               txt:
                 "de " +
                 POL.reduce((k, g) => k + g.items.length, 0) +
                 " políticas",
-            },
-          )}
-        </div>
+            },)])}
         <div class="grid g2" style="align-items:start">${POL.map((g) =>
           card({
             title: g.t,
@@ -3146,12 +3131,7 @@
   window.BI.agregarExcepcion = (x) => { EXC.unshift(x); };
   function pendientesTab(el) {
     el.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Esperando respuesta", EXC.length, { txt: "la más vieja hace " + Math.max.apply(null, EXC.map((x) => x.min).concat([0])) + " min" }, EXC.length ? "var(--warn)" : "var(--ok)")}
-        ${stat("Tiempo de respuesta", "9 min", { txt: "promedio de los últimos 30 días" })}
-        ${stat("Aprobadas", "84 %", { txt: "del mes; el resto rechazadas o vencidas" })}
-        ${stat("Sin autor", "0", { txt: "cada aprobación dice quién y por qué" }, "var(--ok)")}
-      </div>
+      ${U.resumen([U.ts("Esperando respuesta", EXC.length, { txt: "la más vieja hace " + Math.max.apply(null, EXC.map((x) => x.min).concat([0])) + " min" }, EXC.length ? "var(--warn)" : "var(--ok)"), U.ts("Tiempo de respuesta", "9 min", { txt: "promedio de los últimos 30 días" }), U.ts("Aprobadas", "84 %", { txt: "del mes; el resto rechazadas o vencidas" }), U.ts("Sin autor", "0", { txt: "cada aprobación dice quién y por qué" }, "var(--ok)")])}
       ${nota("Al marcar una excepción, la caja muestra <b>quién puede autorizarla</b> y le avisa por el canal configurado. Quien autoriza responde desde el correo, el WhatsApp o el sistema; la respuesta queda aquí con su nombre. Nadie autoriza su propia excepción.", "scale")}
       ${card({
         title: "Solicitudes pendientes",
@@ -3501,12 +3481,7 @@
           norm(b.usuario + " " + b.accion + " " + b.detalle).indexOf(q) >= 0),
     );
     el.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Eventos registrados", grp(todo.length), { txt: "en la ventana visible de la demostración" })}
-        ${stat("De severidad alta", todo.filter((b) => b.sev === "Alta").length, { txt: "autorizaciones, anulaciones, exportaciones y permisos" }, "var(--crit)")}
-        ${stat("Sin autor", "0", { txt: "los procesos automáticos firman como «Sistema»" }, "var(--ok)")}
-        ${stat("Retención", "5 años", { txt: "lo que exige la auditoría externa" })}
-      </div>
+      ${U.resumen([U.ts("Eventos registrados", grp(todo.length), { txt: "en la ventana visible de la demostración" }), U.ts("De severidad alta", todo.filter((b) => b.sev === "Alta").length, { txt: "autorizaciones, anulaciones, exportaciones y permisos" }, "var(--crit)"), U.ts("Sin autor", "0", { txt: "los procesos automáticos firman como «Sistema»" }, "var(--ok)"), U.ts("Retención", "5 años", { txt: "lo que exige la auditoría externa" })])}
       ${card({
         title: "Registro de actividad",
         hint: "clic en una fila para ver el detalle",
@@ -3921,12 +3896,7 @@
   function locales(v) {
     const L = D.locales.concat(NUEVOS_LOC);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Puntos de venta", grp(L.filter((l) => l.tipo === "tienda").length), { txt: "cada uno con su nodo local" })}
-        ${stat("Centro de distribución y bodegas", grp(L.filter((l) => l.tipo !== "tienda").length), { txt: "CEDI Isabel · 55 000 m²" })}
-        ${stat("Cajas", grp(L.reduce((k, l) => k + (l.terminales || 0), 0)), { txt: "cada una con su consecutivo" })}
-        ${stat("Usuarios y locales", "Sin límite", { txt: "la licencia no se cobra por usuario" }, "var(--ok)")}
-      </div>
+      
       ${card({
         title: "Locales y bodegas",
         hint: "se agregan sin tocar el sistema",
@@ -4163,6 +4133,7 @@
                 `<b>Caja ${t.n}</b><span class="sub ui">${esc(dispDe(t).eq)}</span>`,
             },
             { t: "Consecutivo", cls: "mono", fmt: (t) => esc(t.cons) },
+            { t: "Fondo", r: true, cls: "mono", fmt: (t) => grp(t.fondo) },
             {
               t: "Impresora",
               fmt: (t) =>
@@ -4219,6 +4190,13 @@
         : "Consecutivo " + t.cons,
       campos: [
         { id: "eq", l: "Equipo", v: d.eq, ph: "Por ejemplo: Mini PC de caja" },
+        {
+          id: "fon",
+          l: "Fondo de apertura",
+          tipo: "num",
+          v: grp(nueva ? (P.fondoCaja || 50000) : t.fondo),
+          hint: "Lo que recibe esta caja al abrir cada turno. Todas las cajas se ven juntas en Parámetros generales.",
+        },
         {
           id: "imp",
           l: "Impresora",
@@ -4288,7 +4266,7 @@
           /* la terminal nueva existe desde ya: la caja puede facturar con su serie */
           l.terminales++;
           const serie = l.cod + "-" + String(l.terminales).padStart(5, "0");
-          if (V) V.TERMINALES.push({ id: l.id + "-T" + l.terminales, locId: l.id, n: l.terminales, cons: serie, equipo: x.eq || "Caja " + l.terminales });
+          if (V) V.TERMINALES.push({ id: l.id + "-T" + l.terminales, locId: l.id, n: l.terminales, cons: serie, equipo: x.eq || "Caja " + l.terminales, fondo: monIn(x.fon) > 0 ? monIn(x.fon) : P.fondoCaja });
           Object.assign(dispDe({ id: l.id + "-T" + l.terminales, locId: l.id, n: l.terminales }), {
             eq: x.eq || "Mini PC de caja", imp: x.imp, lector: x.lec, datafono: x.dat, gaveta: x.gav, balanza: x.bal,
           });
@@ -4297,6 +4275,11 @@
             t: "Terminal creada · serie " + serie,
             s: "Sus comprobantes empiezan en el número 1 de cada tipo. Habilite quién la usa en Caja y turnos.",
           };
+        }
+        const fn = monIn(x.fon);
+        if (fn > 0 && fn !== t.fondo) {
+          anotar("Cambió fondo de apertura", l.nom + " · Caja " + t.n, "Media", c(t.fondo), c(fn));
+          t.fondo = fn;
         }
         Object.assign(d, {
           eq: x.eq,
@@ -6576,12 +6559,7 @@
       ["Dirección", "Santa Rosa, 200 m sur de la iglesia", "Santa Rosa"],
     ];
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Último refresco", fecha(PRUEBAS.ultimo), { txt: "copia de producción, anonimizada" })}
-        ${stat("Datos personales", "Enmascarados", { txt: "antes de copiar, no después" }, "var(--ok)")}
-        ${stat("Versión en pruebas", VER.prox, { txt: "producción está en " + HISTV[0].v })}
-        ${stat("Con acceso", grp(PRUEBAS.usuarios.length), { txt: "personas y usuarios" })}
-      </div>
+      ${U.resumen([U.ts("Último refresco", fecha(PRUEBAS.ultimo), { txt: "copia de producción, anonimizada" }), U.ts("Datos personales", "Enmascarados", { txt: "antes de copiar, no después" }, "var(--ok)"), U.ts("Versión en pruebas", VER.prox, { txt: "producción está en " + HISTV[0].v }), U.ts("Con acceso", grp(PRUEBAS.usuarios.length), { txt: "personas y usuarios" })])}
       <div class="grid" style="grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:start">
         ${card({
           title: "Qué se enmascara al refrescar",
@@ -6741,13 +6719,11 @@
       ic: "cart",
       items: [
         {
-          t: "Fondo de apertura de caja",
-          d: "Lo que recibe cada caja al abrir el turno.",
-          get: () => fmtC(P.fondoCaja),
-          set: (v) => {
-            P.fondoCaja =
-              parseInt(String(v).replace(/\D/g, ""), 10) || P.fondoCaja;
-          },
+          t: "Fondo de apertura por caja",
+          d: "Cada caja de cada local tiene su propio fondo: el mostrador principal no cambia lo mismo que una caja de apoyo.",
+          get: () => resumenFondos(),
+          btn: "Configurar",
+          abre: () => fondosCaja(),
           ult: [dia(40), "Adrián Vindas"],
         },
         {
@@ -7005,6 +6981,135 @@
     },
   ];
   const valP = (x) => (x.get ? x.get() : x.v);
+
+  /* ── FONDO DE APERTURA POR CAJA ──
+     Cada terminal (caja) de cada local guarda su fondo en VENX.TERMINALES[].fondo;
+     la caja lo propone al abrir el turno. PARAM.fondoCaja queda como sugerido para una caja nueva. */
+  const monIn = (s) => parseInt(String(s).replace(/\D/g, ""), 10);
+  function resumenFondos() {
+    const TT = V ? V.TERMINALES : [];
+    if (!TT.length) return fmtC(P.fondoCaja);
+    const vs = TT.map((t) => t.fondo);
+    const mn = Math.min(...vs), mx = Math.max(...vs);
+    return TT.length + " cajas · " + (mn === mx ? fmtC(mn) + " cada una" : fmtC(mn) + " a " + fmtC(mx));
+  }
+  let fdLoc = "todos";
+  function fondosCaja() {
+    if (!V) return;
+    const draft = {};
+    V.TERMINALES.forEach((t) => (draft[t.id] = t.fondo));
+    let sug = P.fondoCaja;
+    const visibles = () => V.TERMINALES.filter((t) => fdLoc === "todos" || t.locId === fdLoc);
+    const tabla = () => {
+      const TT = visibles();
+      return table({
+        cols: [
+          ...(fdLoc === "todos" ? [{ t: "Local", fmt: (t) => esc(locNom(t.locId)) }] : []),
+          { t: "Caja", fmt: (t) => `<b>Caja ${t.n}</b><span class="sub ui">${esc(t.equipo)}</span>` },
+          { t: "Consecutivo", cls: "mono", fmt: (t) => esc(t.cons) },
+          {
+            t: "Ahora",
+            fmt: (t) => {
+              const tu = V.turnoDe(t.locId, t.n);
+              return tu ? tag("Abierta con " + c(tu.fondo), "ok", "users") : tag("Cerrada", "mu");
+            },
+          },
+          {
+            t: "Fondo de apertura",
+            r: true,
+            fmt: (t) =>
+              `<input class="num" data-fd="${t.id}" inputmode="numeric" aria-label="Fondo de la caja ${t.n} de ${esc(locNom(t.locId))}" value="${draft[t.id] ? grp(draft[t.id]) : ""}" style="width:130px;text-align:right${draft[t.id] !== t.fondo ? ";border-color:var(--accent);background:var(--accent-soft)" : ""}">`,
+          },
+        ],
+        rows: TT,
+      });
+    };
+    const opts = `<option value="todos" ${fdLoc === "todos" ? "selected" : ""}>Todos los locales · ${V.TERMINALES.length} cajas</option>${tiendas
+      .map((l) => {
+        const n = V.TERMINALES.filter((t) => t.locId === l.id).length;
+        return `<option value="${l.id}" ${l.id === fdLoc ? "selected" : ""}>${esc(l.nom)} · ${n} ${n === 1 ? "caja" : "cajas"}</option>`;
+      })
+      .join("")}`;
+    openSheet({
+      title: "Fondo de apertura por caja",
+      sub: "Cada caja de cada local con su propio fondo; queda en la bitácora con el valor anterior",
+      wide: true,
+      body: `<div class="sx-form">
+        <div class="sx-bar" style="justify-content:space-between">
+          <select class="sx-sel" id="fdLoc" aria-label="Local">${opts}</select>
+          <span style="display:flex;gap:8px;align-items:center"><label for="fdTodas" class="sx-hint" style="margin:0">Mismo fondo a las cajas mostradas</label>
+            <input id="fdTodas" class="num" inputmode="numeric" placeholder="₡" style="width:120px;text-align:right">
+            <button class="btn sm" id="fdAplicar">Aplicar</button></span>
+        </div>
+        <div id="fdTabla">${tabla()}</div>
+        <div class="sx-2">
+          <div class="field"><label for="fdSug">Fondo sugerido para una caja nueva</label><input id="fdSug" class="num" inputmode="numeric" value="${grp(sug)}" style="text-align:right"><div class="sx-hint">Lo toma la terminal que se cree en Sistema › Terminales; después se ajusta aquí.</div></div>
+          <div class="field"><label for="fdMot">Motivo del cambio *</label><textarea id="fdMot" rows="2" placeholder="Por ejemplo: acuerdo de gerencia del 12 de setiembre"></textarea></div>
+        </div>
+        ${nota("El nuevo fondo rige desde el <b>próximo turno</b> de cada caja; un turno abierto conserva el fondo con que abrió. El cajero lo ve propuesto al abrir la caja en Ventas › Caja y turnos.", "cash")}
+      </div>`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="fdOk">${icon("check")}Guardar cambios</button>`,
+      after(el) {
+        cerrar(el);
+        const pinta = () => {
+          $("#fdTabla", el).innerHTML = tabla();
+          /* se guarda en el borrador al digitar; sin volver a pintar la tabla (el campo sigue con el foco) */
+          $$("[data-fd]", el).forEach((inp) =>
+            inp.addEventListener("input", () => {
+              const n = monIn(inp.value);
+              draft[inp.dataset.fd] = isNaN(n) ? 0 : n;
+              const t = V.TERMINALES.find((x) => x.id === inp.dataset.fd);
+              const cambio = t && draft[t.id] !== t.fondo;
+              inp.style.borderColor = cambio ? "var(--accent)" : "";
+              inp.style.background = cambio ? "var(--accent-soft)" : "";
+            }),
+          );
+        };
+        pinta();
+        $("#fdLoc", el).addEventListener("change", (e) => {
+          fdLoc = e.target.value;
+          pinta();
+        });
+        $("#fdAplicar", el).addEventListener("click", () => {
+          const n = monIn($("#fdTodas", el).value);
+          if (!(n > 0)) return toast("Monto no válido", "Digite el fondo que quiere poner a las cajas mostradas.", "cr");
+          visibles().forEach((t) => (draft[t.id] = n));
+          pinta();
+        });
+        $("#fdOk", el).addEventListener("click", () => {
+          const cambios = V.TERMINALES.filter((t) => draft[t.id] !== t.fondo);
+          const ns = monIn($("#fdSug", el).value);
+          const cambiaSug = ns > 0 && ns !== P.fondoCaja;
+          if (!cambios.length && !cambiaSug) {
+            closeSheet();
+            return toast("Sin cambios", "Los fondos quedaron igual.", "in");
+          }
+          if (cambios.some((t) => !(draft[t.id] > 0)))
+            return toast("Hay un fondo en cero", "Cada caja necesita un fondo mayor que cero para dar vuelto.", "cr");
+          const mot = $("#fdMot", el).value.trim();
+          if (mot.length < 10)
+            return toast("Escriba un motivo que se entienda", "Un punto o una palabra no le sirve a quien lea la bitácora.", "cr");
+          cambios.forEach((t) => {
+            anotar("Cambió fondo de apertura", locNom(t.locId) + " · Caja " + t.n + " · " + mot, "Media", c(t.fondo), c(draft[t.id]));
+            t.fondo = draft[t.id];
+          });
+          if (cambiaSug) {
+            anotar("Cambió fondo sugerido para caja nueva", mot, "Baja", c(P.fondoCaja), c(ns));
+            P.fondoCaja = ns;
+          }
+          PARAMS[0].items[0].ult = [new Date(D.HOY), yo()];
+          closeSheet();
+          toast(
+            "Fondos actualizados",
+            (cambios.length ? cambios.length + (cambios.length === 1 ? " caja cambió" : " cajas cambiaron") + " su fondo; rige desde el próximo turno." : "") +
+              (cambiaSug ? " Una caja nueva empezará con " + c(ns) + "." : ""),
+            "ok",
+          );
+          A.refresh();
+        });
+      },
+    });
+  }
   /* parámetros contables propios de Configuración y la política de Contabilidad */
   const PC = { valuacion: "Costo promedio ponderado", alcance: "Uno para toda la empresa" };
   const AU = () => w.AUTO || { POLITICA: { toleranciaCaja: 2000, umbralCosto: 25000, comisionDatafono: 2.75 } };
@@ -7038,7 +7143,7 @@
                           esc(x.t),
                           esc(x.d || "") +
                             `<span class="sx-hint" style="display:block;margin-top:3px">Último cambio: ${fecha(x.ult[0])} · ${esc(x.ult[1])}</span>`,
-                          `<span style="display:flex;gap:10px;align-items:center"><span class="sx-val">${esc(valP(x))}</span><button class="btn sm" data-par="${PARAMS.indexOf(G.g)}|${G.g.items.indexOf(x)}">Cambiar</button></span>`,
+                          `<span style="display:flex;gap:10px;align-items:center"><span class="sx-val">${esc(valP(x))}</span><button class="btn sm" data-par="${PARAMS.indexOf(G.g)}|${G.g.items.indexOf(x)}">${esc(x.btn || "Cambiar")}</button></span>`,
                         ),
                       )
                       .join(""),
@@ -7071,6 +7176,7 @@
           const [g, i] = b.dataset.par.split("|").map(Number),
             x = PARAMS[g].items[i];
           if (x.soloLectura) return toast(x.t, x.soloLectura + ".", "in");
+          if (x.abre) return x.abre();
           if (PARAMS[g].g === "Contabilidad e impuestos" && !exige(["Contabilidad", "Gerencia"], "Cambiar un parámetro contable")) return;
           cambiarValor({
             title: x.t,
@@ -8073,16 +8179,9 @@
         (g, i, x) => x.indexOf(g) === i,
       );
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Eventos configurados", ALERTAS.length, { txt: ALERTAS.filter((a) => a.on).length + " activos" })}
-          ${stat(
-            "Avisos enviados hoy",
+        ${U.resumen([U.ts("Eventos configurados", ALERTAS.length, { txt: ALERTAS.filter((a) => a.on).length + " activos" }), U.ts("Avisos enviados hoy",
             ALERTAS.reduce((k, a) => k + a.hoy, 0),
-            { txt: "sin contar el resumen de la tarde" },
-          )}
-          ${stat("Sin atender", "2", { txt: "más de 1 hora sin leerse" }, "var(--warn)")}
-          ${stat("Obligatorios", ALERTAS.filter((a) => a.lock).length, { txt: "no se pueden apagar" })}
-        </div>
+            { txt: "sin contar el resumen de la tarde" },), U.ts("Sin atender", "2", { txt: "más de 1 hora sin leerse" }, "var(--warn)"), U.ts("Obligatorios", ALERTAS.filter((a) => a.lock).length, { txt: "no se pueden apagar" })])}
         ${grupos
           .map((g) =>
             card({

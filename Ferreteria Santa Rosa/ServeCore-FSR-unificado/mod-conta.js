@@ -297,12 +297,7 @@
     const etiqueta = k => { const d = new Date(k); return (k === D.HOY.toDateString() ? "Hoy" : DIA[d.getDay()]) + " " + d.getDate(); };
     v.innerHTML = `<div class="wrap">
         <div class="scrollx">${seg("cjd", [{ v: "semana", t: "Todo setiembre" }].concat(dias.map(k => ({ v: k, t: etiqueta(k) }))), cjDia)}</div>
-        <div class="grid g4">
-          ${stat("Cierres de caja", todas.length, { txt: "cada uno con su depósito, su lote y sus SINPE", dir: "" })}
-          ${stat("Diferencias registradas solas", tolerancia, { txt: "hasta " + c(AU.POLITICA.toleranciaCaja) + ", en «Diferencias de caja»", dir: "" }, "var(--ok)")}
-          ${stat("Locales por revisar", rows.filter(r => r.revisar).length, { txt: "faltantes, depósitos, lotes o SINPE sin cuadrar", dir: rows.some(r => r.revisar) ? "down" : "up" }, rows.some(r => r.revisar) ? "var(--warn)" : "var(--ok)")}
-          ${stat("Comisión del datáfono", c(lotes.reduce((s, x) => s + x.comision, 0)), { txt: dec(AU.POLITICA.comisionDatafono, 2) + " % según el contrato · registrada sola", dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Cierres de caja", todas.length, { txt: "cada uno con su depósito, su lote y sus SINPE", dir: "" }), U.ts("Diferencias registradas solas", tolerancia, { txt: "hasta " + c(AU.POLITICA.toleranciaCaja) + ", en «Diferencias de caja»", dir: "" }, "var(--ok)"), U.ts("Locales por revisar", rows.filter(r => r.revisar).length, { txt: "faltantes, depósitos, lotes o SINPE sin cuadrar", dir: rows.some(r => r.revisar) ? "down" : "up" }, rows.some(r => r.revisar) ? "var(--warn)" : "var(--ok)"), U.ts("Comisión del datáfono", c(lotes.reduce((s, x) => s + x.comision, 0)), { txt: dec(AU.POLITICA.comisionDatafono, 2) + " % según el contrato · registrada sola", dir: "" })])}
         ${card({
       title: "Cuadre por local", hint: "toque un local para ver cada caja",
       body: table({
@@ -371,12 +366,7 @@
     const difs = rows.filter(r => r.estado === "Diferencia");
     const aj = AU.AJUSTES;
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Locales cruzados anoche", rows.length, { txt: "siete tiendas, el CEDI y dos bodegas", dir: "" })}
-          ${stat("Con diferencia", difs.length, { txt: difs.length ? difs.map(r => r.loc.nom).join(" · ") : "el kardex y el libro cuadran en todos", dir: difs.length ? "down" : "up" }, difs.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Ajustes de costo del mes", aj.length, { txt: aj.filter(a => a.estado === "Registrado solo").length + " registrados solos · " + aj.filter(a => a.estado !== "Registrado solo").length + " pasaron por revisión", dir: "" })}
-          ${stat("Costo de ventas", "Al vender", { txt: "en cada factura, al costo promedio, sin esperar al conteo de fin de mes", dir: "up" }, "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Locales cruzados anoche", rows.length, { txt: "siete tiendas, el CEDI y dos bodegas", dir: "" }), U.ts("Con diferencia", difs.length, { txt: difs.length ? difs.map(r => r.loc.nom).join(" · ") : "el kardex y el libro cuadran en todos", dir: difs.length ? "down" : "up" }, difs.length ? "var(--warn)" : "var(--ok)"), U.ts("Ajustes de costo del mes", aj.length, { txt: aj.filter(a => a.estado === "Registrado solo").length + " registrados solos · " + aj.filter(a => a.estado !== "Registrado solo").length + " pasaron por revisión", dir: "" }), U.ts("Costo de ventas", "Al vender", { txt: "en cada factura, al costo promedio, sin esperar al conteo de fin de mes", dir: "up" }, "var(--ok)")])}
         ${card({
       title: "Kardex contra libro, local por local", hint: "el cruce corre cada noche; la diferencia se ve el día que ocurre",
       body: table({
@@ -705,12 +695,7 @@
       const cuadra = Math.round(tfD) === Math.round(tfH) && Math.round(tmd) === Math.round(tmh);
       const dc = n => n ? `${grp(Math.abs(n))} <span class="dim">${n > 0 ? "D" : "C"}</span>` : '<span class="dim">—</span>';
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Cuentas con saldo o movimiento", rows.length, { txt: "de " + D.cuentas.length + " en el catálogo", dir: "" })}
-          ${stat("Movimiento de setiembre", c(tmd), { txt: "debe igual a haber: " + c(tmh), dir: "" })}
-          ${stat("Saldos contrarios a su naturaleza", rows.filter(r => r.raro).length, { txt: "cuentas reguladoras y devoluciones incluidas", dir: "" }, rows.some(r => r.raro) ? "var(--warn)" : "var(--ok)")}
-          ${stat(cuadra ? "Cuadra" : "Descuadre", cuadra ? "₡0" : c(Math.abs(tfD - tfH)), { txt: "saldos deudores contra acreedores", dir: cuadra ? "up" : "down" }, cuadra ? "var(--ok)" : "var(--crit)")}
-        </div>
+        ${U.resumen([U.ts("Cuentas con saldo o movimiento", rows.length, { txt: "de " + D.cuentas.length + " en el catálogo", dir: "" }), U.ts("Movimiento de setiembre", c(tmd), { txt: "debe igual a haber: " + c(tmh), dir: "" }), U.ts("Saldos contrarios a su naturaleza", rows.filter(r => r.raro).length, { txt: "cuentas reguladoras y devoluciones incluidas", dir: "" }, rows.some(r => r.raro) ? "var(--warn)" : "var(--ok)"), U.ts(cuadra ? "Diferencia · cuadra" : "Descuadre", cuadra ? "₡0" : c(Math.abs(tfD - tfH)), { txt: "saldos deudores contra acreedores", dir: cuadra ? "up" : "down" }, cuadra ? "var(--ok)" : "var(--crit)")])}
         ${card({
         title: "Balance de comprobación", hint: "saldo de la migración al 31 de agosto + movimiento de setiembre = saldo final · toque una cuenta para ver su movimiento",
         body: table({
@@ -735,12 +720,7 @@
       A._catRows = rows;
       const sang = n => "padding-left:" + ((n - 1) * 18 + 2) + "px";
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Clases", 6, { txt: "activo, pasivo, patrimonio, ingresos, costos y gastos", dir: "" })}
-          ${stat("Cuentas de movimiento", D.cuentas.length, { txt: "las únicas que admiten partidas", dir: "" })}
-          ${stat("Con saldo", D.cuentas.filter(x => x.debe || x.haber).length, { txt: "el resto está disponible sin uso", dir: "" })}
-          ${stat("Niveles", 4, { txt: "clase · grupo · subgrupo · cuenta", dir: "" })}
-        </div>
+        
         ${card({
         title: "Plan contable", hint: "las sumarias solo suman a sus hijas · toque una cuenta de movimiento para ver su movimiento en Libros",
         body: table({
@@ -1434,12 +1414,7 @@
     const viejo = tmp.firstElementChild;
     const st = viejo.querySelector(".grid.g4"); if (st) st.remove();
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Borradores listos", T.filter(x => x.estado === "Borrador listo").length, { txt: "prellenados con los datos del mes", dir: "" })}
-          ${stat("Revisados", T.filter(x => x.estado === "Revisado").length, { txt: "por " + AU.REVISOR.nom, dir: "" }, "var(--warn)")}
-          ${stat("Presentados", T.filter(x => x.estado === "Presentado").length + " de " + T.length, { txt: "con su comprobante registrado", dir: "up" }, "var(--ok)")}
-          ${stat("Próximo vencimiento", "30 de setiembre", { txt: "pago parcial de renta y patentes", dir: "" }, "var(--crit)")}
-        </div>
+        ${U.resumen([U.ts("Borradores listos", T.filter(x => x.estado === "Borrador listo").length, { txt: "prellenados con los datos del mes", dir: "" }), U.ts("Revisados", T.filter(x => x.estado === "Revisado").length, { txt: "por " + AU.REVISOR.nom, dir: "" }, "var(--warn)"), U.ts("Presentados", T.filter(x => x.estado === "Presentado").length + " de " + T.length, { txt: "con su comprobante registrado", dir: "up" }, "var(--ok)"), U.ts("Próximo vencimiento", "30 de setiembre", { txt: "pago parcial de renta y patentes", dir: "" }, "var(--crit)")])}
         ${borradores()}
         ${viejo.innerHTML}</div>`;
     A._txRows = T;
@@ -1452,12 +1427,7 @@
   function periodos(v) {
     const rows = C.cierres;
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Períodos cerrados", rows.filter(r => r.bloqueado).length, { txt: "de " + rows.length + " del año", dir: "up" }, "var(--ok)")}
-          ${stat("Período abierto", (rows.find(r => !r.bloqueado) || {}).nom || "ninguno", { txt: "admite asientos", dir: "" }, "var(--warn)")}
-          ${stat("Quién cierra", "Una persona", { txt: "el sistema prepara, el contador revisa y alguien aprueba", dir: "" })}
-          ${stat("Reapertura", "Con bitácora", { txt: "queda quién, cuándo y por qué · cierre anual el 31 de diciembre", dir: "" })}
-        </div>
+        
         ${card({
       title: "Períodos del año", hint: "un período cerrado no admite un asiento más",
       body: table({
@@ -1597,12 +1567,7 @@
     });
     const conArt = rows.reduce((s, r) => s + r.arts, 0);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Familias configuradas", rows.length + " de " + rows.length, { txt: "ninguna sin cuenta de destino", dir: "up" }, "var(--ok)")}
-          ${stat("Artículos que heredan", grp(conArt), { txt: "toman la cuenta de su familia", dir: "" })}
-          ${stat("Excepciones por artículo", 0, { txt: "cuando existe, manda la del artículo", dir: "" })}
-          ${stat("Origen", "Sistema actual", { txt: "se migra con el catálogo, no se vuelve a digitar", dir: "" })}
-        </div>
+        
         ${card({
       title: "Cuenta de destino por familia", hint: "configuración contable por ítem · CON-005 de la matriz",
       actions: `<button class="btn sm" id="cfExc">${icon("plus")}Excepción por artículo</button>`,
@@ -1720,12 +1685,7 @@
     const R = AU.REGLAS;
     A._rgRows = R;
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Reglas activas", R.filter(r => r.activa).length, { txt: "de " + R.length + " configuradas", dir: "" }, "var(--ok)")}
-          ${stat("Aprendidas del contador", R.filter(r => /Aprendida/.test(r.origen)).length, { txt: R.filter(r => r.nueva).length + " creadas hoy desde la bandeja", dir: "up" })}
-          ${stat("Aciertos este mes", grp(R.reduce((s, r) => s + r.aciertos, 0)), { txt: "movimientos que nadie tuvo que tocar", dir: "up" }, "var(--ok)")}
-          ${stat("Tolerancias", c(AU.POLITICA.toleranciaCaja) + " · " + c(AU.POLITICA.umbralCosto), { txt: "caja · ajustes de costo", dir: "" })}
-        </div>
+        
         ${card({
       title: "Reglas de conciliación", hint: "cada asiento automático dice cuál de estas lo generó",
       body: table({

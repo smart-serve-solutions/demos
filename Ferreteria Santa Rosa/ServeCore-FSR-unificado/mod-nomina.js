@@ -397,12 +397,7 @@
     const rows = M.movimientos;
     const sin = rows.filter(r => !r.reportado);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Movimientos del trimestre", rows.length, { txt: "ingresos, salidas y aumentos", dir: "" })}
-          ${stat("Ingresos", rows.filter(r => r.tipo === "Ingreso").length, { txt: "personal nuevo", dir: "up" }, "var(--ok)")}
-          ${stat("Salidas", rows.filter(r => r.tipo === "Salida").length, { txt: "con liquidación calculada", dir: "" }, "var(--warn)")}
-          ${stat("Sin reportar", sin.length, { txt: sin.length ? "la CCSS cobra intereses por omisión" : "todo al día", dir: sin.length ? "down" : "up" }, sin.length ? "var(--crit)" : "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Movimientos del trimestre", rows.length, { txt: "ingresos, salidas y aumentos", dir: "" }), U.ts("Ingresos", rows.filter(r => r.tipo === "Ingreso").length, { txt: "personal nuevo", dir: "up" }, "var(--ok)"), U.ts("Salidas", rows.filter(r => r.tipo === "Salida").length, { txt: "con liquidación calculada", dir: "" }, "var(--warn)"), U.ts("Sin reportar", sin.length, { txt: sin.length ? "la CCSS cobra intereses por omisión" : "todo al día", dir: sin.length ? "down" : "up" }, sin.length ? "var(--crit)" : "var(--ok)")])}
         ${card({
       title: "Bitácora de movimientos", hint: "el mismo dato alimenta el expediente, la planilla y el reporte a la CCSS",
       body: table({
@@ -437,12 +432,7 @@
       return { p, n: gente.length, prom, bajo: gente.filter(e => e.salario < e.minimo).length };
     });
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Puestos definidos", M.PUESTOS.length, { txt: "cada uno amarrado a una categoría de ley", dir: "" })}
-          ${stat("Categorías del decreto", M.MINIMOS.length, { txt: "de no calificado a licenciado", dir: "" })}
-          ${stat("Aumento general 2026", "1,63 %", { txt: "3,96 % en trabajo doméstico · 2,18 % en especializados", dir: "up" }, "var(--ok)")}
-          ${stat("Personas bajo el mínimo", rows.reduce((s, r) => s + r.bajo, 0), { txt: "el sistema no deja guardar un salario bajo el mínimo", dir: "" }, "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Puestos definidos", M.PUESTOS.length, { txt: "cada uno amarrado a una categoría de ley", dir: "" }), U.ts("Categorías del decreto", M.MINIMOS.length, { txt: "de no calificado a licenciado", dir: "" }), U.ts("Aumento general 2026", "1,63 %", { txt: "3,96 % en trabajo doméstico · 2,18 % en especializados", dir: "up" }, "var(--ok)"), U.ts("Personas bajo el mínimo", rows.reduce((s, r) => s + r.bajo, 0), { txt: "el sistema no deja guardar un salario bajo el mínimo", dir: "" }, "var(--ok)")])}
         <div class="grid" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);align-items:start">
           ${card({
       title: "Catálogo de puestos", hint: "banda interna contra el mínimo de ley",
@@ -493,12 +483,7 @@
     const liqs = M.liquidaciones;
     A._liqs = liqs;
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Liquidaciones del mes", liqs.length, { txt: "una con responsabilidad patronal", dir: "" })}
-          ${stat("Monto liquidado", c(liqs.reduce((s, l) => s + l.lineas.reduce((a, x) => a + x.m, 0), 0)), { txt: "sin contar el FCL de la operadora", dir: "" })}
-          ${stat("FCL a retirar", c(liqs.reduce((s, l) => s + l.fcl, 0)), { txt: "lo retira la persona, salga como salga", dir: "" }, "var(--ok)")}
-          ${stat("Plazo de pago", "6 a 8 días hábiles", { txt: "después corren intereses a favor del trabajador", dir: "" }, "var(--warn)")}
-        </div>
+        ${U.resumen([U.ts("Liquidaciones del mes", liqs.length, { txt: "una con responsabilidad patronal", dir: "" }), U.ts("Monto liquidado", c(liqs.reduce((s, l) => s + l.lineas.reduce((a, x) => a + x.m, 0), 0)), { txt: "sin contar el FCL de la operadora", dir: "" }), U.ts("FCL a retirar", c(liqs.reduce((s, l) => s + l.fcl, 0)), { txt: "lo retira la persona, salga como salga", dir: "" }, "var(--ok)"), U.ts("Plazo de pago", "6 a 8 días hábiles", { txt: "después corren intereses a favor del trabajador", dir: "" }, "var(--warn)")])}
         ${card({
       title: "Liquidaciones calculadas", hint: "toque una fila para ver el desglose",
       body: table({
@@ -667,12 +652,7 @@
     const hEx = rows.reduce((s, r) => s + r.extra, 0);
     A._asRows = rows.slice().sort((a, b) => b.dia - a.dia || (a.estado < b.estado ? 1 : -1));
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Marcas del periodo", rows.length, { txt: asDia === 2 ? "últimos 7 días" : "una jornada", dir: "" })}
-          ${stat("Ausencias", aus.length, { txt: aus.filter(a => !a.justificada).length + " sin justificar", dir: aus.length ? "down" : "" }, aus.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Tardías", tar.length, { txt: "más de 5 minutos después de la hora", dir: "" }, "var(--warn)")}
-          ${stat("Horas extra acumuladas", dec(hEx, 1) + " h", { txt: "se pagan con recargo del " + M.RECARGO_EXTRA + " %", dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Marcas del periodo", rows.length, { txt: asDia === 2 ? "últimos 7 días" : "una jornada", dir: "" }), U.ts("Ausencias", aus.length, { txt: aus.filter(a => !a.justificada).length + " sin justificar", dir: aus.length ? "down" : "" }, aus.length ? "var(--warn)" : "var(--ok)"), U.ts("Tardías", tar.length, { txt: "más de 5 minutos después de la hora", dir: "" }, "var(--warn)"), U.ts("Horas extra acumuladas", dec(hEx, 1) + " h", { txt: "se pagan con recargo del " + M.RECARGO_EXTRA + " %", dir: "" })])}
         <div class="filters">
           <select class="inp" id="asloc" aria-label="Local" style="max-width:200px">${["Todos"].concat(D.locales.map(l => l.nom)).map(o => `<option ${o === asLoc ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>
           <span class="mut" style="font-size:12.5px">La marca entra del reloj del local, del POS o de la aplicación móvil; sin enlace se guarda en el nodo y sube al reconectar.</span>
@@ -704,12 +684,7 @@
     const totH = rows.reduce((s, r) => s + r.h, 0), totM = rows.reduce((s, r) => s + r.monto, 0);
     const ex = rows.filter(r => r.excede);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Horas extra de la semana", dec(totH, 1) + " h", { txt: rows.length + " personas", dir: "" })}
-          ${stat("Costo con recargo", c(totM), { txt: "la hora extra vale 1,5 veces la ordinaria", dir: "" }, "var(--warn)")}
-          ${stat("Sobre el tope semanal", ex.length, { txt: ex.length ? "no se puede pagar sin justificar" : "nadie pasó de 12 horas", dir: ex.length ? "down" : "up" }, ex.length ? "var(--crit)" : "var(--ok)")}
-          ${stat("Equivalente en personas", dec(totH / 48, 1), { txt: "jornadas completas de 48 horas", dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Horas extra de la semana", dec(totH, 1) + " h", { txt: rows.length + " personas", dir: "" }), U.ts("Costo con recargo", c(totM), { txt: "la hora extra vale 1,5 veces la ordinaria", dir: "" }, "var(--warn)"), U.ts("Sobre el tope semanal", ex.length, { txt: ex.length ? "no se puede pagar sin justificar" : "nadie pasó de 12 horas", dir: ex.length ? "down" : "up" }, ex.length ? "var(--crit)" : "var(--ok)"), U.ts("Equivalente en personas", dec(totH / 48, 1), { txt: "jornadas completas de 48 horas", dir: "" })])}
         <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start">
           ${card({
       title: "Horas extra por persona", hint: "de las marcas de la semana, sin digitar nada",
@@ -765,12 +740,7 @@
     const curso = M.vacaciones.filter(x => x.estado === "En curso");
     const prov = act.reduce((s, e) => s + e.vacSaldo * (e.salario / 30), 0);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Días acumulados", grp(dias), { txt: "de " + act.length + " personas activas", dir: "" })}
-          ${stat("Provisión de vacaciones", c(prov), { txt: "pasivo laboral registrado en contabilidad", dir: "" }, "var(--warn)")}
-          ${stat("Solicitudes por aprobar", sol.length, { txt: curso.length + " personas de vacaciones hoy", dir: "" }, sol.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Con más de dos periodos", acum.length, { txt: "la ley pide disfrutarlas, no acumularlas", dir: acum.length ? "down" : "up" }, acum.length ? "var(--crit)" : "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Días acumulados", grp(dias), { txt: "de " + act.length + " personas activas", dir: "" }), U.ts("Provisión de vacaciones", c(prov), { txt: "pasivo laboral registrado en contabilidad", dir: "" }, "var(--warn)"), U.ts("Solicitudes por aprobar", sol.length, { txt: curso.length + " personas de vacaciones hoy", dir: "" }, sol.length ? "var(--warn)" : "var(--ok)"), U.ts("Con más de dos periodos", acum.length, { txt: "la ley pide disfrutarlas, no acumularlas", dir: acum.length ? "down" : "up" }, acum.length ? "var(--crit)" : "var(--ok)")])}
         <div class="grid" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);align-items:start">
           ${card({
       title: "Solicitudes y disfrutes", hint: "el calendario cruza contra la dotación mínima del local",
@@ -838,12 +808,7 @@
     const dias = rows.reduce((s, r) => s + r.dias, 0);
     const costoPat = rows.reduce((s, r) => { const e = M.emp(r.empId); return s + (e ? (e.salario / 30) * r.patrono * 0.5 : 0); }, 0);
     v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Boletas del trimestre", rows.length, { txt: vig.length + " vigentes hoy", dir: "" })}
-          ${stat("Días de incapacidad", grp(dias), { txt: "ausentismo por salud", dir: "" }, "var(--warn)")}
-          ${stat("Costo directo al patrono", c(costoPat), { txt: "los primeros tres días al 50 %", dir: "" })}
-          ${stat("Riesgos del trabajo", rows.filter(r => r.tipo === "INS").length, { txt: "reportadas al INS con la póliza", dir: "" }, "var(--crit)")}
-        </div>
+        ${U.resumen([U.ts("Boletas del trimestre", rows.length, { txt: vig.length + " vigentes hoy", dir: "" }), U.ts("Días de incapacidad", grp(dias), { txt: "ausentismo por salud", dir: "" }, "var(--warn)"), U.ts("Costo directo al patrono", c(costoPat), { txt: "los primeros tres días al 50 %", dir: "" }), U.ts("Riesgos del trabajo", rows.filter(r => r.tipo === "INS").length, { txt: "reportadas al INS con la póliza", dir: "" }, "var(--crit)")])}
         ${card({
       title: "Boletas", hint: "el rebajo de la planilla y el subsidio salen de aquí",
       body: table({

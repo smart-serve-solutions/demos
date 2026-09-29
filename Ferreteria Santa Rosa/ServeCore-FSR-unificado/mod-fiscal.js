@@ -28,13 +28,8 @@
       hoy.forEach(x => porTipo[x.doc.tipo] = (porTipo[x.doc.tipo] || 0) + 1);
 
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Emitidos hoy", hoy.length, { txt: Object.keys(porTipo).map(k => k + " " + porTipo[k]).join(" · "), dir: "" })}
-          ${stat("Aceptados por Hacienda", hoy.filter(x => x.estado === "Aceptado").length + " de " + hoy.length,
-        { txt: cola.length ? cola.length + " documentos pendientes en total" : "nada pendiente", dir: cola.length ? "down" : "up" }, cola.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("Sin aceptar del proveedor", sin.length, { txt: c(sin.reduce((s, r) => s + r.iva, 0)) + " de crédito fiscal en riesgo", dir: sin.length ? "down" : "up" }, sin.length ? "var(--crit)" : "var(--ok)")}
-          ${stat("IVA del período", c(iva.aPagar), { txt: "débito " + c(iva.debito) + " − crédito " + c(iva.creditoFiscal), dir: "" })}
-        </div>
+        ${U.resumen([U.ts("Emitidos hoy", hoy.length, { txt: Object.keys(porTipo).map(k => k + " " + porTipo[k]).join(" · "), dir: "" }), U.ts("Aceptados por Hacienda", hoy.filter(x => x.estado === "Aceptado").length + " de " + hoy.length,
+        { txt: cola.length ? cola.length + " documentos pendientes en total" : "nada pendiente", dir: cola.length ? "down" : "up" }, cola.length ? "var(--warn)" : "var(--ok)"), U.ts("Sin aceptar del proveedor", sin.length, { txt: c(sin.reduce((s, r) => s + r.iva, 0)) + " de crédito fiscal en riesgo", dir: sin.length ? "down" : "up" }, sin.length ? "var(--crit)" : "var(--ok)"), U.ts("IVA del período", c(iva.aPagar), { txt: "débito " + c(iva.debito) + " − crédito " + c(iva.creditoFiscal), dir: "" })])}
 
         <div class="grid" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);align-items:start">
           ${card({
@@ -219,14 +214,10 @@
     render(v) {
       const rows = F.recibidos();
       const sin = rows.filter(r => r.estado === "Sin aceptar");
-      A._recRows = rows;
+      const FR = U.filtrar("rec", rows, [{ v: "todos", t: "Todos", f: () => true }, { v: "sin", t: "Sin aceptar", f: r => r.estado === "Sin aceptar", k: "cr" }, { v: "acep", t: "Aceptados", f: r => /Aceptado/.test(r.estado) }, { v: "sinoc", t: "Sin orden de compra", f: r => !r.ocLigada, k: "wa" }]);
+      A._recRows = FR.rows;
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Sin aceptar", sin.length, { txt: sin.length ? "el más urgente vence en " + Math.min.apply(null, sin.map(r => r.venceEn)) + " días" : "todo al día", dir: sin.length ? "down" : "up" }, sin.length ? "var(--crit)" : "var(--ok)")}
-          ${stat("Crédito fiscal en riesgo", c(sin.reduce((s, r) => s + r.iva, 0)), { txt: "se pierde sin recuperación retroactiva", dir: "" }, "var(--crit)")}
-          ${stat("Aceptados", rows.filter(r => /Aceptado/.test(r.estado)).length, { txt: "con mensaje de receptor transmitido", dir: "up" }, "var(--ok)")}
-          ${stat("Sin orden de compra", rows.filter(r => !r.ocLigada).length, { txt: "entraron sin orden previa — revisión manual", dir: "" }, "var(--warn)")}
-        </div>
+        <div class="ffila">${FR.chips}${U.tira([U.ts("Crédito fiscal en riesgo", c(sin.reduce((s, r) => s + r.iva, 0)), { txt: sin.length ? "se pierde sin recuperación retroactiva · el más urgente vence en " + Math.min.apply(null, sin.map(r => r.venceEn)) + " días" : "todo al día" }, "var(--crit)")])}</div>
         ${card({
         title: "Comprobantes de proveedor", hint: "toque una fila para responder el mensaje de receptor",
         body: table({
@@ -241,7 +232,7 @@
             { t: "Orden ligada", cls: "mono", fmt: r => r.ocLigada ? `<span class="mut">${esc(r.ocLigada)}</span>` : tag("Sin orden", "wa", "alert") },
             { t: "Vence en", r: true, cls: "mono", fmt: r => r.estado === "Sin aceptar" ? `<b style="color:${r.venceEn <= 2 ? "var(--crit)" : "var(--warn)"}">${r.venceEn} d</b>` : '<span class="dim">—</span>' },
             { t: "Estado", fmt: r => r.estado === "Sin aceptar" ? tag("Sin aceptar", "cr", "alert") : tag(r.estado, r.estado === "Rechazado" ? "wa" : "ok", "check") }
-          ], rows, rowCls: r => r.estado === "Sin aceptar" && r.venceEn <= 2 ? "cr" : r.estado === "Sin aceptar" ? "wa" : ""
+          ], rows: FR.rows, rowCls: r => r.estado === "Sin aceptar" && r.venceEn <= 2 ? "cr" : r.estado === "Sin aceptar" ? "wa" : ""
         })
       })}
         ${card({
@@ -255,6 +246,7 @@
       })}</div>`;
     },
     wire(v) {
+      U.onFiltro(document, "rec");
       const b = $("#recAll", document);
       if (b) b.addEventListener("click", () => {
         const n = F.aceptarRecibidos();
@@ -302,12 +294,7 @@
     render(v) {
       const venc = F.diferidas.filter(x => x.vencido);
       const pend = F.diferidas.filter(x => !x.vencido);
-      const kpis = `<div class="grid g4">
-        ${stat("REP emitidos", F.reps.length, { txt: "uno por cada abono cobrado", dir: "" })}
-        ${stat("IVA trasladado por REP", c(F.reps.reduce((s, r) => s + r.iva, 0)), { txt: "se declara en el mes del recibo, no de la factura", dir: "" }, "var(--ok)")}
-        ${stat("IVA diferido pendiente", c(pend.reduce((s, x) => s + x.ivaDiferido, 0)), { txt: pend.length + " facturas dentro del plazo", dir: "" })}
-        ${stat("Pasaron los 90 días", venc.length, { txt: c(venc.reduce((s, x) => s + x.ivaDiferido, 0)) + " se declara aunque no se cobre", dir: venc.length ? "down" : "up" }, venc.length ? "var(--crit)" : "var(--ok)")}
-      </div>`;
+      const kpis = `${U.resumen([U.ts("REP emitidos", F.reps.length, { txt: "uno por cada abono cobrado", dir: "" }), U.ts("IVA trasladado por REP", c(F.reps.reduce((s, r) => s + r.iva, 0)), { txt: "se declara en el mes del recibo, no de la factura", dir: "" }, "var(--ok)"), U.ts("IVA diferido pendiente", c(pend.reduce((s, x) => s + x.ivaDiferido, 0)), { txt: pend.length + " facturas dentro del plazo", dir: "" }), U.ts("Pasaron los 90 días", venc.length, { txt: c(venc.reduce((s, x) => s + x.ivaDiferido, 0)) + " se declara aunque no se cobre", dir: venc.length ? "down" : "up" }, venc.length ? "var(--crit)" : "var(--ok)")])}`;
 
       if (repTab === "Recibos emitidos") {
         v.innerHTML = `<div class="wrap">${kpis}
@@ -412,17 +399,13 @@
       const rows = F.cola();
       const porErr = {};
       rows.forEach(x => { if (x.err) porErr[x.err.cod] = (porErr[x.err.cod] || 0) + 1; });
+      const FC = U.filtrar("cola", rows, [{ v: "todos", t: "Todos", f: () => true }, { v: "proc", t: "En proceso", f: x => x.estado === "En proceso" }, { v: "rech", t: "Rechazados", f: x => x.estado === "Rechazado", k: "cr" }, { v: "rev", t: "Requieren revisión", f: x => x.err && !x.err.auto, k: "cr" }, { v: "auto", t: "Se reintentan solos", f: x => x.err && x.err.auto }]);
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("En la cola", rows.length, { txt: "de " + grp(D.documentos.length) + " comprobantes", dir: "" }, rows.length ? "var(--warn)" : "var(--ok)")}
-          ${stat("En proceso", rows.filter(x => x.estado === "En proceso").length, { txt: "esperando respuesta de Hacienda", dir: "" })}
-          ${stat("Rechazados", rows.filter(x => x.estado === "Rechazado").length, { txt: rows.filter(x => x.err && x.err.auto).length + " se corrigen y reenvían solos", dir: "" }, "var(--crit)")}
-          ${stat("Una hora de caída", "≈200 documentos", { txt: "al volumen real de Santa Rosa", dir: "" })}
-        </div>
+        <div class="ffila">${FC.chips}${U.tira([{ v: grp(D.documentos.length), l: "comprobantes emitidos", t: "la cola es lo que todavía no tiene aceptación" }, { v: "≈200", l: "documentos por cada hora de caída", t: "al volumen real de Santa Rosa" }])}</div>
         <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start">
           ${card({
         title: "Comprobantes sin aceptación", hint: "cada uno con su código de error y su motivo",
-        body: rows.length ? table({
+        body: FC.rows.length ? table({
           h: "calc(100dvh - 430px)",
           cols: [
             { t: "Consecutivo", cls: "mono", fmt: r => esc(r.doc.cons) },
@@ -432,7 +415,7 @@
             { t: "Intentos", r: true, cls: "mono", fmt: r => r.intentos },
             { t: "Error", fmt: r => r.err ? `<b class="mono">${esc(r.err.cod)}</b> <span class="mut">${esc(r.err.t)}</span>` : '<span class="dim">sin respuesta todavía</span>' },
             { t: "", fmt: r => r.err ? (r.err.auto ? tag("Se reintenta solo", "ac") : tag("Requiere revisión", "cr", "alert")) : tag("En proceso", "wa", "clock") }
-          ], rows, rowCls: r => r.err && !r.err.auto ? "cr" : "wa"
+          ], rows: FC.rows, rowCls: r => r.err && !r.err.auto ? "cr" : "wa"
         }) : empty("check", "Nada en la cola", "Todos los comprobantes tienen respuesta de aceptación de Hacienda.")
       })}
           <div style="display:flex;flex-direction:column;gap:14px">
@@ -458,6 +441,7 @@
         </div></div>`;
     },
     wire() {
+      U.onFiltro(document, "cola");
       const b = $("#colRe", document);
       if (b) b.addEventListener("click", () => {
         const n = F.reintentar();
@@ -474,12 +458,7 @@
     render(v) {
       const prov = F.emitidos().filter(x => x.sit === "2").length + (S.offline ? S.queue : 0);
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Estado del servicio", S.offline ? "Sin respuesta" : "Disponible", { txt: S.offline ? "el nodo local sigue facturando" : "validador de Hacienda respondiendo", dir: S.offline ? "down" : "up" }, S.offline ? "var(--warn)" : "var(--ok)")}
-          ${stat("Provisionales por convertir", S.offline ? S.queue : 0, { txt: "plazo de 2 días hábiles", dir: "" }, S.offline ? "var(--warn)" : "var(--ok)")}
-          ${stat("Emitidos en contingencia", prov, { txt: "en la ventana de la demo", dir: "" })}
-          ${stat("Caída del 11 de setiembre", "25 min", { txt: "los siete locales sin poder facturar", dir: "down" }, "var(--crit)")}
-        </div>
+        ${U.resumen([U.ts("Estado del servicio", S.offline ? "Sin respuesta" : "Disponible", { txt: S.offline ? "el nodo local sigue facturando" : "validador de Hacienda respondiendo", dir: S.offline ? "down" : "up" }, S.offline ? "var(--warn)" : "var(--ok)"), U.ts("Provisionales por convertir", S.offline ? S.queue : 0, { txt: "plazo de 2 días hábiles", dir: "" }, S.offline ? "var(--warn)" : "var(--ok)"), U.ts("Emitidos en contingencia", prov, { txt: "en la ventana de la demo", dir: "" }), U.ts("Caída del 11 de setiembre", "25 min", { txt: "los siete locales sin poder facturar", dir: "down" }, "var(--crit)")])}
         <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start">
           ${card({
         title: "Cómo opera la contingencia", hint: "el interruptor de la barra superior lo demuestra",
@@ -534,12 +513,7 @@
           </div>`).join("")}</div>`
       });
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Series activas", rows.length, { txt: "sucursal × terminal × tipo de comprobante", dir: "" })}
-          ${stat("Terminales", F.EMISOR.terminales, { txt: "en " + F.EMISOR.sucursales + " tiendas", dir: "" })}
-          ${stat("Saltos detectados", saltos.length, { txt: saltos.length ? "el sistema los señala antes de que Hacienda pregunte" : "ninguna serie con huecos", dir: saltos.length ? "down" : "up" }, saltos.length ? "var(--crit)" : "var(--ok)")}
-          ${stat("Coordinación entre locales", "Ninguna", { txt: "la serie ya lleva sucursal y terminal", dir: "up" }, "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Series activas", rows.length, { txt: "sucursal × terminal × tipo de comprobante", dir: "" }), U.ts("Terminales", F.EMISOR.terminales, { txt: "en " + F.EMISOR.sucursales + " tiendas", dir: "" }), U.ts("Saltos detectados", saltos.length, { txt: saltos.length ? "el sistema los señala antes de que Hacienda pregunte" : "ninguna serie con huecos", dir: saltos.length ? "down" : "up" }, saltos.length ? "var(--crit)" : "var(--ok)"), U.ts("Coordinación entre locales", "Ninguna", { txt: "la serie ya lleva sucursal y terminal", dir: "up" }, "var(--ok)")])}
         ${bloque(F.CONS_SEG, "Numeración consecutiva")}
         ${bloque(F.CLAVE_SEG, "Clave numérica")}
         ${card({
@@ -576,12 +550,7 @@
       const L = F.LLAVE;
       const pctVida = Math.round((1 - L.faltan / 1461) * 100);
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Ambiente", L.ambiente, { txt: "el de pruebas vence el " + fechaL(L.pruebas.vence), dir: "" }, "var(--ok)")}
-          ${stat("Vence", fechaL(L.vence), { txt: "vigencia de 4 años desde la emisión", dir: "" })}
-          ${stat("Faltan", grp(L.faltan) + " días", { txt: "avisos a los 90, 30 y 7 días", dir: L.faltan < 180 ? "down" : "" }, L.faltan < 180 ? "var(--warn)" : "var(--accent)")}
-          ${stat("Custodia", "Solo la nube", { txt: "ningún nodo de local tiene la llave", dir: "up" }, "var(--ok)")}
-        </div>
+        
         <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start">
           ${card({
         title: "Llave de producción",
@@ -632,12 +601,7 @@
       if (cbTab === "Catálogo CABYS") {
         const ret = F.CABYS.filter(x => !x.vigente);
         v.innerHTML = `<div class="wrap">
-          <div class="grid g4">
-            ${stat("Códigos en uso", F.CABYS.length, { txt: "sobre " + grp(D.articulos.length) + " artículos del catálogo", dir: "" })}
-            ${stat("Retirados del catálogo", ret.length, { txt: ret.length ? "Hacienda los rechaza con el error 4012" : "todos vigentes", dir: ret.length ? "down" : "up" }, ret.length ? "var(--crit)" : "var(--ok)")}
-            ${stat("Con tarifa reducida", F.CABYS.filter(x => x.tarifa < 13).length, { txt: "insumos agropecuarios al 1 %", dir: "" })}
-            ${stat("Sincronización", "Semanal", { txt: "y aviso cuando un código que usted usa cambia", dir: "up" }, "var(--ok)")}
-          </div>
+          ${U.resumen([U.ts("Códigos en uso", F.CABYS.length, { txt: "sobre " + grp(D.articulos.length) + " artículos del catálogo", dir: "" }), U.ts("Retirados del catálogo", ret.length, { txt: ret.length ? "Hacienda los rechaza con el error 4012" : "todos vigentes", dir: ret.length ? "down" : "up" }, ret.length ? "var(--crit)" : "var(--ok)"), U.ts("Con tarifa reducida", F.CABYS.filter(x => x.tarifa < 13).length, { txt: "insumos agropecuarios al 1 %", dir: "" }), U.ts("Sincronización", "Semanal", { txt: "y aviso cuando un código que usted usa cambia", dir: "up" }, "var(--ok)")])}
           ${card({
           title: "Códigos del catálogo", hint: "el CABYS determina la tarifa de IVA de cada línea",
           actions: `<button class="btn sm pri" id="cbFix">${icon("check")}Resolver el código retirado</button>`,

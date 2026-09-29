@@ -354,6 +354,8 @@
           const items = $$("[data-add]", box);
           const elegido = items[sel] || items[0];
           if (elegido) agregar(elegido.dataset.add);
+          /* Enter con el campo vacío cobra: escanear, escanear… Enter */
+          else if (!scan.value.trim() && S.cart.lineas.length) cobrar();
         } else if (e.key === "Escape" && scan.value) {
           e.stopPropagation();
           scan.value = ""; box.innerHTML = ""; sel = 0;
@@ -491,6 +493,14 @@
       v._keys = e => {
         if (S.screen !== "pos" || $("#ovScrim")) return;
         if (e.altKey && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); agregarSug(+e.code.slice(5) - 1); return; }
+        /* Enter cobra sin importar dónde esté el foco, como las F. Se respeta el Enter propio de un campo
+           (el escaneo y las líneas lo manejan ellos) y el de un botón enfocado (lo activa el navegador) */
+        if (e.key === "Enter" && !e.repeat) {
+          const tg = e.target, tn = (tg.tagName || "").toLowerCase();
+          if (tn === "input" || tn === "textarea" || tn === "select" || tn === "button" || tg.isContentEditable) return;
+          if (S.cart.lineas.length) { e.preventDefault(); cobrar(); }
+          return;
+        }
         const f = ACCIONES[e.key];
         if (f) { e.preventDefault(); f(); }
       };
@@ -767,15 +777,15 @@
     openSheet({
       title: "Cobro de la factura", sub: `${cli ? cli.nom : "Consumidor final"} · ${c(t.total)}`,
       body: `<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px" id="medios">
-          ${ALT_MEDIOS.map((m, i) => `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px" data-medio="${m[1]}" aria-pressed="${!credito && i === 0}">${icon(m[0])}${m[1]}<kbd style="font-size:10px">Alt+${i + 1}</kbd></button>`).join("")}
-          ${tieneCredito ? `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px${creditoOk ? "" : ";opacity:.45;cursor:not-allowed"}" data-medio="Crédito" aria-pressed="${credito}" ${creditoOk ? "" : "disabled"}>${icon("file")}Crédito ${cli.plazo} días<kbd style="font-size:10px">Alt+${ALT_MEDIOS.length + 1}</kbd></button>` : ""}
+          ${ALT_MEDIOS.map((m, i) => `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px" data-medio="${m[1]}" aria-pressed="${!credito && i === 0}">${icon(m[0])}${m[1]}<kbd style="font-size:10px">F${i + 1}</kbd></button>`).join("")}
+          ${tieneCredito ? `<button class="btn" style="flex-direction:column;padding:13px 8px;gap:5px${creditoOk ? "" : ";opacity:.45;cursor:not-allowed"}" data-medio="Crédito" aria-pressed="${credito}" ${creditoOk ? "" : "disabled"}>${icon("file")}Crédito ${cli.plazo} días<kbd style="font-size:10px">F${ALT_MEDIOS.length + 1}</kbd></button>` : ""}
         </div>
         ${tieneCredito && !creditoOk ? `<div style="margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--surface-2);border:1px solid var(--hair);font-size:12.5px;color:var(--ink-2)">${icon("info")} Crédito no disponible para este cliente (mora o límite). Cobre con otro medio.</div>` : ""}
         <div id="secCont"${credito ? " hidden" : ""}>
         <div class="grid g2" style="gap:12px;margin-top:14px">
           <div class="field" style="margin:0"><label for="monto" id="montoLbl">Monto</label><input id="monto" class="num" style="font-size:20px;font-weight:600;text-align:right;padding:10px 12px" value="${grp(t.total)}"><div class="sx-hint" id="usdHint"></div></div>
           <div class="field" style="margin:0"><label for="pRef">Referencia</label><input id="pRef" placeholder="Autorización, SINPE o n.º de cheque"></div></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm" id="addPago">${icon("plus")}Agregar este pago y seguir con otro medio</button></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm" id="addPago">${icon("plus")}Agregar este pago y seguir con otro medio<kbd style="font-size:10px;margin-left:4px">F9</kbd></button></div>
         <div id="pagosLista" style="margin-top:10px"></div>
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:1px solid var(--hair-2)">
           <span style="font-size:13px;font-weight:600" id="vueltoLbl">Vuelto</span>
@@ -790,7 +800,7 @@
           <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Condición 02 · crédito a ${cli.plazo} días. El <strong>Recibo Electrónico de Pago</strong> se emite cuando entre el dinero.</div></div></div>` : "")
         + `<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--hair);display:flex;gap:10px">${icon("shield")}
           <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Al aplicar: se firma y ${S.offline ? "se encola para" : "se envía a"} Hacienda, se imprime el comprobante, baja el inventario y se genera el asiento contable<span id="notaCxc">${credito ? " y la cuenta por cobrar" : ""}</span>.</div></div>`,
-      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="okPay">${icon("check")}Aplicar</button>`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="okPay">${icon("check")}Aplicar<kbd style="font-size:10px;margin-left:6px">⏎</kbd></button>`,
       after(el) {
         let medio = "Efectivo";
         $$("[data-cerrar]", el).forEach(b => b.addEventListener("click", closeSheet));
@@ -894,11 +904,43 @@
             ponerMonto(pendiente()); $("#pRef", el).value = "";
             pintar(); mo.focus(); mo.select();
           });
-          el.addEventListener("keydown", e => {
-            if (e.altKey && /^Digit[1-8]$/.test(e.code)) { e.preventDefault(); const b = $$("[data-medio]", el)[+e.code.slice(5) - 1]; if (b) elegir(b); }
-          });
           setTimeout(() => { if (!credito) { mo.focus(); mo.select(); } }, 40);
         }
+        /* teclas del cobro: la hoja es modal y la caja de atrás queda inhabilitada, así que aquí
+           las F se reusan para los medios, en el mismo orden de la cuadrícula (F1 Efectivo … F8 Crédito)
+           y F9 agrega el pago para seguir con otro medio. Se escuchan en captura sobre el documento
+           para que no lleguen a los atajos globales (F1 caja, F9 inicio) aunque el foco quede fuera
+           de un campo. Alt+1–8 queda como alias. */
+        const medios = $("#medios", el);
+        const teclas = e => {
+          if (!medios.isConnected) { document.removeEventListener("keydown", teclas, true); return; }
+          /* Enter aplica desde cualquier parte del cobro (monto, referencia o sin foco). Se respeta
+             un botón enfocado (Enter lo activa) y una nota de varias líneas; mantener Enter no repite */
+          if (e.key === "Enter") {
+            const tg = e.target, tn = (tg.tagName || "").toLowerCase();
+            if (tn === "textarea" || (tn === "button" && tg !== okB)) return;
+            e.preventDefault(); e.stopPropagation();
+            if (e.repeat) return;
+            if (okB.disabled) {
+              const falta = credito ? 0 : t.total - propuesta().reduce((s, x) => s + x.monto, 0);
+              return toast(falta > 0 ? "Falta " + c(falta) + " por cobrar" : "Revise los montos", falta > 0 ? "Digite el monto completo o agregue este pago con F9 y siga con otro medio." : "Solo el efectivo puede pasar del total y dar vuelto.", "wa");
+            }
+            okB.click();
+            return;
+          }
+          const f = /^F([1-9])$/.exec(e.key);
+          const alt = e.altKey && /^Digit([1-8])$/.exec(e.code);
+          if (!f && !alt) return;
+          e.preventDefault(); e.stopPropagation();
+          const k = +(f ? f[1] : alt[1]);
+          if (k === 9) { const ap = $("#addPago", el); if (ap && !credito) ap.click(); return; }
+          const b = $$("[data-medio]", el)[k - 1];
+          if (!b) return;
+          if (b.disabled) return toast("Crédito no disponible", "Este cliente tiene mora o no le alcanza el límite. Cobre con otro medio.", "wa");
+          elegir(b);
+          if (!credito && mo) { mo.focus(); mo.select(); }
+        };
+        document.addEventListener("keydown", teclas, true);
         pintar();
         okB.addEventListener("click", () => {
           let aplicados = [];
@@ -969,12 +1011,7 @@
     sub: () => "≈40 vehículos · el flete sale del tarifario, no del criterio de una persona",
     render(v) {
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Rutas de hoy", D.rutas.length, { txt: D.rutas.filter(r => r.estado === "En ruta").length + " en camino", dir: "" })}
-          ${stat("Entregas programadas", D.rutas.reduce((s, r) => s + r.entregas, 0), { txt: "cada una asociada a un documento de venta", dir: "" })}
-          ${stat("Kilómetros del día", D.rutas.reduce((s, r) => s + r.km, 0) + " km", { txt: "para calcular el costo real de la entrega", dir: "" })}
-          ${stat("Ingreso por flete", c(D.rutas.reduce((s, r) => s + r.tarifa * r.entregas, 0)), { txt: "según el tarifario vigente", dir: "" }, "var(--ok)")}
-        </div>
+        ${U.resumen([U.ts("Rutas de hoy", D.rutas.length, { txt: D.rutas.filter(r => r.estado === "En ruta").length + " en camino", dir: "" }), U.ts("Entregas programadas", D.rutas.reduce((s, r) => s + r.entregas, 0), { txt: "cada una asociada a un documento de venta", dir: "" }), U.ts("Recorridos hoy", D.rutas.reduce((s, r) => s + r.km, 0) + " km", { txt: "para calcular el costo real de la entrega", dir: "" }), U.ts("Ingreso por flete", c(D.rutas.reduce((s, r) => s + r.tarifa * r.entregas, 0)), { txt: "según el tarifario vigente", dir: "" }, "var(--ok)")])}
         <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start">
           ${card({
         title: "Rutas del día",

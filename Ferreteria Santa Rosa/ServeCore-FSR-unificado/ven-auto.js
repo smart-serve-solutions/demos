@@ -28,7 +28,7 @@
 
   /* ═══ 1 · PARÁMETROS DE EJEMPLO (se definen con Santa Rosa) ═══ */
   const PARAM = {
-    fondoCaja: 50000,            /* fondo de apertura de cada caja */
+    fondoCaja: 50000,            /* fondo sugerido para una caja nueva; cada caja tiene el suyo (TERMINALES[].fondo) */
     topeEfectivo: 300000,        /* sobre esto la caja sugiere un retiro */
     devolucionSinAprobacion: 100000, /* una devolución mayor espera al administrador */
     diasProforma: 15,            /* vigencia de la proforma */
@@ -186,14 +186,18 @@
     L7: [["Josué Mora", "Cajero y administrador"]]
   };
   const TERMINALES = [];
-  D.tiendas.forEach(l => { for (let t = 1; t <= l.terminales; t++) TERMINALES.push({ id: l.id + "-T" + t, locId: l.id, n: t, cons: l.cod + "-" + pad(t, 5), equipo: "Caja " + t + (t === 1 ? " · mostrador principal" : "") }); });
+  /* fondo de apertura propio de cada caja de cada local: el mostrador principal de los locales
+     grandes cambia más billetes que una caja de apoyo (en sesión 2: «inició con 100 000», «dejó el fondo en 50 o 100 000») */
+  const FONDO_INICIAL = { "L1-T1": 100000, "L2-T1": 100000, "L2-T2": 75000, "L3-T1": 75000 };
+  D.tiendas.forEach(l => { for (let t = 1; t <= l.terminales; t++) TERMINALES.push({ id: l.id + "-T" + t, locId: l.id, n: t, cons: l.cod + "-" + pad(t, 5), equipo: "Caja " + t + (t === 1 ? " · mostrador principal" : ""), fondo: FONDO_INICIAL[l.id + "-T" + t] || PARAM.fondoCaja }); });
+  const fondoDe = (locId, n) => { const tm = TERMINALES.find(x => x.locId === locId && x.n === n); return tm && tm.fondo != null ? tm.fondo : PARAM.fondoCaja; };
 
   const TURNOS = [];
   let tseq = 1;
   const MEDIOS = ["Efectivo", "Tarjeta", "SINPE móvil", "Transferencia", "Cheque", "Dólares", "Anticipo", "Nota de crédito a favor", "Crédito"];
   const EFECTIVO = { "Efectivo": true, "Dólares": true };
   function nuevoTurno(locId, n, cajero, abre, fondo) {
-    const t = { id: "TU" + tseq++, locId, n, cajero, abre, fondo: fondo == null ? PARAM.fondoCaja : fondo, retiros: [], cierre: null, estado: "Abierta" };
+    const t = { id: "TU" + tseq++, locId, n, cajero, abre, fondo: fondo == null ? fondoDe(locId, n) : fondo, retiros: [], cierre: null, estado: "Abierta" };
     TURNOS.push(t); return t;
   }
   /* hoy: casi todas las cajas abrieron a las 7:00; la 2 de Santa Rosa cambió de cajera a media mañana */
@@ -782,7 +786,7 @@
   w.VENX = {
     PARAM, STATS, CATEGORIAS, FAMV, DESC, margenFam, descMax, VOLUMEN, CONVENIOS, descAuto,
     VE_COSTO, MIN_HIST, cambiarMinimo, bajoMinimo, AUT, BARRIDO, autorizaciones, resolver,
-    HABILITADOS, TERMINALES, TURNOS, MEDIOS, EFECTIVO, CIERRES, turnoDe, turnosDe, resumen, abrir, retirar, cerrar,
+    HABILITADOS, TERMINALES, fondoDe, TURNOS, MEDIOS, EFECTIVO, CIERRES, turnoDe, turnosDe, resumen, abrir, retirar, cerrar,
     prep, consumir, revertir,
     flete, ZONA, MOTIVOS, PERDIDAS, perdidas, enviarLink, confirmarPago, marcarPerdida,
     CAP, AUTORIZADOS, alistar, asignar, entregar,

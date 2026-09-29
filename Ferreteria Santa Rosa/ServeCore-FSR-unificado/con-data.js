@@ -173,7 +173,7 @@
     desdeAux("2-01-01-001", -cxp, "facturas de proveedor por pagar");
 
     /* estados de cuenta y arqueos al 31 de agosto */
-    const fondos = D.locales.reduce((s, l) => s + (l.tipo === "tienda" ? l.terminales : 0), 0) * (w.VENX ? w.VENX.PARAM.fondoCaja : 50000);
+    const fondos = w.VENX ? w.VENX.TERMINALES.reduce((s, t) => s + t.fondo, 0) : D.locales.reduce((s, l) => s + (l.tipo === "tienda" ? l.terminales : 0), 0) * 50000;
     pone("1-01-01-001", fondos, "fondos de las cajas (lo del 31 ya se depositó)");
     pone("1-01-02-001", 48250000); pone("1-01-02-002", 9400000); pone("1-01-02-003", 6120000); pone("1-01-02-004", 3280000);
     pone("1-01-02-005", 25000 * D.tcDe(FIN_AGO).compra, "US$ 25 000 al tipo de compra del 31");

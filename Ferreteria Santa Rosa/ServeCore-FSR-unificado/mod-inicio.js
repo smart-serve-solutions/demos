@@ -55,7 +55,7 @@
     const transito = D.traslados.filter(t => t.estado === "En tránsito");
     const pendientes = D.compras.filter(o => o.estado !== "Aplicada");
     const conteo = D.conteos.find(x => x.estado === "En proceso") || D.conteos[0];
-    const oc = D.compras.find(o => o.cons === "OC-2026-004412") || D.compras[0];
+    const oc = D.compras.find(o => o.estado === "Recibida parcial") || D.compras.find(o => o.estado !== "Registrada") || D.compras[0];
     const tr = transito[0] || D.traslados[0];
     return `<div class="grid g4">
       ${stat("Traslados en tránsito", transito.length, { txt: transito.length ? "el más viejo salió hace 2 días" : "nada en camino", dir: "" }, "var(--accent)")}

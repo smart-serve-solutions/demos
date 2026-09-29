@@ -253,12 +253,7 @@
       const choferes = {};
       pend.forEach(d => { const k = d.ruta.chofer; (choferes[k] = choferes[k] || { chofer: k, ruta: d.ruta.nom, docs: [], efectivo: 0, otros: 0 }).docs.push(d); if (/Efectivo/.test(d.ruta.medio)) choferes[k].efectivo += d.saldo; else choferes[k].otros += d.saldo; });
       v.innerHTML = `<div class="wrap">
-        <div class="grid g4">
-          ${stat("Por liquidar", c(pend.reduce((s, d) => s + d.saldo, 0)), { txt: pend.length + " facturas a un día" })}
-          ${stat("Vencidas (más de 24 h)", c(venc.reduce((s, d) => s + d.saldo, 0)), { txt: venc.length + " sin liquidar después del plazo", dir: venc.length ? "down" : "" }, venc.length ? "var(--crit)" : "var(--ok)")}
-          ${stat("Liquidadas", grp(liq.length), { txt: "cada una con su recibo electrónico de pago" }, "var(--ok)")}
-          ${stat("Efectivo en manos de choferes", c(Object.values(choferes).reduce((s, x) => s + x.efectivo, 0)), { txt: "a entregar al cierre de la ruta" }, "var(--warn)")}
-        </div>
+        ${U.resumen([U.ts("Por liquidar", c(pend.reduce((s, d) => s + d.saldo, 0)), { txt: pend.length + " facturas a un día" }), U.ts("Vencidas (más de 24 h)", c(venc.reduce((s, d) => s + d.saldo, 0)), { txt: venc.length + " sin liquidar después del plazo", dir: venc.length ? "down" : "" }, venc.length ? "var(--crit)" : "var(--ok)"), U.ts("Liquidadas", grp(liq.length), { txt: "cada una con su recibo electrónico de pago" }, "var(--ok)"), U.ts("Efectivo en manos de choferes", c(Object.values(choferes).reduce((s, x) => s + x.efectivo, 0)), { txt: "a entregar al cierre de la ruta" }, "var(--warn)")])}
         ${nota("<b>Por qué existe:</b> el sistema anterior no deja emitir una factura sin medio de pago, así que la entrega a domicilio se factura «a crédito» y alguien tiene que ir a cuentas por cobrar a cancelarla. Aquí la factura nace con plazo de <b>1 día</b> (término «Conta ruta» de Configuración) y se liquida desde esta misma lista, desde la caja o al validar la transferencia por WhatsApp. Al liquidarla sale el <b>REP</b> y el IVA diferido pasa a IVA por pagar.", "route")}
         ${card({
         title: "Facturas conta ruta", hint: "vencida = más de 24 horas sin liquidar",
@@ -395,12 +390,7 @@
           const bloq = L.filter(x => V.bloqueo(x.id) && V.bloqueo(x.id).k === "cr");
           A._cred = L;
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Líneas otorgadas", c(lim), { txt: L.length + " clientes con crédito" })}
-              ${stat("Saldo usado", c(sal), { txt: dec(sal / lim * 100, 1) + " % de las líneas" })}
-              ${stat("Bloqueados en la caja", grp(bloq.length), { txt: "por mora de más de " + V.PARAM.diasBloqueo + " días o límite excedido", dir: bloq.length ? "down" : "" }, "var(--crit)")}
-              ${stat("Excepciones vigentes", grp(EXCEPCIONES.filter(x => /Vigente/.test(x.estado)).length), { txt: "cada una con quién la autorizó" }, "var(--warn)")}
-            </div>
+            ${U.resumen([U.ts("Líneas otorgadas", c(lim), { txt: L.length + " clientes con crédito" }), U.ts("Saldo usado", c(sal), { txt: dec(sal / lim * 100, 1) + " % de las líneas" }), U.ts("Bloqueados en la caja", grp(bloq.length), { txt: "por mora de más de " + V.PARAM.diasBloqueo + " días o límite excedido", dir: bloq.length ? "down" : "" }, "var(--crit)"), U.ts("Excepciones vigentes", grp(EXCEPCIONES.filter(x => /Vigente/.test(x.estado)).length), { txt: "cada una con quién la autorizó" }, "var(--warn)")])}
             ${card({
             title: "Líneas de crédito", hint: "disponible = límite − saldo − pedidos comprometidos", actions: filtroCaja("lnQ", "Buscar cliente o cédula"),
             body: table({
@@ -780,12 +770,7 @@
           const hoyP = prom.filter(g => diasEntre(g.promesa.fecha, HOY) === 0), vencP = prom.filter(g => diasEntre(g.promesa.fecha, HOY) > 0);
           const sinG = D.clientes.filter(x => V.vencidas(x.id).length && !GESTIONES.some(g => g.cliId === x.id && diasEntre(g.fecha, HOY) <= 7));
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Promesas para hoy", c(hoyP.reduce((s, g) => s + g.promesa.monto, 0)), { txt: hoyP.length + " clientes" }, "var(--accent)")}
-              ${stat("Promesas incumplidas", c(vencP.reduce((s, g) => s + g.promesa.monto, 0)), { txt: vencP.length + " a llamar de nuevo", dir: vencP.length ? "down" : "" }, "var(--crit)")}
-              ${stat("Vencidos sin gestión en 7 días", grp(sinG.length), { txt: "entran a la agenda de hoy" }, "var(--warn)")}
-              ${stat("Recordatorios automáticos", "4 reglas", { txt: "WhatsApp antes y después del vencimiento" }, "var(--ok)")}
-            </div>
+            ${U.resumen([U.ts("Promesas para hoy", c(hoyP.reduce((s, g) => s + g.promesa.monto, 0)), { txt: hoyP.length + " clientes" }, "var(--accent)"), U.ts("Promesas incumplidas", c(vencP.reduce((s, g) => s + g.promesa.monto, 0)), { txt: vencP.length + " a llamar de nuevo", dir: vencP.length ? "down" : "" }, "var(--crit)"), U.ts("Vencidos sin gestión en 7 días", grp(sinG.length), { txt: "entran a la agenda de hoy" }, "var(--warn)"), U.ts("Recordatorios automáticos", "4 reglas", { txt: "WhatsApp antes y después del vencimiento" }, "var(--ok)")])}
             ${card({
             title: "Bitácora de gestiones", hint: "quién llamó, qué dijo el cliente y qué prometió",
             body: table({
@@ -934,12 +919,7 @@
           const reps = RECIBOS.reduce((s, r) => s + r.aplicado.length, 0), cola = F.reps.filter(r => r.estado !== "Aceptado").length;
           A._rd = RECIBOS;
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Cobrado hoy", c(hoyR.reduce((s, r) => s + totRec(r), 0)), { txt: hoyR.length + " recibos" })}
-              ${stat("Recibos del mes", grp(RECIBOS.length), { txt: reps + " facturas aplicadas" })}
-              ${stat("REP en cola o rechazados", grp(cola), { txt: cola ? "revisar en Facturación electrónica" : "todos aceptados por Hacienda", dir: cola ? "down" : "" }, cola ? "var(--warn)" : "var(--ok)")}
-              ${stat("Transferencias por validar", grp(VALIDAR.length), { txt: "llegaron por WhatsApp" }, "var(--accent)")}
-            </div>
+            ${U.resumen([U.ts("Cobrado hoy", c(hoyR.reduce((s, r) => s + totRec(r), 0)), { txt: hoyR.length + " recibos" }), U.ts("Recibos del mes", grp(RECIBOS.length), { txt: reps + " facturas aplicadas" }), U.ts("REP en cola o rechazados", grp(cola), { txt: cola ? "revisar en Facturación electrónica" : "todos aceptados por Hacienda", dir: cola ? "down" : "" }, cola ? "var(--warn)" : "var(--ok)"), U.ts("Transferencias por validar", grp(VALIDAR.length), { txt: "llegaron por WhatsApp" }, "var(--accent)")])}
             ${card({
             title: "Recibos", hint: "toque uno para ver el detalle, el asiento o anularlo",
             body: table({
@@ -1509,12 +1489,7 @@
           const pp = all.map(prontoDe).filter(Boolean), sinAceptar = D.recibidos.filter(r => r.estado === "Sin aceptar");
           const ncDisp = all.filter(o => o.tipo === "Nota de crédito" && o.saldo < 0);
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Saldo con proveedores", c(all.reduce((s, o) => s + o.saldo, 0)), { txt: all.length + " documentos abiertos" })}
-              ${stat("Vencido", c(venc.reduce((s, o) => s + o.saldo, 0)), { txt: venc.length + " facturas fuera de plazo", dir: "down" }, "var(--crit)")}
-              ${stat("Vence en 7 días", c(sem.reduce((s, o) => s + o.saldo, 0)), { txt: sem.length + " facturas por programar" }, "var(--warn)")}
-              ${stat("Pronto pago disponible", c(pp.reduce((s, x) => s + x.desc, 0)), { txt: pp.length + " facturas · si se pagan a tiempo" }, "var(--ok)")}
-            </div>
+            ${U.resumen([U.ts("Saldo con proveedores", c(all.reduce((s, o) => s + o.saldo, 0)), { txt: all.length + " documentos abiertos" }), U.ts("Vencido", c(venc.reduce((s, o) => s + o.saldo, 0)), { txt: venc.length + " facturas fuera de plazo", dir: "down" }, "var(--crit)"), U.ts("Vence en 7 días", c(sem.reduce((s, o) => s + o.saldo, 0)), { txt: sem.length + " facturas por programar" }, "var(--warn)"), U.ts("Pronto pago disponible", c(pp.reduce((s, x) => s + x.desc, 0)), { txt: pp.length + " facturas · si se pagan a tiempo" }, "var(--ok)")])}
             ${cuadreCxP()}
             ${sinAceptar.length ? `<div class="stepbar wa"><div class="sbt"><b>${sinAceptar.length} comprobantes de proveedor sin aceptar no entran al pago</b><span>Primero se aceptan (mensaje de receptor, 8 días hábiles) y se cruzan con la orden y la recepción. ${c(sinAceptar.reduce((s, r) => s + r.monto, 0))} esperando.</span></div><div class="sba"><button class="btn sm" data-ir="fel-recibidos">Aceptar comprobantes</button></div></div>` : ""}
             ${card({
@@ -1763,16 +1738,12 @@
         render(v) {
           const proc = LOTES.filter(l => enProceso(l) && (pbOrigen === "Todos" || l.origen === pbOrigen))
             .sort((a, b) => (a.origen === "Planilla" ? 0 : 1) - (b.origen === "Planilla" ? 0 : 1) || a.fechaPago - b.fechaPago);
-          A._arch = proc;
+          const FB = U.filtrar("arch", proc, [{ v: "todos", t: "Todos", f: () => true }, { v: "firmar", t: "Por firmar", f: l => l.estado === "Por aprobar", k: "wa" }, { v: "listos", t: "Listos para el banco", f: l => /Aprobado|Archivo|Validado/.test(l.estado) }, { v: "env", t: "Enviados", f: l => l.estado === "Enviado al banco" }]);
+          A._arch = FB.rows;
           const tot = proc.reduce((s, l) => s + netoLote(l), 0);
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Por firmar", grp(proc.filter(l => l.estado === "Por aprobar").length), { txt: "lotes esperando firma" }, "var(--warn)")}
-              ${stat("Listos para el banco", grp(proc.filter(l => /Aprobado|Archivo|Validado/.test(l.estado)).length), { txt: "firmados, falta el archivo o subirlo" })}
-              ${stat("Enviados", grp(proc.filter(l => l.estado === "Enviado al banco").length), { txt: "esperando la respuesta del banco" })}
-              ${stat("Monto en proceso", c(tot), { txt: proc.reduce((s, l) => s + l.items.length, 0) + " transferencias" }, "var(--accent)")}
-            </div>
-            ${proc.length ? proc.map((l, i) => {
+            <div class="ffila">${FB.chips}${U.tira([U.ts("Monto en proceso", c(tot), { txt: proc.reduce((s, l) => s + l.items.length, 0) + " transferencias" })])}</div>
+            ${FB.rows.length ? FB.rows.map((l, i) => {
             const planilla = l.origen === "Planilla", vence = diasEntre(HOY, l.fechaPago);
             return card({
               title: l.cons + " · " + l.concepto,
@@ -1799,6 +1770,7 @@
             ${nota("Flujo del Banco Nacional levantado en la sesión 1: el archivo se analiza en el <b>módulo local</b> del banco, que valida oficina, cuenta y campos y devuelve una llave de prueba; luego se sube en «Envío de archivo» de la banca en línea y el banco responde «recibido». Planilla y proveedores usan el mismo formato, cada lote en su propio archivo. Si el BN expone un servicio, la validación se hace desde aquí (INT-004).", "bank")}</div>`;
         },
         wire(v) {
+          U.onFiltro(document, "arch");
           const L = A._arch;
           $$("[data-adl]", v).forEach(b => b.addEventListener("click", () => { const l = L[+b.dataset.adl]; descargar((l.archivo ? l.archivo.nombre : nombreArch(l)), archivoBN(l).join("\r\n") + "\r\n"); }));
           $$("[data-agen]", v).forEach(b => b.addEventListener("click", () => {
@@ -2125,12 +2097,7 @@
           A._np = L;
           const pend = docsCxP().filter(o => o.tipo === "Nota de crédito" && o.saldo < 0);
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("NC por aplicar", c(-pend.reduce((s, o) => s + o.saldo, 0)), { txt: pend.length + " notas · se aplican solas en el próximo lote" }, "var(--accent)")}
-              ${stat("Reclamos abiertos", c(NOTAS.filter(n => n.tipo === "ND" && !/Cerrada/.test(n.estado)).reduce((s, n) => s + n.total, 0)), { txt: NOTAS.filter(n => n.tipo === "ND" && !/Cerrada/.test(n.estado)).length + " notas de débito esperando la NC" }, "var(--warn)")}
-              ${stat("NC recibidas por XML", grp(NOTAS.filter(n => n.origenXml).length), { txt: "aceptadas en Facturación electrónica" })}
-              ${stat("Conceptos", grp(CONCEPTOS_NP.length), { txt: "cada uno con su cuenta contable" })}
-            </div>
+            ${U.resumen([U.ts("NC por aplicar", c(-pend.reduce((s, o) => s + o.saldo, 0)), { txt: pend.length + " notas · se aplican solas en el próximo lote" }, "var(--accent)"), U.ts("Reclamos abiertos", c(NOTAS.filter(n => n.tipo === "ND" && !/Cerrada/.test(n.estado)).reduce((s, n) => s + n.total, 0)), { txt: NOTAS.filter(n => n.tipo === "ND" && !/Cerrada/.test(n.estado)).length + " notas de débito esperando la NC" }, "var(--warn)"), U.ts("NC recibidas por XML", grp(NOTAS.filter(n => n.origenXml).length), { txt: "aceptadas en Facturación electrónica" }), U.ts("Conceptos", grp(CONCEPTOS_NP.length), { txt: "cada uno con su cuenta contable" })])}
             ${card({
             title: "Notas", body: table({
               onRow: true,
@@ -2301,12 +2268,7 @@
           A._fondos = FONDOS;
           const tot = FONDOS.reduce((s, f) => s + f.monto, 0), gast = FONDOS.reduce((s, f) => s + f.monto - disponibleFondo(f), 0);
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Fondos asignados", c(tot), { txt: FONDOS.length + " fondos" })}
-              ${stat("Gastado por reponer", c(gast), { txt: VALES.filter(x => x.estado !== "Repuesto").length + " vales" }, "var(--warn)")}
-              ${stat("Vales sin factura electrónica", grp(VALES.filter(x => !x.fe && x.estado !== "Repuesto").length), { txt: "sin crédito fiscal de IVA" }, "var(--crit)")}
-              ${stat("Tope por vale", c(50000), { txt: "más de eso va por compra normal" })}
-            </div>
+            ${U.resumen([U.ts("Fondos asignados", c(tot), { txt: FONDOS.length + " fondos" }), U.ts("Gastado por reponer", c(gast), { txt: VALES.filter(x => x.estado !== "Repuesto").length + " vales" }, "var(--warn)"), U.ts("Vales sin factura electrónica", grp(VALES.filter(x => !x.fe && x.estado !== "Repuesto").length), { txt: "sin crédito fiscal de IVA" }, "var(--crit)"), U.ts("Tope por vale", c(50000), { txt: "más de eso va por compra normal" })])}
             ${card({
             title: "Fondos de caja chica", body: table({
               cols: [
@@ -2357,12 +2319,7 @@
           const tot = MOV_TJ.reduce((s, x) => s + x.monto, 0);
           const det = [{ cta: "2-01-01-003", debe: tot, haber: 0 }, { cta: "1-01-02-001", debe: 0, haber: tot }];
           v.innerHTML = `<div class="wrap">
-            <div class="grid g4">
-              ${stat("Consumo del período", c(tot), { txt: TARJETA.marca + " ···· " + TARJETA.ult })}
-              ${stat("Disponible", c(TARJETA.limite - tot), { txt: "límite " + c(TARJETA.limite) }, "var(--ok)")}
-              ${stat("Sin comprobante", grp(MOV_TJ.filter(x => /Falta/.test(x.estado)).length), { txt: "el titular tiene 3 días para subirlo" }, "var(--crit)")}
-              ${stat("Corte y pago", "día " + TARJETA.corte, { txt: "se paga el " + TARJETA.pago + " del mes siguiente" })}
-            </div>
+            ${U.resumen([U.ts("Consumo del período", c(tot), { txt: TARJETA.marca + " ···· " + TARJETA.ult }), U.ts("Disponible", c(TARJETA.limite - tot), { txt: "límite " + c(TARJETA.limite) }, "var(--ok)"), U.ts("Sin comprobante", grp(MOV_TJ.filter(x => /Falta/.test(x.estado)).length), { txt: "el titular tiene 3 días para subirlo" }, "var(--crit)"), U.ts("Corte y pago", "día " + TARJETA.corte, { txt: "se paga el " + TARJETA.pago + " del mes siguiente" })])}
             ${card({
             title: "Movimientos del estado de cuenta", hint: "titular " + TARJETA.titular,
             body: table({
