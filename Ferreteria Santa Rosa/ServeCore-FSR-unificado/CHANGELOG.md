@@ -1,5 +1,18 @@
 # Cambios
 
+## 2026-09-29 · Taller · Revisión de KPIs aplicada y borrador de compra
+
+- Las tres pantallas del Taller siguen la regla de KPIs: sin fila de tarjetas arriba.
+  - **Tablero de órdenes:** una línea de resumen (órdenes abiertas, esperando repuestos en ámbar, mantenimiento de
+    flota del mes y lo facturado a clientes).
+  - **Órdenes, Bodega de repuestos y Reparación de herramientas:** filtros con número sobre la lista (por ejemplo,
+    «Esperando repuestos», «Bajo el mínimo sin pedido» y «Esperando al cliente», en ámbar cuando hay algo que
+    atender). Los montos de la bodega (valor, reservado y consumido en el mes) van en la misma línea, a la derecha.
+- «Pedir a compras» registra un **borrador**, que toma su consecutivo `OC-2026-…` cuando Proveeduría lo aprueba (el
+  cambio de numeración de Compras).
+
+Archivos: `mod-taller.js`.
+
 ## 2026-09-29 · Todos los módulos · Revisión de KPIs aplicada (sin filas de tarjetas arriba)
 
 Tras aprobar el piloto del Agente de WhatsApp se aplicó la misma regla a las demás pantallas. De las 72 que abrían

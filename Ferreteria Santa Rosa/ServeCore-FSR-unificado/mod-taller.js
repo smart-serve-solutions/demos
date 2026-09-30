@@ -12,7 +12,7 @@
   "use strict";
   const D = w.DB, A = w.APP, U = w.UI, T = w.TAL;
   if (!T) return;
-  const { $, $$, esc, norm, grp, c, dec, fecha, fh, icon, tag, card, stat, table, seg, onSeg, openSheet, closeSheet, toast, cliNom, empty } = U;
+  const { $, $$, esc, norm, grp, c, dec, fecha, fh, icon, tag, card, table, seg, onSeg, openSheet, closeSheet, toast, cliNom, empty } = U;
   const S = A.state;
   const B = T.BODEGA;
   /* el taller cobra en la caja 3 de Santa Rosa */
@@ -221,7 +221,6 @@
   /* ═════════════════════════════════════════════════════════════
      TAL-001 · Órdenes de trabajo del taller automotriz
      ═════════════════════════════════════════════════════════════ */
-  let otFiltro = "Todas";
   const COLS = ["Recibida", "En diagnóstico", "Esperando repuestos", "En reparación", "Lista para entregar"];
 
   function tarjetaOT(o) {
@@ -240,13 +239,13 @@
     const costoFlota = mes.filter(o => o.flota).reduce((s, o) => s + (o.costoRepuestos || 0) + (o.costoMO || 0), 0);
     const facturado = mes.filter(o => o.factura).reduce((s, o) => { const d = D.documentos.find(x => x.cons === o.factura); return s + (d ? d.total : 0); }, 0);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Órdenes abiertas", ab.length, { txt: ab.filter(o => o.flota).length + " de la flota · " + ab.filter(o => !o.flota).length + " de clientes" })}
-        ${stat("Esperando repuestos", ab.filter(o => pendientes(o).length).length, { txt: "la orden no avanza hasta que Bodega reciba" }, "var(--warn)")}
-        ${stat("Listas para entregar", ab.filter(o => o.estado === "Lista para entregar").length, { txt: "flota: se cierran · clientes: se facturan" }, "var(--ok)")}
-        ${stat("Mantenimiento de flota del mes", c(costoFlota), { txt: facturado ? "facturado a clientes " + c(facturado) : "repuestos al costo + horas de mecánico" })}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(${COLS.length},minmax(180px,1fr));gap:12px;margin-top:14px;overflow-x:auto">
+      ${U.resumen([
+        U.ts("órdenes abiertas", grp(ab.length), { txt: ab.filter(o => o.flota).length + " de la flota · " + ab.filter(o => !o.flota).length + " de clientes" }),
+        U.ts("esperando repuestos", grp(ab.filter(o => pendientes(o).length).length), { txt: "la orden no avanza hasta que Bodega reciba" }, "var(--warn)"),
+        U.ts("Mantenimiento de flota del mes", c(costoFlota), { txt: "repuestos al costo + horas de mecánico" }),
+        U.ts("Facturado a clientes", c(facturado), { txt: "órdenes entregadas este mes" })
+      ])}
+      <div style="display:grid;grid-template-columns:repeat(${COLS.length},minmax(180px,1fr));gap:12px;overflow-x:auto">
         ${COLS.map(col => {
           const L = ab.filter(o => o.estado === col);
           return `<div><div style="display:flex;justify-content:space-between;align-items:center;margin:0 2px 8px;font-size:12px;font-weight:650;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em">${esc(col)}<span class="num">${L.length}</span></div>
@@ -257,10 +256,12 @@
   const wireOT = v => $$("[data-ot]", v).forEach(b => b.addEventListener("click", () => fichaOT(T.ORDENES.find(o => o.id === b.dataset.ot))));
 
   function listaOT(v) {
-    const L = T.ORDENES.filter(o => otFiltro === "Todas" || (otFiltro === "Flota" ? o.flota : !o.flota));
-    v.innerHTML = `<div class="wrap">${card({
+    const F = U.filtrar("tal-ot", T.ORDENES, [{ v: "todas", t: "Todas", f: () => true }, { v: "abiertas", t: "Abiertas", f: o => o.estado !== "Entregada" },
+      { v: "flota", t: "Flota propia", f: o => o.flota }, { v: "clientes", t: "Clientes", f: o => !o.flota },
+      { v: "repuesto", t: "Esperando repuestos", f: o => pendientes(o).length > 0, k: "wa" }]);
+    const L = F.rows;
+    v.innerHTML = `<div class="wrap"><div class="ffila">${F.chips}</div>${card({
       title: "Órdenes de setiembre", hint: "cada orden guarda quién la recibió, quién la trabajó y cómo se cerró",
-      actions: seg("otf", ["Todas", "Flota", "Clientes"], otFiltro),
       body: table({
         cols: [
           { t: "Orden", fmt: o => `<b class="num">${o.id}</b><div class="dim num" style="font-size:11.5px">${fecha(o.recibida)}</div>` },
@@ -276,7 +277,7 @@
     filas = L;
   }
   function listaOTWire(v) {
-    onSeg(v, "otf", x => { otFiltro = x; A.refresh(); });
+    U.onFiltro(document, "tal-ot");
     $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => fichaOT(filas[+tr.dataset.i])));
   }
 
@@ -424,7 +425,6 @@
   /* ═════════════════════════════════════════════════════════════
      TAL-002 · Bodega de repuestos del taller
      ═════════════════════════════════════════════════════════════ */
-  let bdFiltro = "Todos";
   const filasBodega = () => T.REPUESTOS.map(a => {
     const e = D.stock(a.id, B) || { cant: 0, comp: 0, min: 0 };
     const pedido = D.compras.filter(o => o.locId === B && !["Aplicada", "Anulada"].includes(o.estado) && !(o.rec && o.rec.cerrada))
@@ -432,19 +432,21 @@
     return { a, e, disp: e.cant - e.comp, pedido, bajo: e.cant - e.comp < e.min };
   });
   function bodega(v) {
-    const F = filasBodega(), L = F.filter(f => bdFiltro === "Todos" || (bdFiltro === "Bajo mínimo" ? f.bajo : f.a.sub === bdFiltro));
+    const F = filasBodega();
+    const FB = U.filtrar("tal-bod", F, [{ v: "todos", t: "Todos", f: () => true }, { v: "auto", t: "Automotriz", f: f => f.a.sub === "Automotriz" },
+      { v: "herr", t: "Herramientas eléctricas", f: f => f.a.sub === "Herramientas eléctricas" }, { v: "res", t: "Con reserva", f: f => f.e.comp > 0 },
+      { v: "bajo", t: "Bajo el mínimo sin pedido", f: f => f.bajo && !f.pedido, k: "wa" }, { v: "pedido", t: "Con pedido a compras", f: f => f.pedido > 0 }]);
+    const L = FB.rows;
     const valor = F.reduce((s, f) => s + f.e.cant * f.a.costo, 0), res = F.reduce((s, f) => s + f.e.comp * f.a.costo, 0);
     const consumo = D.kardex.filter(k => k.locId === B && k.salida && k.fecha >= D.INICIO).reduce((s, k) => s + k.salida * k.costo, 0);
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("Valor de la bodega", c(valor), { txt: F.length + " repuestos · al costo, dentro de Inventario (1-01-04-001)" })}
-        ${stat("Reservado para órdenes", c(res), { txt: "apartado: no se vende ni se usa en otra orden" })}
-        ${stat("Bajo el mínimo", F.filter(f => f.bajo).length, { txt: F.filter(f => f.bajo && !f.pedido).length + " sin pedido a compras" }, "var(--warn)")}
-        ${stat("Consumido en setiembre", c(consumo), { txt: "flota, garantías y lo facturado a clientes" })}
-      </div>
+      <div class="ffila">${FB.chips}${U.tira([
+        U.ts("Valor de la bodega", c(valor), { txt: "al costo, dentro de Inventario (1-01-04-001)" }),
+        U.ts("Reservado", c(res), { txt: "apartado para órdenes: no se usa en otra" }),
+        U.ts("Consumido en setiembre", c(consumo), { txt: "flota, garantías y lo facturado a clientes" })
+      ])}</div>
       ${card({
         title: "Existencias", hint: "disponible = existencia − reservado",
-        actions: seg("bdf", ["Todos", "Automotriz", "Herramientas eléctricas", "Bajo mínimo"], bdFiltro),
         body: table({
           cols: [
             { t: "Repuesto", fmt: f => `<b>${esc(f.a.desc)}</b><div class="dim num" style="font-size:11.5px">${esc(f.a.cod)} · ${esc(f.a.marca)} · ${esc(f.a.ubic)}</div>` },
@@ -461,7 +463,7 @@
     filas = L;
   }
   function bodegaWire(v) {
-    onSeg(v, "bdf", x => { bdFiltro = x; A.refresh(); });
+    U.onFiltro(document, "tal-bod");
     $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => kardexRep(filas[+tr.dataset.i].a)));
     $$("[data-tal=pedir]").forEach(b => { b.onclick = pedirCompras; });
   }
@@ -497,8 +499,8 @@
         { t: "Repuesto", fmt: it => esc(art(it.a).desc) },
         { t: "Cantidad", r: true, fmt: it => `<span class="num">${it.c}</span>` },
         { t: "Costo", r: true, fmt: it => `<span class="num">${c(it.c * art(it.a).costo)}</span>` }
-      ], rows: items }) + `<p class="dim" style="font-size:12px">Sugerido: hasta el doble del mínimo. La orden queda registrada para que Proveeduría la apruebe; el taller no compra directo.</p>`,
-      footer: `<button class="btn" id="pcNo">Cancelar</button><button class="btn pri" id="pcSi">${icon("cart")}Registrar la orden</button>`,
+      ], rows: items }) + `<p class="dim" style="font-size:12px">Sugerido: hasta el doble del mínimo. Queda como borrador para que Proveeduría lo apruebe; el taller no compra directo.</p>`,
+      footer: `<button class="btn" id="pcNo">Cancelar</button><button class="btn pri" id="pcSi">${icon("cart")}Registrar el borrador</button>`,
       after: r => {
         $("#pcNo", r).onclick = closeSheet;
         $("#pcSi", r).onclick = () => {
@@ -506,7 +508,7 @@
           oc.creadoPor = D.sesion.nom; oc.origen = "Taller";
           oc.hist = [{ f: D.ahora(), quien: D.sesion.nom, acc: "Registró la orden desde la bodega del taller" }];
           closeSheet();
-          toast("Orden " + oc.cons + " registrada", "Queda en Compras por aprobar. Al recibirla, entra a la bodega del taller.", "ok");
+          toast("Borrador " + oc.cons.replace(/^BOR-/, "") + " registrado", "Queda en Compras por aprobar; al aprobarse toma su consecutivo OC-2026-… y, al recibirla, entra a la bodega del taller.", "ok");
           A.refresh();
         };
       }
@@ -523,20 +525,16 @@
   /* ═════════════════════════════════════════════════════════════
      TAL-003 · Taller de reparación de herramientas
      ═════════════════════════════════════════════════════════════ */
-  let hrFiltro = "Abiertas";
   function herramientas(v) {
-    const H = T.HERRAMIENTAS, ab = abiertas(H);
-    const L = hrFiltro === "Abiertas" ? ab : hrFiltro === "Garantía" ? H.filter(o => o.garantia) : H;
+    const FH = U.filtrar("tal-hr", T.HERRAMIENTAS, [{ v: "todas", t: "Todas", f: () => true }, { v: "abiertas", t: "En el taller", f: o => o.estado !== "Entregada" },
+      { v: "diag", t: "Por diagnosticar", f: o => o.estado === "Recibida" || o.estado === "En diagnóstico" },
+      { v: "cliente", t: "Esperando al cliente", f: o => o.estado === "Presupuesto enviado", k: "wa" },
+      { v: "retirar", t: "Listas para retirar", f: o => o.estado === "Lista para retirar" }, { v: "garantia", t: "En garantía", f: o => o.garantia }]);
+    const L = FH.rows;
     v.innerHTML = `<div class="wrap">
-      <div class="grid g4">
-        ${stat("En el taller", ab.length, { txt: ab.filter(o => o.estado === "En diagnóstico" || o.estado === "Recibida").length + " por diagnosticar" })}
-        ${stat("Esperando al cliente", ab.filter(o => o.estado === "Presupuesto enviado").length, { txt: "presupuesto enviado, falta la aprobación" }, "var(--warn)")}
-        ${stat("Listas para retirar", ab.filter(o => o.estado === "Lista para retirar").length, { txt: "se cobran al entregar" }, "var(--ok)")}
-        ${stat("En garantía", H.filter(o => o.garantia).length, { txt: "sin cobro · se reclama al proveedor" })}
-      </div>
+      <div class="ffila">${FH.chips}</div>
       ${card({
         title: "Boletas de reparación", hint: "cada herramienta entra con boleta firmada, número de serie y accesorios",
-        actions: seg("hrf", ["Abiertas", "Garantía", "Todas"], hrFiltro),
         body: table({
           cols: [
             { t: "Boleta", fmt: o => `<b class="num">${o.id}</b><div class="dim num" style="font-size:11.5px">${fecha(o.recibida)}</div>` },
@@ -552,7 +550,7 @@
     filas = L;
   }
   function herramientasWire(v) {
-    onSeg(v, "hrf", x => { hrFiltro = x; A.refresh(); });
+    U.onFiltro(document, "tal-hr");
     $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => fichaHR(filas[+tr.dataset.i])));
     $$("[data-tal=boleta]").forEach(b => { b.onclick = nuevaBoleta; });
   }
