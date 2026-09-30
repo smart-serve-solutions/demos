@@ -36,7 +36,7 @@
     const tok = norm(texto).split(/[^a-z0-9#½]+/).filter(x => (x.length > 2 || /[#\d]/.test(x)) && LUGARES.indexOf(x) < 0 &&
       !/^(de|del|los|las|una|uno|con|para|por|que|me|tienen|hay|precio|cuanto|vale|rollos|sacos|unidades|necesito|cotizacion|entrega|lunes|mandeme|ocupo|quiero)$/.test(x));
     if (!tok.length) return [];
-    return D.articulos.filter(a => a.tipo === "Producto").map(a => {
+    return D.articulos.filter(a => a.tipo === "Producto" && !a.taller).map(a => {
       const d = norm(a.desc), o = norm(a.sub + " " + a.marca);
       const pts = tok.reduce((s, x) => s + (d.includes(x) ? 3 : d.includes(raiz(x)) ? 2 : o.includes(x) || o.includes(raiz(x)) ? 1 : 0), 0);
       return { a, pts };

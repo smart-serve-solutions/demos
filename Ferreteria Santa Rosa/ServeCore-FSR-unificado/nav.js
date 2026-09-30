@@ -1595,8 +1595,9 @@
           {
             t: "Órdenes de trabajo del taller automotriz",
             reqs: ["TAL-001"],
+            screen: "tal-ordenes",
           },
-          { t: "Bodega de repuestos del taller", reqs: ["TAL-002"] },
+          { t: "Bodega de repuestos del taller", reqs: ["TAL-002"], screen: "tal-bodega" },
         ],
       },
       {
@@ -1606,6 +1607,7 @@
           {
             t: "Taller de reparación de herramientas",
             reqs: ["TAL-003"],
+            screen: "tal-herramientas",
           },
         ],
       },
@@ -2091,6 +2093,24 @@
       ic: "gear",
       g: "Nómina",
       d: "Tasas, tramos, conceptos y políticas",
+    },
+    "tal-ordenes": {
+      t: "Órdenes de trabajo",
+      ic: "wrench",
+      g: "Taller",
+      d: "Flota propia y vehículos de clientes, del ingreso a la entrega",
+    },
+    "tal-bodega": {
+      t: "Bodega de repuestos",
+      ic: "box",
+      g: "Taller",
+      d: "Existencias, reservas por orden, mínimos y pedido a compras",
+    },
+    "tal-herramientas": {
+      t: "Reparación de herramientas",
+      ic: "wrench",
+      g: "Taller",
+      d: "Boleta, diagnóstico, presupuesto, garantía y entrega",
     },
     integraciones: {
       t: "Panel de integraciones",

@@ -638,7 +638,8 @@
     documentos.unshift(doc);
 
     /* inventario */
-    opts.lineas.forEach(l => mover(l.artId, opts.locId, -l.cant, "Venta", doc.cons, doc.fecha));
+    /* la mercadería sale de la bodega indicada (el taller factura repuestos de su propia bodega) */
+    opts.lineas.forEach(l => { const art = artById[l.artId]; if (!art || art.tipo !== "Servicio") mover(l.artId, opts.bodega || opts.locId, -l.cant, "Venta", doc.cons, doc.fecha); });
 
     /* contabilidad */
     const det = [];

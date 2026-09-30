@@ -210,7 +210,7 @@
   RUTA_CLI.forEach(id => { if (D.cliById[id]) D.cliById[id].plazo = 1; });
   function sembrarRuta() {
     if (D.documentos.some(d => d.ruta)) return;
-    const arts = D.articulos.filter(a => a.tipo === "Producto" && a.precio > 2500 && a.precio < 26000);
+    const arts = D.articulos.filter(a => a.tipo === "Producto" && !a.taller && a.precio > 2500 && a.precio < 26000);
     const plan = [
       ["C5", "L3", 1, 14, "RT3", "Efectivo contra entrega", "Entregada"],
       ["C9", "L6", 1, 9, "RT1", "SINPE móvil", "Entregada"],

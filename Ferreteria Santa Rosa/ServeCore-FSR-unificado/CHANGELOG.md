@@ -113,6 +113,38 @@ Archivos: `img-productos.js`, `mod-inv.js`, `index.html` (estilos `.foto-prev` y
 
 Archivos: `ven-auto.js`, `mod-sys.js`, `mod-venta-gestion.js`, `con-data.js`.
 
+## 2026-09-28 · Taller · Órdenes de trabajo, bodega de repuestos y reparación de herramientas
+
+- **TAL-001 · Órdenes de trabajo del taller automotriz**:
+  - Tablero por estado: recibida, en diagnóstico, esperando repuestos, en reparación, lista para entregar.
+  - Cada orden lleva mecánico, repuestos, horas y bitácora.
+  - La orden de la **flota propia** no se factura. Al cerrarla, los repuestos salen de la bodega con asiento a
+    Mantenimiento y reparaciones (6-01-02-005) contra Inventario. Las horas del mecánico se informan para el costo
+    por unidad; no se asientan, porque ya están en la planilla.
+  - La orden de un **cliente** se factura (contado o crédito, con el mismo control de crédito que la caja) desde la
+    caja 3 de Santa Rosa. Los repuestos salen de la bodega del taller y la mano de obra va como servicio.
+  - Pestaña de vehículos con el mantenimiento preventivo de la flota por kilometraje (horas en el montacargas) y el
+    historial de los vehículos de clientes.
+- **TAL-002 · Bodega de repuestos del taller**:
+  - Es un local nuevo (013 · Bodega del taller) con la familia «Repuestos del taller» (automotriz y herramientas
+    eléctricas). Sus existencias entran en la migración al 31 de agosto como parte del inventario.
+  - Muestra existencia, lo reservado por orden, disponible y mínimo, y el kardex de cada repuesto.
+  - «Pedir a compras» registra la orden a la distribuidora de repuestos (proveedor nuevo) para que Proveeduría la
+    apruebe. Al recibirla, la mercadería entra a la bodega del taller.
+- **TAL-003 · Reparación de herramientas**:
+  - Flujo de la boleta: se recibe con serie y accesorios, se diagnostica y se envía presupuesto. Si el cliente
+    aprueba, se repara, se factura y se entrega.
+  - Si el cliente no aprueba, se cobra solo el diagnóstico.
+  - En **garantía** (contra la factura de compra) no se cobra: los repuestos quedan en Reclamos a proveedores
+    (1-01-03-005).
+- `D.emitir()` acepta `bodega`: la mercadería sale de esa bodega aunque la factura sea de la caja de una tienda.
+  Los servicios ya no generan movimiento de inventario.
+- Los repuestos del taller no entran en las ventas de ejemplo ni en las respuestas del agente de WhatsApp: no se
+  venden en las tiendas.
+
+Archivos: `tal-data.js` (nuevo), `mod-taller.js` (nuevo), `data.js`, `nav.js`, `index.html`, `mod-cobros.js`,
+`mod-ia.js`.
+
 ## 2026-09-28 · Integraciones e IA · Imágenes de producto en las conversaciones
 
 - Cuando el agente de WhatsApp habla de un producto (precio, cotización o reserva), lo muestra en una tarjeta con su
