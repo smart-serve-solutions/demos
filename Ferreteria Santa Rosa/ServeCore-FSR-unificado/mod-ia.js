@@ -483,7 +483,7 @@
         <div class="ffila">${FI.chips}</div>
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr));align-items:stretch">
           ${FI.rows.map(x => card({
-        title: x.t, hint: x.d, chip: " " + tag(x.estado[0], x.estado[1], x.estado[1] === "ok" ? "check" : "alert"),
+        id: "int-" + x.id, title: x.t, hint: x.d, chip: " " + tag(x.estado[0], x.estado[1], x.estado[1] === "ok" ? "check" : "alert"),
         body: `<dl class="kv">${x.datos.map(d => `<dt>${esc(d[0])}</dt><dd class="num">${esc(String(d[1]))}</dd>`).join("")}
             <dt>Última actividad</dt><dd class="num">${x.ult ? fh(x.ult) : "—"}</dd></dl>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${x.acc.map(a => `<button class="btn sm" data-int="${esc(a[1])}">${esc(a[0])}</button>`).join("")}</div>`
@@ -502,8 +502,16 @@
         })
       })}</div>`;
     },
-    wire(v) {
+    wire(v, arg) {
       U.onFiltro(document, "int");
+      /* desde el menú (por ejemplo «Integración con Hacienda») se llega con la tarjeta de esa conexión a la vista */
+      if (arg) {
+        const el = $("#int-" + arg, v);
+        if (!el) { const todas = $('[data-seg="int"] button', v); if (todas) todas.click(); return; }
+        A.state.arg = null;
+        el.style.boxShadow = "0 0 0 2px var(--accent)";
+        el.scrollIntoView({ block: "nearest" });
+      }
       $$("[data-int]", v).forEach(b => b.addEventListener("click", () => {
         const a = b.dataset.int;
         if (a.indexOf("go:") === 0) { const [scr, arg] = a.slice(3).split("|"); return A.go(scr, arg); }

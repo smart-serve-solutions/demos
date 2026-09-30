@@ -1165,9 +1165,13 @@
             screen: "integraciones",
           },
           {
+            /* la conexión con Hacienda en el panel de integraciones; la operación
+               de los comprobantes sigue en Facturación electrónica */
             t: "Integración con Hacienda",
             reqs: ["INT-003"],
-            screen: "fiscal",
+            screen: "integraciones",
+            arg: "hacienda",
+            alias: true,
           },
           {
             /* acceso directo: la pantalla vive en Contabilidad › Conciliaciones */

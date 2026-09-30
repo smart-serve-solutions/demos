@@ -1,5 +1,13 @@
 # Cambios
 
+## 2026-09-29 · Integraciones e IA · «Integración con Hacienda» se queda en el módulo
+
+- La opción del menú abría el Panel fiscal de Facturación electrónica y sacaba al usuario del módulo. Ahora abre el
+  Panel de integraciones con la tarjeta de Hacienda resaltada: estado de la conexión, cola, rechazos, llave
+  criptográfica y reintento de envíos. Desde la tarjeta, «Ver comprobantes» sigue llevando a Facturación.
+
+Archivos: `nav.js`, `mod-ia.js`.
+
 ## 2026-09-29 · Taller · Revisión de KPIs aplicada y borrador de compra
 
 - Las tres pantallas del Taller siguen la regla de KPIs: sin fila de tarjetas arriba.
