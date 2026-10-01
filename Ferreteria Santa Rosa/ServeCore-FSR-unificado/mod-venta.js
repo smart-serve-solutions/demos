@@ -598,6 +598,7 @@
         </div>
         <div id="cliBox">${tablaCli(D.clientes)}</div>`,
       footer: `<button class="btn" id="cliCancelar">Cancelar</button><div class="gap" style="flex:1"></div>
+        <button class="btn" id="cliNuevo">${icon("plus")}Nuevo cliente</button>
         <button class="btn" id="cliFinal">${icon("users")}Consumidor final</button>`,
       after(root) {
         let visibles = D.clientes;
@@ -614,12 +615,14 @@
           const t = norm(q.value.trim());
           visibles = t ? D.clientes.filter(x => norm(x.nom + " " + x.ced + " " + x.categoria).includes(t)) : D.clientes;
           $("#cliBox").innerHTML = visibles.length ? tablaCli(visibles)
-            : `<div class="mut" style="padding:34px;text-align:center;font-size:13.5px">Ningún cliente coincide con «${esc(q.value)}».</div>`;
+            : `<div class="mut" style="padding:34px;text-align:center;font-size:13.5px">Ningún cliente coincide con «${esc(q.value)}». Puede crearlo con «Nuevo cliente».</div>`;
           enlazar();
         });
         q.addEventListener("keydown", e => { if (e.key === "Enter" && visibles.length) usar(visibles[0].id); });
         $("#cliCancelar", root).addEventListener("click", closeSheet);
         $("#cliFinal", root).addEventListener("click", () => usar(null));
+        /* el alta vive en Clientes (mod-venta-gestion.js); al crearlo queda asociado a la venta */
+        $("#cliNuevo", root).addEventListener("click", () => { if (w.CLIENTES) w.CLIENTES.nuevo(cli => usar(cli.id), { texto: q.value }); });
       }
     });
   }

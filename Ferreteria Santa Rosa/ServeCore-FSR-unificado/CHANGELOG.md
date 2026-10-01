@@ -1,5 +1,28 @@
 # Cambios
 
+## 2026-10-01 · Ventas · Alta de clientes
+
+- **Nuevo cliente** en Clientes › Ficha y en la caja (al identificar al cliente). Si la búsqueda no encontró a nadie,
+  el formulario se abre con lo que se escribió (nombre o cédula); al crearlo desde la caja, queda asociado a la venta.
+- La identificación se valida como la pide Hacienda:
+  - física de 9 dígitos que no empieza en 0
+  - jurídica de 10 dígitos que empieza en 3
+  - DIMEX de 11 o 12 dígitos
+  - NITE de 10 dígitos
+
+  Se guarda con el formato oficial (1-0234-0567, 3-101-123456), y no deja repetir una cédula que ya existe.
+- Pide nombre o razón social, teléfono, correo para los comprobantes, dirección con su zona de flete, categoría (que
+  define los descuentos de la caja) y actividad económica (sugerida según la categoría).
+- Todo cliente nace **de contado**. El crédito se solicita en Clientes › Crédito, donde se fija el límite y el plazo.
+  El alta queda en la bitácora.
+- **Editar** en los datos fiscales ya edita: nombre, teléfono, correo de comprobantes, dirección fiscal y zona,
+  categoría y actividad económica.
+  - Cada campo que cambia queda en la bitácora con el valor anterior y el nuevo, y con quién lo cambió.
+  - La identificación no se edita: si la cédula está mal, se crea el cliente correcto y se inactiva el anterior, así
+    las facturas emitidas no cambian de receptor.
+
+Archivos: `mod-venta-gestion.js`, `mod-venta.js`.
+
 ## 2026-09-29 · Integraciones e IA · «Integración con Hacienda» se queda en el módulo
 
 - La opción del menú abría el Panel fiscal de Facturación electrónica y sacaba al usuario del módulo. Ahora abre el

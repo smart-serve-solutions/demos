@@ -1162,8 +1162,9 @@
   }
   function fichaWire(v) {
     conClienteWire(v); A.wireIr(v);
+    $$("[data-nuevocli]", v).forEach(b => b.addEventListener("click", () => nuevoCliente(cli => { S.cliSel = cli.id; cliQ = ""; A.refresh(); }, { texto: cliQ })));
     const cli = D.cliById[S.cliSel], f = V.FICHA[cli.id];
-    $("#editF", v).addEventListener("click", () => toast("Edición de la ficha", "Cada cambio queda en la bitácora con el valor anterior y el nuevo.", "in"));
+    $("#editF", v).addEventListener("click", () => editarCliente(cli, () => A.refresh()));
     $$("[data-add]", v).forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.add;
       const campos = k === "autorizado" ? [["Nombre", "nom"], ["Cédula", "ced"], ["Papel", "rol"]] : k === "contacto" ? [["Nombre", "nom"], ["Puesto", "puesto"], ["Teléfono", "tel"], ["Correo", "correo"]] : [["Nombre de la dirección", "nom"], ["Dirección", "dir"]];
@@ -1194,6 +1195,163 @@
       });
     });
   }
+
+  /* ── alta de cliente ───────────────────────────────────────────
+     Lo mínimo para facturarle con comprobante electrónico: identificación
+     válida y sin repetir, nombre, correo para el XML y dirección con su zona
+     de flete. Todo cliente nace de contado: el crédito se pide aparte
+     (Clientes › Crédito) y lo aprueba gerencia. */
+  const TIPOS_ID = [
+    { v: "Física", t: "Física", d: 9, ej: "1-0234-0567", fmt: x => x[0] + "-" + x.slice(1, 5) + "-" + x.slice(5) },
+    { v: "Jurídica", t: "Jurídica", d: 10, ej: "3-101-123456", fmt: x => x[0] + "-" + x.slice(1, 4) + "-" + x.slice(4) },
+    { v: "DIMEX", t: "DIMEX", d: [11, 12], ej: "11 o 12 dígitos", fmt: x => x },
+    { v: "NITE", t: "NITE", d: 10, ej: "10 dígitos", fmt: x => x }
+  ];
+  const ACTIVIDADES = [
+    ["410000", "Construcción de edificios"], ["439000", "Otras actividades especializadas de construcción"],
+    ["432200", "Instalaciones de fontanería, calefacción y aire acondicionado"], ["432100", "Instalaciones eléctricas"],
+    ["711000", "Actividades de arquitectura e ingeniería"], ["310000", "Fabricación de muebles"],
+    ["011100", "Cultivo de cereales, legumbres y semillas oleaginosas"], ["841100", "Administración pública en general"],
+    ["475200", "Venta al por menor de artículos de ferretería"]
+  ];
+  /* valida la identificación; devuelve {ced} con el formato de Hacienda o {error} */
+  function validarId(tipo, txt) {
+    const t = TIPOS_ID.find(x => x.v === tipo), d = String(txt || "").replace(/\D/g, "");
+    const largo = [].concat(t.d);
+    if (!largo.includes(d.length)) return { error: "Una cédula " + (tipo === "DIMEX" || tipo === "NITE" ? "" : tipo.toLowerCase() + " ") + (tipo === "DIMEX" || tipo === "NITE" ? tipo + " " : "") + "lleva " + largo.join(" o ") + " dígitos (" + t.ej + ")." };
+    if (tipo === "Física" && d[0] === "0") return { error: "La cédula física no empieza en 0." };
+    if (tipo === "Jurídica" && d[0] !== "3") return { error: "La cédula jurídica empieza en 3 (3-101-…, 3-002-…)." };
+    const ced = t.fmt(d);
+    const ya = D.clientes.find(x => x.ced.replace(/\D/g, "") === d);
+    if (ya) return { error: "Ya existe: " + ya.nom + ".", ya };
+    return { ced };
+  }
+  /* abre el formulario; al guardar llama listo(cliente). pre: {texto} para prellenar desde una búsqueda */
+  function nuevoCliente(listo, pre) {
+    const txt = (pre && pre.texto || "").trim(), esNum = /^[\d\s-]{6,}$/.test(txt);
+    const zonas = D.tarifario.map(t => t.zona);
+    openSheet({
+      title: "Nuevo cliente", sub: "Nace de contado · el crédito se solicita en Clientes › Crédito",
+      body: `<div class="field"><label>Tipo de identificación</label>${seg("ncTipo", TIPOS_ID.map(x => ({ v: x.v, t: x.t })), "Física")}</div>
+        <div class="field"><label>Identificación</label><input id="ncCed" class="inp num" placeholder="1-0234-0567" value="${esNum ? esc(txt) : ""}" autocomplete="off"><div id="ncCedMsg" class="dim" style="font-size:12px;margin-top:4px"></div></div>
+        <div class="field"><label id="ncNomL">Nombre completo</label><input id="ncNom" class="inp" value="${esNum ? "" : esc(txt)}" autocomplete="off"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label>Teléfono</label><input id="ncTel" class="inp num" placeholder="8888-8888"></div>
+          <div class="field"><label>Correo para los comprobantes</label><input id="ncMail" class="inp" type="email" placeholder="nombre@correo.cr"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label>Dirección</label><input id="ncDir" class="inp" placeholder="Distrito, señas"></div>
+          <div class="field"><label>Zona de entrega</label><select id="ncZona" class="inp">${zonas.map(z => `<option>${esc(z)}</option>`).join("")}</select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label>Categoría</label><select id="ncCat" class="inp">${V.CATEGORIAS.map(k => `<option ${k.id === "Consumidor final" ? "selected" : ""}>${esc(k.id)}</option>`).join("")}</select></div>
+          <div class="field"><label>Actividad económica</label><select id="ncAct" class="inp"><option value="">Sin actividad (consumidor final)</option>${ACTIVIDADES.map(a => `<option value="${a[0]}">${a[0]} · ${esc(a[1])}</option>`).join("")}</select></div>
+        </div>
+        ${nota("La categoría define los descuentos que la caja aplica sola. El correo es a donde llegan la factura electrónica, su XML y la respuesta de Hacienda; sin correo, la factura se le entrega impresa.", "info")}`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="ncOk">${icon("check")}Crear cliente</button>`,
+      after(el) {
+        cerrar(el);
+        let tipo = "Física";
+        const msg = () => {
+          const v = $("#ncCed", el).value, m = $("#ncCedMsg", el);
+          if (!v.replace(/\D/g, "")) { m.textContent = ""; return; }
+          const r = validarId(tipo, v);
+          m.style.color = r.error ? "var(--crit)" : "var(--ok)";
+          m.textContent = r.error || "Válida · " + r.ced;
+        };
+        onSeg(el, "ncTipo", x => {
+          tipo = x;
+          $("#ncCed", el).placeholder = TIPOS_ID.find(t => t.v === x).ej;
+          $("#ncNomL", el).textContent = x === "Jurídica" ? "Razón social" : "Nombre completo";
+          if (x === "Jurídica" && $("#ncCat", el).value === "Consumidor final") { $("#ncCat", el).value = "Constructora"; $("#ncCat", el).dispatchEvent(new Event("change")); }
+          msg();
+        });
+        /* si se escribió una cédula de 10 dígitos que empieza en 3, es jurídica */
+        if (esNum && /^3/.test(txt.replace(/\D/g, "")) && txt.replace(/\D/g, "").length === 10) $('[data-seg="ncTipo"] button[data-v="Jurídica"]', el).click();
+        $("#ncCed", el).addEventListener("input", msg); msg();
+        $("#ncCat", el).addEventListener("change", () => {
+          const k = $("#ncCat", el).value;
+          const sug = { "Constructora": "410000", "Maestro de obra": "439000", "Fontanero": "432200", "Electricista": "432100", "Ingeniero": "711000", "Ebanista": "310000", "Agropecuario": "011100", "Institucional": "841100" }[k];
+          $("#ncAct", el).value = sug || "";
+        });
+        $("#ncOk", el).addEventListener("click", () => {
+          const r = validarId(tipo, $("#ncCed", el).value);
+          if (r.error) return toast("Revise la identificación", r.error, "cr");
+          const nom = $("#ncNom", el).value.trim().replace(/\s+/g, " ");
+          if (nom.length < 3) return toast("Falta el nombre", tipo === "Jurídica" ? "Digite la razón social como aparece en Hacienda." : "Digite el nombre completo como aparece en la cédula.", "cr");
+          const mail = $("#ncMail", el).value.trim();
+          if (mail && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(mail)) return toast("El correo no es válido", "Revise el correo para los comprobantes.", "cr");
+          const tel = $("#ncTel", el).value.trim(), dir = $("#ncDir", el).value.trim() || "Sin dirección", zona = $("#ncZona", el).value;
+          const cat = $("#ncCat", el).value, act = ACTIVIDADES.find(a => a[0] === $("#ncAct", el).value);
+          const n = D.clientes.reduce((m, x) => Math.max(m, +x.id.slice(1) || 0), 0) + 1;
+          const cli = { id: "C" + n, ced: r.ced, nom, tipoCed: tipo, categoria: cat, limite: 0, plazo: 0, dir, tel, saldo: 0,
+            exonerado: false, exoneraciones: [], autorizados: [], desde: String(D.ahora().getFullYear()), nuevo: true };
+          D.clientes.push(cli); D.cliById[cli.id] = cli;
+          V.FICHA[cli.id] = {
+            actividad: act ? { cod: act[0], desc: act[1] } : null, exoneraciones: cli.exoneraciones,
+            contactos: [{ nom: tipo === "Jurídica" ? "Contacto principal" : nom, puesto: tipo === "Jurídica" ? "Proveeduría" : "Titular", tel, correo: mail, comprobantes: !!mail }],
+            direcciones: [{ nom: "Dirección fiscal", dir, zona, principal: true }],
+            territorio: zona, vendedor: S.vendedor || D.VENDEDORES[0], correoFE: mail || "—", activo: true, sobregiros: []
+          };
+          V.anotar("Creó cliente", nom + " · " + r.ced + " · " + cat, D.sesion.nom, S.locId, "Baja");
+          closeSheet();
+          toast("Cliente " + nom + " creado", "De contado" + (mail ? "" : " y sin correo: la factura se le entrega impresa") + ". El crédito se solicita en Clientes › Crédito.", "ok");
+          if (listo) listo(cli);
+        });
+      }
+    });
+  }
+  /* edición de la ficha: la identificación no cambia (otra cédula es otro cliente);
+     cada campo que cambia queda en la bitácora con su valor anterior y el nuevo */
+  function editarCliente(cli, listo) {
+    const f = V.FICHA[cli.id], dirF = f.direcciones.find(x => x.principal) || f.direcciones[0];
+    const zonas = D.tarifario.map(t => t.zona);
+    const actOpts = ACTIVIDADES.slice();
+    if (f.actividad && !actOpts.some(a => a[0] === f.actividad.cod)) actOpts.unshift([f.actividad.cod, f.actividad.desc]);
+    openSheet({
+      title: "Editar cliente", sub: cli.ced + " · " + cli.tipoCed + " · la identificación no se cambia",
+      body: `<div class="field"><label>${cli.tipoCed === "Jurídica" ? "Razón social" : "Nombre completo"}</label><input id="ecNom" class="inp" value="${esc(cli.nom)}"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label>Teléfono</label><input id="ecTel" class="inp num" value="${esc(cli.tel || "")}"></div>
+          <div class="field"><label>Correo para los comprobantes</label><input id="ecMail" class="inp" type="email" value="${esc(f.correoFE && f.correoFE !== "—" ? f.correoFE : "")}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label>Dirección fiscal</label><input id="ecDir" class="inp" value="${esc(dirF ? dirF.dir : cli.dir)}"></div>
+          <div class="field"><label>Zona de entrega</label><select id="ecZona" class="inp">${zonas.map(z => `<option ${dirF && dirF.zona === z ? "selected" : ""}>${esc(z)}</option>`).join("")}</select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label>Categoría</label><select id="ecCat" class="inp">${V.CATEGORIAS.map(k => `<option ${k.id === cli.categoria ? "selected" : ""}>${esc(k.id)}</option>`).join("")}</select></div>
+          <div class="field"><label>Actividad económica</label><select id="ecAct" class="inp"><option value="">Sin actividad (consumidor final)</option>${actOpts.map(a => `<option value="${a[0]}" ${f.actividad && f.actividad.cod === a[0] ? "selected" : ""}>${a[0]} · ${esc(a[1])}</option>`).join("")}</select></div>
+        </div>
+        ${nota("Si la cédula está mal, no se corrige aquí: se crea el cliente con la cédula correcta y este se inactiva, así las facturas ya emitidas no cambian de receptor. El límite y el plazo de crédito se cambian en la pestaña Crédito.", "lock")}`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="ecOk">${icon("check")}Guardar cambios</button>`,
+      after(el) {
+        cerrar(el);
+        $("#ecOk", el).addEventListener("click", () => {
+          const nom = $("#ecNom", el).value.trim().replace(/\s+/g, " ");
+          if (nom.length < 3) return toast("Falta el nombre", "", "cr");
+          const mail = $("#ecMail", el).value.trim();
+          if (mail && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(mail)) return toast("El correo no es válido", "Revise el correo para los comprobantes.", "cr");
+          const act = actOpts.find(a => a[0] === $("#ecAct", el).value) || null;
+          const nuevo = { nom, tel: $("#ecTel", el).value.trim(), correo: mail || "—", dir: $("#ecDir", el).value.trim() || cli.dir, zona: $("#ecZona", el).value, cat: $("#ecCat", el).value, act: act ? act[0] + " · " + act[1] : "Sin actividad" };
+          const antes = { nom: cli.nom, tel: cli.tel || "", correo: f.correoFE || "—", dir: dirF ? dirF.dir : cli.dir, zona: dirF ? dirF.zona : "", cat: cli.categoria, act: f.actividad ? f.actividad.cod + " · " + f.actividad.desc : "Sin actividad" };
+          const NOM = { nom: "Nombre", tel: "Teléfono", correo: "Correo de comprobantes", dir: "Dirección fiscal", zona: "Zona", cat: "Categoría", act: "Actividad económica" };
+          const cambios = Object.keys(NOM).filter(k => String(antes[k]) !== String(nuevo[k]));
+          if (!cambios.length) { closeSheet(); return toast("Sin cambios", "La ficha queda igual.", "in"); }
+          cambios.forEach(k => V.anotar("Modificó ficha de cliente", cli.nom + " · " + NOM[k], D.sesion.nom, S.locId, k === "cat" ? "Media" : "Baja", antes[k], nuevo[k]));
+          cli.nom = nom; cli.tel = nuevo.tel; cli.categoria = nuevo.cat; cli.dir = nuevo.dir;
+          f.correoFE = nuevo.correo; f.actividad = act ? { cod: act[0], desc: act[1] } : null;
+          if (dirF) { dirF.dir = nuevo.dir; dirF.zona = nuevo.zona; } f.territorio = nuevo.zona;
+          const tit = f.contactos.find(x => x.puesto === "Titular");
+          if (tit) { tit.nom = nom; tit.tel = nuevo.tel; tit.correo = mail; tit.comprobantes = !!mail; }
+          closeSheet();
+          toast("Ficha actualizada", cambios.map(k => NOM[k]).join(", ") + ". Quedó en la bitácora con el valor anterior y el nuevo" + (cambios.includes("cat") ? "; la caja aplica los descuentos de la categoría nueva desde la próxima venta." : "."), "ok");
+          if (listo) listo(cli);
+        });
+      }
+    });
+  }
+  w.CLIENTES = { nuevo: nuevoCliente, editar: editarCliente, validarId };
 
   function credito(v) {
     conCliente(v, (cli, f, bq) => {
@@ -1303,7 +1461,8 @@
     sub: () => D.clientes.length + " clientes activos de 78 412 en la base",
     onArg: tab => { if (D.cliById[tab]) S.cliSel = tab; },
     tabs: [
-      { id: "ficha", t: "Ficha", sub: "Datos fiscales, contactos, direcciones, autorizados a retirar y categoría", render: ficha, wire: fichaWire },
+      { id: "ficha", t: "Ficha", sub: "Datos fiscales, contactos, direcciones, autorizados a retirar y categoría",
+        actions: () => `<button class="btn pri" data-nuevocli>${icon("plus")}Nuevo cliente</button>`, render: ficha, wire: fichaWire },
       {
         id: "credito", t: "Crédito", sub: "Límite, plazo, bloqueo y sobregiros autorizados",
         badge: () => { const n = D.clientes.filter(x => V.bloqueo(x.id) && V.bloqueo(x.id).k === "cr").length; return { n, k: "cr", l: n + " bloqueados" }; },
