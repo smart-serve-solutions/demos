@@ -1,5 +1,13 @@
 # Cambios
 
+## 2026-10-01 · Ventas · Botón «Editar» visible en las categorías de cliente
+
+- La edición de una categoría se abría tocando su nombre, y no se notaba. Ahora cada categoría tiene un botón
+  **«Editar»** con ícono de lápiz junto al nombre. «Consumidor final» no lo lleva porque es fija.
+- `core.js`: nuevo ícono `edit` (lápiz).
+
+Archivos: `mod-venta-gestion.js`, `core.js`.
+
 ## 2026-10-01 · Todos los módulos · «Volver» encima del título (revisión de UX)
 
 - Por recomendación del agente revisor, el «Volver a …» sale de la barra de ubicación y va en una línea propia

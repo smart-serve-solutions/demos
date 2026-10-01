@@ -1483,11 +1483,11 @@
     v.innerHTML = `<div class="wrap">
       ${nota("Cada categoría de cliente tiene su porcentaje por familia. La caja lo aplica sola al elegir el cliente y, si el descuento dejaría un artículo bajo el margen mínimo de su familia, lo deja en el tope. Así el precio especial deja de vivir en la cabeza de cada vendedor.", "wallet")}
       ${card({
-      title: "Descuento por categoría de cliente y familia", hint: esGerencia() ? "clic en un porcentaje para cambiarlo; en el nombre, para editar la categoría" : "solo gerencia puede cambiarlos",
+      title: "Descuento por categoría de cliente y familia", hint: esGerencia() ? "clic en un porcentaje para cambiarlo · «Editar» cambia el nombre, la descripción o la elimina" : "solo gerencia puede cambiarlos",
       actions: esGerencia() ? `<button class="btn sm pri" id="catNueva">${icon("plus")}Nueva categoría</button>` : "",
       body: `<div class="tscroll"><table class="dt"><thead><tr><th>Categoría</th><th class="r">Clientes</th>${F.map(f => `<th class="r" style="white-space:nowrap" title="${esc(f.nom)} · mínimo ${f.min} %">${esc(f.nom.split(" ")[0])}</th>`).join("")}</tr></thead>
         <tbody>${V.CATEGORIAS.map(k => `<tr><td>${esGerencia() && k.id !== "Consumidor final"
-          ? `<button type="button" data-cat="${esc(k.id)}" style="background:none;border:0;padding:0;cursor:pointer;color:var(--accent);font-size:inherit;text-align:left;font-weight:650;display:inline-flex;gap:6px;align-items:center" title="Editar la categoría">${esc(k.id)}${icon("clip", 'style="width:13px;height:13px;color:var(--ink-4)"')}</button>`
+          ? `<div style="display:flex;align-items:center;gap:8px"><b>${esc(k.id)}</b><button type="button" class="btn sm" data-cat="${esc(k.id)}" style="padding:3px 9px;font-size:12px" aria-label="Editar la categoría ${esc(k.id)}">${icon("edit")}Editar</button></div>`
           : `<b>${esc(k.id)}</b>`}<span class="sub ui">${esc(k.d)}</span></td><td class="r mono">${nCli(k.id)}</td>
           ${F.map(f => {
         const d = V.DESC[k.id][f.id], mg = d ? V.margenFam(f.id, d) : null, tope = mg != null && mg < f.min;
