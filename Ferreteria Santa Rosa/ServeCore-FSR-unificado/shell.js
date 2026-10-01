@@ -66,6 +66,14 @@
      Lo que se abre desde el menú, Inicio, el buscador o las teclas F
      empieza un recorrido nuevo. */
   const VOLVER = [];
+  /* {mod, pant}: el módulo de origen y su pantalla (o pestaña) */
+  const origenDe = (id) => {
+    if (id === "inicio") return { mod: "Inicio", pant: "" };
+    const def = APP.screens[id] || {}, path = N.menuPathFor(id);
+    const pest = def.crumb ? def.crumb() : null;
+    const tit = typeof def.title === "function" ? def.title() : def.title;
+    return path ? { mod: path.mod.t, pant: pest || path.item.t } : { mod: tit || id, pant: "" };
+  };
   const etiquetaDe = (id) => {
     if (id === "inicio") return "Inicio";
     const def = APP.screens[id] || {}, path = N.menuPathFor(id);
@@ -82,7 +90,7 @@
       if (top && top.screen === id) VOLVER.pop();
       else {
         const def = APP.screens[S.screen] || {}, v = $("#view");
-        VOLVER.push({ screen: S.screen, arg: def.tab ? def.tab() : S.arg, t: etiquetaDe(S.screen), scroll: v ? v.scrollTop : 0 });
+        VOLVER.push({ screen: S.screen, arg: def.tab ? def.tab() : S.arg, t: etiquetaDe(S.screen), ...origenDe(S.screen), scroll: v ? v.scrollTop : 0 });
         if (VOLVER.length > 8) VOLVER.shift();
       }
     }
@@ -550,7 +558,8 @@
       'style="width:13px;height:13px;color:var(--ink-4)"',
     );
     const path = S.screen === "inicio" ? null : N.menuPathFor(S.screen);
-    const atras = VOLVER[VOLVER.length - 1];
+    /* el «Volver» va sobre el título (render); solo las pantallas sin cabecera lo llevan aquí */
+    const atras = (APP.screens[S.screen] || {}).bare ? VOLVER[VOLVER.length - 1] : null;
     let html = (atras
       ? `<button class="bc-volver" data-volver title="Volver a ${esc(atras.t)} (Alt + ←)">${icon("chev", 'style="transform:rotate(180deg)"')}<span>Volver a ${esc(atras.t)}</span></button>`
       : "") +
@@ -711,13 +720,19 @@
     renderBanda();
     const v = $("#view");
     v.scrollTop = 0;
+    /* «‹ Volver a Inventarios · Sugerido de compra» encima del título: se lee como
+       «vine de otro lado», no como parte de la ruta de la pantalla actual */
+    const atras = VOLVER[VOLVER.length - 1];
+    const volverHtml = atras
+      ? `<button class="ph-volver" data-volver title="Volver a ${esc(atras.t)} (Alt + ←)" aria-label="Volver a ${esc(atras.t)}">${icon("chev", 'style="transform:rotate(180deg)"')}<span class="pv-t">Volver a <b>${esc(atras.mod)}</b></span>${atras.pant ? `<span class="pv-p">· ${esc(atras.pant)}</span>` : ""}${VOLVER.length > 1 ? `<span class="pv-n">· ${VOLVER.length} atrás</span>` : ""}</button>`
+      : "";
     const cabeza = def.bare
       ? ""
       : U.pageHead(
           typeof def.title === "function" ? def.title() : def.title,
           typeof def.sub === "function" ? def.sub() : def.sub,
           def.extra ? def.extra() : "",
-        );
+        ).replace('<div class="ph-t">', '<div class="ph-t">' + volverHtml);
     if (def.html) {
       v.innerHTML = def.bare
         ? def.html()
@@ -728,6 +743,7 @@
         : `<div class="${def.pad || "pad"}">${cabeza}<div id="sbody"></div></div>`;
       def.render(def.bare ? v : $("#sbody"), S.arg);
     }
+    $$(".ph-volver[data-volver]", v).forEach((b) => b.addEventListener("click", volver));
     if (def.wire) def.wire(v, S.arg);
   }
 

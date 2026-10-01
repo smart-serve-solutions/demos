@@ -1,5 +1,17 @@
 # Cambios
 
+## 2026-10-01 · Todos los módulos · «Volver» encima del título (revisión de UX)
+
+- Por recomendación del agente revisor, el «Volver a …» sale de la barra de ubicación y va en una línea propia
+  encima del título de la pantalla, como en Fiori, Odoo o NetSuite. Ya no se confunde con la ruta de la pantalla
+  actual, ni empuja esa ruta fuera de la vista en las cajas de 1024 px.
+- Texto: «‹ Volver a **Inventarios** · Sugerido de compra». El módulo nunca se recorta; la pantalla se recorta con
+  «…» si no cabe. Con varios saltos encadenados agrega «· 3 atrás». Debajo de 480 px solo muestra el módulo.
+- Enlace discreto con el color de acento. El texto completo y el atajo Alt + ← van en el título del botón. Las
+  pantallas sin cabecera conservan el botón en la barra de ubicación.
+
+Archivos: `shell.js`, `index.html`.
+
 ## 2026-10-01 · Todos los módulos · Volver a la pantalla anterior
 
 - Cuando un botón lleva a otro módulo (por ejemplo, «Cotizar a proveedores» en Inventarios › Reposición abre Compras
