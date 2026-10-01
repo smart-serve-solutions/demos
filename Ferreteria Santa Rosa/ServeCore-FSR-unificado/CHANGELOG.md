@@ -1,5 +1,20 @@
 # Cambios
 
+## 2026-10-01 · Ventas · Categorías de cliente: crear, editar y eliminar
+
+- En Precios, descuentos y márgenes › Por categoría de cliente, **Nueva categoría** crea una con nombre y descripción.
+  Sus descuentos pueden empezar en cero o copiarse de otra categoría, y luego se ajustan en la tabla. La categoría
+  nueva aparece al crear o editar un cliente.
+- Clic en el nombre de una categoría para editarla:
+  - Cambiar el nombre (sus clientes la conservan) o la descripción.
+  - Pasar todos sus clientes a otra categoría.
+  - Eliminarla, solo si ya no tiene clientes.
+- «Consumidor final» queda fija: paga el precio de lista. No se permiten nombres repetidos.
+- Todo queda en la bitácora con quién lo hizo. El cambio de un porcentaje ahora firma con el usuario de la sesión
+  (antes salía siempre «Adrián Vindas»).
+
+Archivos: `mod-venta-gestion.js`.
+
 ## 2026-10-01 · Ventas · Alta de clientes
 
 - **Nuevo cliente** en Clientes › Ficha y en la caja (al identificar al cliente). Si la búsqueda no encontró a nadie,

@@ -1483,9 +1483,12 @@
     v.innerHTML = `<div class="wrap">
       ${nota("Cada categoría de cliente tiene su porcentaje por familia. La caja lo aplica sola al elegir el cliente y, si el descuento dejaría un artículo bajo el margen mínimo de su familia, lo deja en el tope. Así el precio especial deja de vivir en la cabeza de cada vendedor.", "wallet")}
       ${card({
-      title: "Descuento por categoría de cliente y familia", hint: esGerencia() ? "clic en un porcentaje para cambiarlo" : "solo gerencia puede cambiarlos",
+      title: "Descuento por categoría de cliente y familia", hint: esGerencia() ? "clic en un porcentaje para cambiarlo; en el nombre, para editar la categoría" : "solo gerencia puede cambiarlos",
+      actions: esGerencia() ? `<button class="btn sm pri" id="catNueva">${icon("plus")}Nueva categoría</button>` : "",
       body: `<div class="tscroll"><table class="dt"><thead><tr><th>Categoría</th><th class="r">Clientes</th>${F.map(f => `<th class="r" style="white-space:nowrap" title="${esc(f.nom)} · mínimo ${f.min} %">${esc(f.nom.split(" ")[0])}</th>`).join("")}</tr></thead>
-        <tbody>${V.CATEGORIAS.map(k => `<tr><td><b>${esc(k.id)}</b><span class="sub ui">${esc(k.d)}</span></td><td class="r mono">${nCli(k.id)}</td>
+        <tbody>${V.CATEGORIAS.map(k => `<tr><td>${esGerencia() && k.id !== "Consumidor final"
+          ? `<button type="button" data-cat="${esc(k.id)}" style="background:none;border:0;padding:0;cursor:pointer;color:var(--accent);font-size:inherit;text-align:left;font-weight:650;display:inline-flex;gap:6px;align-items:center" title="Editar la categoría">${esc(k.id)}${icon("clip", 'style="width:13px;height:13px;color:var(--ink-4)"')}</button>`
+          : `<b>${esc(k.id)}</b>`}<span class="sub ui">${esc(k.d)}</span></td><td class="r mono">${nCli(k.id)}</td>
           ${F.map(f => {
         const d = V.DESC[k.id][f.id], mg = d ? V.margenFam(f.id, d) : null, tope = mg != null && mg < f.min;
         return `<td class="r">${esGerencia() && k.id !== "Consumidor final"
@@ -1499,14 +1502,74 @@
         ${card({ title: "Clientes por categoría", body: bars(V.CATEGORIAS.map(k => ({ n: k.id, v: nCli(k.id), lab: String(nCli(k.id)) })).filter(x => x.v)) })}
       </div></div>`;
   }
+  /* categorías de cliente: crear, renombrar, describir y quitar.
+     «Consumidor final» es fija (paga precio de lista). Una categoría con
+     clientes no se borra: primero se pasan sus clientes a otra. */
+  const catNom = s => String(s || "").trim().replace(/\s+/g, " ");
+  const catExiste = (n, menos) => V.CATEGORIAS.some(k => k.id !== menos && norm(k.id) === norm(n));
+  function categoriaSheet(k) {
+    const nueva = !k, nCli = k ? D.clientes.filter(x => x.categoria === k.id) : [];
+    openSheet({
+      title: nueva ? "Nueva categoría de cliente" : "Editar categoría", sub: nueva ? "Con su descuento por familia" : nCli.length + " clientes en esta categoría",
+      body: `<div class="field"><label>Nombre</label><input id="ctNom" class="inp" value="${k ? esc(k.id) : ""}" placeholder="Por ejemplo: Taller de soldadura"></div>
+        <div class="field"><label>Descripción</label><input id="ctDesc" class="inp" value="${k ? esc(k.d) : ""}" placeholder="A quién agrupa"></div>
+        ${nueva ? `<div class="field"><label>Descuentos iniciales</label><select id="ctBase" class="inp">${V.CATEGORIAS.map(x => `<option ${x.id === "Consumidor final" ? "selected" : ""} value="${esc(x.id)}">${x.id === "Consumidor final" ? "Sin descuento (se definen después)" : "Copiar los de " + esc(x.id)}</option>`).join("")}</select></div>`
+          : `<div class="field"><label>Pasar sus clientes a otra categoría</label><select id="ctMover" class="inp"><option value="">No mover</option>${V.CATEGORIAS.filter(x => x.id !== k.id).map(x => `<option>${esc(x.id)}</option>`).join("")}</select></div>`}
+        ${nota(nueva ? "Los porcentajes se ajustan después en la tabla, familia por familia. La caja nunca baja del margen mínimo de la familia." : "Al cambiar el nombre, los clientes de la categoría se quedan en ella. Solo se puede eliminar una categoría sin clientes; los cambios quedan en la bitácora.", "info")}`,
+      footer: `<button class="btn" data-cerrar>Cancelar</button>${nueva ? "" : `<button class="btn" id="ctBorrar">${icon("trash")}Eliminar</button>`}<div class="gap"></div><button class="btn pri" id="ctOk">${icon("check")}${nueva ? "Crear categoría" : "Guardar"}</button>`,
+      after(el) {
+        cerrar(el);
+        $("#ctOk", el).addEventListener("click", () => {
+          const n = catNom($("#ctNom", el).value), d = catNom($("#ctDesc", el).value);
+          if (n.length < 3) return toast("Falta el nombre", "Digite el nombre de la categoría.", "cr");
+          if (catExiste(n, k && k.id)) return toast("Ya existe esa categoría", "Use otro nombre o edite la existente.", "cr");
+          if (nueva) {
+            const base = $("#ctBase", el).value;
+            V.CATEGORIAS.splice(V.CATEGORIAS.length - 1, 0, { id: n, d: d || "Categoría nueva" });
+            V.DESC[n] = {}; V.FAMV.forEach(f => { V.DESC[n][f.id] = (V.DESC[base] || {})[f.id] || 0; });
+            V.anotar("Creó categoría de cliente", n + (base !== "Consumidor final" ? " · descuentos copiados de " + base : ""), D.sesion.nom, S.locId, "Alta");
+            closeSheet(); toast("Categoría " + n + " creada", "Ya aparece al crear o editar un cliente. Ajuste sus porcentajes en la tabla.", "ok");
+            return A.refresh();
+          }
+          const antes = k.id, cambios = [];
+          if (n !== antes) {
+            V.DESC[n] = V.DESC[antes]; delete V.DESC[antes];
+            D.clientes.forEach(x => { if (x.categoria === antes) x.categoria = n; });
+            k.id = n; cambios.push("nombre");
+            V.anotar("Renombró categoría de cliente", n, D.sesion.nom, S.locId, "Media", antes, n);
+          }
+          if (d && d !== k.d) { V.anotar("Cambió descripción de categoría", k.id, D.sesion.nom, S.locId, "Baja", k.d, d); k.d = d; cambios.push("descripción"); }
+          const mover = $("#ctMover", el).value;
+          if (mover) {
+            const L = D.clientes.filter(x => x.categoria === k.id);
+            L.forEach(x => { x.categoria = mover; });
+            if (L.length) { V.anotar("Pasó clientes de categoría", L.length + " clientes", D.sesion.nom, S.locId, "Media", k.id, mover); cambios.push(L.length + " clientes a " + mover); }
+          }
+          closeSheet();
+          toast(cambios.length ? "Categoría actualizada" : "Sin cambios", cambios.length ? (x => x.charAt(0).toUpperCase() + x.slice(1))(cambios.join(", ")) + ". Quedó en la bitácora." : "La categoría queda igual.", cambios.length ? "ok" : "in");
+          A.refresh();
+        });
+        const b = $("#ctBorrar", el);
+        if (b) b.addEventListener("click", () => {
+          const quedan = D.clientes.filter(x => x.categoria === k.id).length;
+          if (quedan) return toast("Tiene " + quedan + " clientes", "Páselos primero a otra categoría (en esta misma ventana) y luego elimínela.", "wa");
+          V.CATEGORIAS.splice(V.CATEGORIAS.indexOf(k), 1); delete V.DESC[k.id];
+          V.anotar("Eliminó categoría de cliente", k.id, D.sesion.nom, S.locId, "Alta");
+          closeSheet(); toast("Categoría " + k.id + " eliminada", "Quedó en la bitácora.", "ok"); A.refresh();
+        });
+      }
+    });
+  }
   function categoriasWire(v) {
+    const nu = $("#catNueva", v); if (nu) nu.addEventListener("click", () => categoriaSheet(null));
+    $$("[data-cat]", v).forEach(b => b.addEventListener("click", () => categoriaSheet(V.CATEGORIAS.find(k => k.id === b.dataset.cat))));
     $$("[data-dc]", v).forEach(i => {
       i.addEventListener("focus", () => i.select());
       i.addEventListener("keydown", e => { if (e.key === "Enter") i.blur(); });
       i.addEventListener("change", () => {
         const [k, f] = i.dataset.dc.split("|"), antes = V.DESC[k][f], n = Math.max(0, Math.min(40, numIn(i.value)));
         V.DESC[k][f] = n;
-        V.anotar("Cambió descuento por categoría", k + " · " + D.famById[f].nom, "Adrián Vindas", S.locId, "Alta", antes + " %", n + " %");
+        V.anotar("Cambió descuento por categoría", k + " · " + D.famById[f].nom, D.sesion.nom, S.locId, "Alta", antes + " %", n + " %");
         toast("Descuento actualizado", k + " · " + D.famById[f].nom + ": " + n + " %. Rige desde la siguiente factura.", "ok");
         A.refresh();
       });
