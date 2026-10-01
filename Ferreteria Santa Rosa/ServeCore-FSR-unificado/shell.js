@@ -47,7 +47,8 @@
       this.screens[id] = def;
       this.order.push(id);
     },
-    go,
+    go: (id, arg) => go(id, arg),
+    volver,
     refresh: () => render(),
     nextConsec,
   };
@@ -58,12 +59,44 @@
     return D.proximoConsec(S.cart && S.cart.cliId ? "FE" : "TE", S.locId, S.term);
   }
 
-  function go(id, arg) {
+  /* ── volver a donde estaba ─────────────────────────────────────
+     Un enlace dentro de una pantalla (por ejemplo «Cotizar a proveedores»
+     en Reposición) lleva a otro módulo: se guarda de dónde venía (pantalla,
+     pestaña y desplazamiento) y la barra de ubicación ofrece «Volver a …».
+     Lo que se abre desde el menú, Inicio, el buscador o las teclas F
+     empieza un recorrido nuevo. */
+  const VOLVER = [];
+  const etiquetaDe = (id) => {
+    if (id === "inicio") return "Inicio";
+    const def = APP.screens[id] || {}, path = N.menuPathFor(id);
+    const pest = def.crumb ? def.crumb() : null;
+    if (!path) return def.title ? (typeof def.title === "function" ? def.title() : def.title) : id;
+    return path.mod.t + " · " + (pest ? path.item.t + " › " + pest : path.item.t);
+  };
+  function go(id, arg, modo) {
     if (!APP.screens[id]) return;
+    if (modo === "menu") VOLVER.length = 0;
+    else if (modo !== "volver" && S.screen && id !== S.screen) {
+      const top = VOLVER[VOLVER.length - 1];
+      /* si vuelve por su cuenta a la pantalla anterior, no se apila un círculo */
+      if (top && top.screen === id) VOLVER.pop();
+      else {
+        const def = APP.screens[S.screen] || {}, v = $("#view");
+        VOLVER.push({ screen: S.screen, arg: def.tab ? def.tab() : S.arg, t: etiquetaDe(S.screen), scroll: v ? v.scrollTop : 0 });
+        if (VOLVER.length > 8) VOLVER.shift();
+      }
+    }
     S.screen = id;
     S.arg = arg;
     closeOverlays();
     render();
+  }
+  function volver() {
+    const x = VOLVER.pop();
+    if (!x) return;
+    go(x.screen, x.arg, "volver");
+    const v = $("#view");
+    if (v && x.scroll) v.scrollTop = x.scroll;
   }
   function closeOverlays() {
     const o = $("#overlayRoot");
@@ -266,7 +299,7 @@
       ).join("");
     wrap
       .querySelector('[data-goid="inicio"]')
-      .addEventListener("click", () => go("inicio"));
+      .addEventListener("click", () => go("inicio", undefined, "menu"));
     $$(".mg[data-mod]", wrap).forEach((b) =>
       b.addEventListener("click", () => {
         menuState.module = b.dataset.mod;
@@ -306,7 +339,7 @@
             S.catSel = a.id;
             S.catTab = a.tipo;
             S.catQ = "";
-            go("catalogo", "articulos");
+            go("catalogo", "articulos", "menu");
           },
         });
     });
@@ -318,7 +351,7 @@
           k: x.ced,
           go: () => {
             S.cliSel = x.id;
-            go("clientes");
+            go("clientes", undefined, "menu");
           },
         });
     });
@@ -328,7 +361,7 @@
           ic: "truck",
           t: x.nom,
           k: x.ced,
-          go: () => go("proveedores"),
+          go: () => go("proveedores", undefined, "menu"),
         });
     });
     D.documentos.forEach((x) => {
@@ -337,7 +370,7 @@
           ic: "file",
           t: x.cons,
           k: x.tipo + " · " + c(x.total),
-          go: () => go("documentos", x.id),
+          go: () => go("documentos", x.id, "menu"),
         });
     });
     return out;
@@ -475,7 +508,7 @@
     }
 
     $$("[data-goid]", itemsEl).forEach((b) =>
-      b.addEventListener("click", () => go(b.dataset.goid, b.dataset.arg)),
+      b.addEventListener("click", () => go(b.dataset.goid, b.dataset.arg, "menu")),
     );
     $$("[data-dato]", itemsEl).forEach((b) =>
       b.addEventListener("click", () => {
@@ -517,7 +550,11 @@
       'style="width:13px;height:13px;color:var(--ink-4)"',
     );
     const path = S.screen === "inicio" ? null : N.menuPathFor(S.screen);
-    let html = `<button class="bc-item${path ? "" : " current"}" data-goid="inicio"${path ? "" : ' aria-current="true"'}>${icon("home")}<span>Inicio</span></button>`;
+    const atras = VOLVER[VOLVER.length - 1];
+    let html = (atras
+      ? `<button class="bc-volver" data-volver title="Volver a ${esc(atras.t)} (Alt + ←)">${icon("chev", 'style="transform:rotate(180deg)"')}<span>Volver a ${esc(atras.t)}</span></button>`
+      : "") +
+      `<button class="bc-item${path ? "" : " current"}" data-goid="inicio"${path ? "" : ' aria-current="true"'}>${icon("home")}<span>Inicio</span></button>`;
     if (path) {
       /* en un espacio de trabajo con pestañas, la pestaña activa es el último eslabón */
       const def = APP.screens[S.screen] || {};
@@ -546,8 +583,9 @@
           : `<span class="bc-item current" aria-current="true"><span>${esc(path.item.t)}</span></span>`);
     }
     el.innerHTML = html;
+    $$("[data-volver]", el).forEach((b) => b.addEventListener("click", volver));
     $$("[data-goid]", el).forEach((b) =>
-      b.addEventListener("click", () => go(b.dataset.goid)),
+      b.addEventListener("click", () => go(b.dataset.goid, undefined, "menu")),
     );
     $$("[data-openmod]", el).forEach((b) =>
       b.addEventListener("click", () => APP.abrirMenu(b.dataset.openmod)),
@@ -595,6 +633,7 @@
       sub: () => val(cur().sub) || val(cfg.sub) || "",
       extra: () => (cur().actions ? cur().actions() : ""),
       crumb: () => cur().t,
+      tab: () => st.tab,
       prep(arg) {
         if (arg == null || arg === "") return;
         const s = String(arg),
@@ -732,11 +771,16 @@
       if (tagn === "input" || tagn === "textarea" || tagn === "select") return;
       if (e.key === "F1") {
         e.preventDefault();
-        go("pos");
+        go("pos", undefined, "menu");
       }
       if (e.key === "F9") {
         e.preventDefault();
-        go("inicio");
+        go("inicio", undefined, "menu");
+      }
+      /* Alt + ← : volver a la pantalla de la que se vino */
+      if (e.altKey && e.key === "ArrowLeft" && VOLVER.length) {
+        e.preventDefault();
+        volver();
       }
     });
 

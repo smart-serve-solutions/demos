@@ -1,5 +1,17 @@
 # Cambios
 
+## 2026-10-01 · Todos los módulos · Volver a la pantalla anterior
+
+- Cuando un botón lleva a otro módulo (por ejemplo, «Cotizar a proveedores» en Inventarios › Reposición abre Compras
+  › Cotizar a proveedores), la barra de ubicación muestra **«← Volver a Inventarios · Reposición › Sugerido de
+  compra»**. Regresa a la misma pantalla, en la misma pestaña y a la misma altura. También funciona con Alt + ←.
+- Se pueden encadenar varios saltos y volver uno por uno (hasta 8).
+- Lo que se abre desde el menú, Inicio, el buscador o las teclas F1/F9 empieza un recorrido nuevo, así el botón no
+  ofrece volver a pantallas de otra tarea.
+- Va en el shell (`shell.js`): aplica a todos los enlaces entre pantallas sin tocar cada módulo.
+
+Archivos: `shell.js`, `index.html`.
+
 ## 2026-10-01 · Ventas · Categorías de cliente: crear, editar y eliminar
 
 - En Precios, descuentos y márgenes › Por categoría de cliente, **Nueva categoría** crea una con nombre y descripción.
