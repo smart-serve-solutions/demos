@@ -94,8 +94,17 @@
   BI.BASE_DIA = BASE_DIA;
   BI.mill = mill;
   BI.tagVar = tagVar;
+  /* A5 · el acceso a reportes sale del usuario de la sesión, no del selector de vista
+     de Inicio. «Ver como» (en Todos los reportes) es una vista previa explícita. */
+  BI.verComo = null;
+  const rolDeSesion = () => {
+    const r = (D.sesion && D.sesion.rol) || "";
+    return ["TI", "Gerencia", "Contabilidad", "Proveeduría"].indexOf(r) >= 0 ? "gerencia" : r === "Bodega" ? "bodega" : "cajero";
+  };
+  const rolBI = () => BI.verComo || rolDeSesion();
+  BI.rolBI = rolBI;
   BI.puedeExportar = (g) =>
-    S.role === "gerencia" || (S.role === "bodega" && g === "Inventario");
+    rolBI() === "gerencia" || (rolBI() === "bodega" && g === "Inventario");
 
   /* ── estilos propios del módulo ─────────────────────────────── */
   (function () {
@@ -1703,9 +1712,9 @@
   const catBy = (id) => CAT.find((x) => x.id === id);
   const GRUPOS = ["Todos"].concat(Object.keys(G).map((k) => G[k]));
   const acceso = (r) =>
-    S.role === "gerencia" ||
-    (S.role === "cajero" && r.g === G.v && !r.sens) ||
-    (S.role === "bodega" && r.g === G.i && !r.sens);
+    rolBI() === "gerencia" ||
+    (rolBI() === "cajero" && r.g === G.v && !r.sens) ||
+    (rolBI() === "bodega" && r.g === G.i && !r.sens);
   const specDe = (r) => r.spec || {};
   const dimsDe = (r) =>
     specDe(r).rows
@@ -1849,10 +1858,11 @@
     R.cmp = true;
   };
 
+  const ROL_ET = { gerencia: "Gerencia", cajero: "Mostrador", bodega: "Bodega" };
   const rolEt = () =>
-    ({ gerencia: "Andrey (Gerencia)", cajero: "Mostrador", bodega: "Bodega" })[
-      S.role
-    ] || S.role;
+    BI.verComo
+      ? "vista de " + ROL_ET[BI.verComo]
+      : D.sesion.corto + " · " + (D.sesion.rol === "TI" ? "Administrador (TI)" : D.sesion.rol);
   const PRE = {
     Hoy: ["2026-09-13", "2026-09-13"],
     "Esta semana": ["2026-09-07", "2026-09-13"],
@@ -2411,12 +2421,17 @@
     openSheet({
       title: "Este reporte necesita autorización",
       sub: r.n,
-      body: `<div class="bi-note warn">${icon("lock")}<div>«${esc(r.n)}» muestra ${r.g === G.a ? "información de control interno" : "costos o márgenes"}. Su perfil (${esc(rolEt())}) no lo tiene asignado.</div></div>
-        <div class="mut" style="font-size:12.5px;margin-top:12px">Puede pedirle acceso a gerencia; cada acceso queda en la bitácora.</div>`,
-      footer: `<button class="btn" id="bNo">Cerrar</button><div class="gap"></div><button class="btn pri" id="bSi">Solicitar acceso</button>`,
+      body: `<div class="bi-note warn">${icon("lock")}<div>«${esc(r.n)}» (Reportería › ${esc(r.g)}) muestra ${r.g === G.a ? "información de control interno" : r.sens ? "costos o márgenes" : "información de " + esc(String(r.g).toLowerCase())}. ${BI.verComo ? "En la <b>" + esc(rolEt()) + "</b>" : "Su perfil (" + esc(rolEt()) + ")"} no tiene el permiso.</div></div>
+        <dl class="kv" style="margin-top:12px"><dt>Permiso que falta</dt><dd style="text-align:left">Acceso a reportes · «${esc(r.g)}»${r.sens ? " con costos y márgenes" : ""} · nivel «Solo ver» o más</dd>
+          <dt>Dónde se asigna</dt><dd style="text-align:left">Sistema › Roles y permisos › Acceso a reportes</dd></dl>
+        ${BI.verComo ? `<div class="mut" style="font-size:12.5px;margin-top:12px">Está usando «Ver como» para revisar lo que ve otro rol. Con su perfil sí entra.</div>` : `<div class="mut" style="font-size:12.5px;margin-top:12px">Puede pedirle acceso a gerencia; cada acceso queda en la bitácora.</div>`}`,
+      footer: `<button class="btn" id="bNo">Cerrar</button><div class="gap"></div>${BI.verComo ? `<button class="btn pri" id="bYo">Volver a mi perfil y abrirlo</button>` : `<button class="btn pri" id="bSi">Solicitar acceso</button>`}`,
       after(el) {
         $("#bNo", el).addEventListener("click", closeSheet);
-        $("#bSi", el).addEventListener("click", () => {
+        const yo = $("#bYo", el);
+        if (yo) yo.addEventListener("click", () => { BI.verComo = null; closeSheet(); A.refresh(); const t = document.querySelector(`[data-rep="${r.id}"]`); if (t) t.click(); });
+        const bs = $("#bSi", el);
+        if (bs) bs.addEventListener("click", () => {
           BI.pedirPermiso("Ver el reporte «" + r.n + "»; no está asignado al rol de " + rolEt(), "Acceso a reporte", "", "Reporte «" + r.n + "»");
           closeSheet();
           toast("Solicitud enviada", "Gerencia la verá en Autorización de excepciones.", "ok");
@@ -2464,11 +2479,12 @@
         return `<span class="mut" style="font-size:12.5px">Ver como</span>${seg(
           "rRol",
           [
+            { v: "yo", t: "Mi perfil" },
             { v: "gerencia", t: "Gerencia" },
             { v: "bodega", t: "Bodega" },
             { v: "cajero", t: "Mostrador" },
           ],
-          S.role,
+          BI.verComo || "yo",
         )}`;
       const volver = `<button class="btn" id="rBack">← ${R.vista === "resultado" ? "Volver a los filtros" : "Todos los reportes"}</button>`;
       if (R.vista !== "resultado") return volver;
@@ -2501,7 +2517,7 @@
         });
       if (R.vista === "lista") {
         onSeg(document, "rRol", (x) => {
-          S.role = x;
+          BI.verComo = x === "yo" ? null : x;
           rf();
         });
         const q = $("#rq", v);

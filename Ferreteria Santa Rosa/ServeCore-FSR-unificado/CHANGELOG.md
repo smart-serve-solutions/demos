@@ -1,5 +1,25 @@
 # Cambios
 
+## 2026-10-05 · Reportería · A5 · «Sin acceso» con el perfil de administrador
+
+Requerimiento de la sesión con TI del 1 de octubre, punto A5.
+
+- **Causa:** Reportería decidía el acceso con el selector de vista de **Inicio** (Gerencia / Mostrador / Bodega), no
+  con el usuario de la sesión. Si en Inicio se mostró la vista de Mostrador, los reportes con costos quedaban
+  «Sin acceso», y el aviso hablaba del perfil «Mostrador», lo que parecía de otro módulo. Además, el perfil se
+  rotulaba «Andrey (Gerencia)», aunque Andrey es TI.
+- **Corrección:** el acceso sale del usuario de la sesión.
+  - El administrador (TI), Gerencia, Contabilidad y Proveeduría entran a todos los reportes.
+  - Bodega entra a los de inventario.
+  - Mostrador entra a los de ventas sin costos.
+- **«Ver como»** (en Todos los reportes) es una vista previa explícita, con «Mi perfil» como primera opción. Ya no
+  depende de Inicio ni lo cambia.
+- **El aviso de bloqueo dice qué permiso falta** («Acceso a reportes · Ventas con costos y márgenes · nivel Solo ver
+  o más») y dónde se asigna (Sistema › Roles y permisos › Acceso a reportes). Si es una vista previa, ofrece
+  «Volver a mi perfil y abrirlo».
+
+Archivos: `mod-bi.js`.
+
 ## 2026-10-05 · Ventas / Sistema · A4 · Reimprimir con vista previa
 
 Requerimiento de la sesión con TI del 1 de octubre, punto A4.
