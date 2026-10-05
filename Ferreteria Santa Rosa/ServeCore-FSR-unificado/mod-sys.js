@@ -7824,9 +7824,9 @@
     const act = D.actividadPrincipal();
     return `Clave ${esc(d.clave)}<br>Actividad ${esc(act.cod)} · ${d.condicion === "Crédito" ? "Condición 02 crédito" : "Condición 01 contado"} · ${esc(D.mediosTxt(d))}<br>Situación ${esc(d.situacion)} · factura electrónica 4.4${d.exoneracion ? `<br>Exoneración ${esc(d.exoneracion.numero)} · ${esc(d.exoneracion.institucion)} · ${d.exoneracion.pct} puntos de IVA` : ""}`;
   };
-  function vistaDoc(p) {
+  function vistaDoc(p, real) {
     if (p.tam.indexOf("80 mm") >= 0) {
-      const d = ejemploDoc("TE", false);
+      const d = real || ejemploDoc("TE", false);
       return `<div class="sx-doc sx-80">
       <div style="text-align:center"><b>${esc(EMP.comercial)}</b><br>${esc(EMP.nombre)}<br>${esc(EMP.cedula)} · ${esc(locNom(d.locId))}<br>${esc(p.t.toUpperCase())}<br>${esc(d.cons)}<br>${fecha(d.fecha)} ${d.fecha.getFullYear()}</div>
       <div style="border-top:1px dashed #9aa1b1;margin:8px 0"></div>
@@ -7840,7 +7840,7 @@
     }
     if (p.id === "et")
       return `<div class="sx-doc" style="max-width:260px;margin:0 auto;text-align:center"><b style="font-size:13px">Cemento gris 50 kg</b><div style="font-size:26px;font-weight:800;margin:4px 0">₡7 950</div><div style="font-family:var(--num);letter-spacing:2px">▌▌▍▌▎▌▌▍▎▌▍▌▌▎▍▌</div><div class="sx-dm">MAT-00012 · Pasillo C · anaquel 1 · cara A · estante 04</div></div>`;
-    const d = ejemploDoc("FE", !!p.firma);
+    const d = real || ejemploDoc("FE", !!p.firma);
     const cli = D.cliById[d.clienteId];
     const plazo = cli && cli.plazo ? cli.plazo : 30;
     return `<div class="sx-doc">
@@ -7850,10 +7850,18 @@
       <div style="margin:12px 0 6px"><b>Cliente:</b> ${cli ? esc(cli.nom) + " · " + esc(cli.ced || "") : "Consumidor final"}</div>
       <div class="sx-dl" style="font-weight:700"><span style="flex:1">Descripción</span><span style="width:110px">CABYS</span><span style="width:40px;text-align:right">Cant.</span><span style="width:70px;text-align:right">Precio s/IVA</span><span style="width:80px;text-align:right">Monto</span></div>
       ${lineasDoc(d).map((l) => `<div class="sx-dl"><span style="flex:1">${esc(l.desc)}${l.desc_ ? ` <span class="sx-dm">(desc. ${l.desc_} %)</span>` : ""}</span><span style="width:110px" class="sx-dm">${esc(l.cabys)}</span><span style="width:40px;text-align:right">${esc(String(l.cant))}</span><span style="width:70px;text-align:right">₡${dec(l.precio, 2)}</span><span style="width:80px;text-align:right">${c(l.total)}</span></div>`).join("")}
-      <div style="display:flex;justify-content:space-between;gap:16px;margin-top:8px"><div class="sx-dm" style="word-break:break-all;max-width:60%">${bloqueFiscal(d)}</div><div style="min-width:200px"><div class="sx-dl"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}<div class="sx-dl" style="font-weight:800"><span>Total</span><span>${c(d.total)}</span></div></div></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;margin-top:8px"><div class="sx-dm" style="word-break:break-all;max-width:60%">${bloqueFiscal(d)}</div><div style="min-width:200px"><div class="sx-dl"><span>Subtotal</span><span>${c(d.grav + d.exe)}</span></div>${D.desgloseIva(d).map(([k, v]) => `<div class="sx-dl"><span>${esc(k)}</span><span>${v < 0 ? "−" + c(-v) : c(v)}</span></div>`).join("")}<div class="sx-dl" style="font-weight:800"><span>Total</span><span>${c(d.total)}</span></div>${d.condicion === "Crédito" ? "" : (d.pagos || []).map((x) => `<div class="sx-dl" style="border:0"><span class="sx-dm">${x.vuelto ? "Vuelto" : esc(x.medio)}${x.usd ? " · US$ " + dec(x.usd, 2) : ""}</span><span class="sx-dm">${x.monto < 0 ? "−" + c(-x.monto) : c(x.monto)}</span></div>`).join("")}</div></div>
       ${p.firma ? `<div style="display:flex;gap:30px;margin-top:26px"><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px" class="sx-dm">Firma del cliente</div><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px" class="sx-dm">Cédula</div></div><div class="sx-dm" style="margin-top:6px">ORIGINAL · se imprime también la COPIA</div>` : ""}
       <div class="sx-dm" style="margin-top:14px;border-top:1px solid #e6e8ee;padding-top:8px">${esc(PL_CFG.pie)}<br>Consulta pública del comprobante: consulta.santarosa.cr/c/8F3K2Q — no abre el sistema ni pide sesión; vence en 30 días.</div></div>`;
   }
+  /* A4 · la misma plantilla, con los datos de un comprobante real (reimprimir) */
+  function vistaComprobante(d) {
+    const id = d.tipo === "TE" ? "te" : d.condicion === "Crédito" ? "fc" : "fe";
+    const p = Object.assign({}, PLANT.find((x) => x.id === id));
+    if (d.tipo === "NC") p.t = "Nota de crédito electrónica";
+    return { p, html: vistaDoc(p, d) };
+  }
+  w.PLANTILLAS = { vistaComprobante };
   function impresosTab(el) {
     const p = PLANT.find((x) => x.id === plSel) || PLANT[0];
     el.innerHTML = `<div class="split ancho">

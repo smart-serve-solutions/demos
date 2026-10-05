@@ -1,5 +1,24 @@
 # Cambios
 
+## 2026-10-05 · Ventas / Sistema · A4 · Reimprimir con vista previa
+
+Requerimiento de la sesión con TI del 1 de octubre, punto A4.
+
+- **Ya existía:** la vista previa de las plantillas en Sistema › Plantillas y mensajes, pero siempre con un
+  comprobante de ejemplo. El botón «Reimprimir» del historial no hacía nada.
+- **Ventas › Documentos › Historial de ventas › Reimprimir** abre la vista previa con la plantilla que le toca:
+  - tiquete, en térmica de 80 mm
+  - factura de contado, en carta
+  - factura a crédito, con línea para la firma
+  - nota de crédito
+
+  Lleva los datos reales del comprobante: consecutivo, clave, cliente, líneas, IVA por tarifa y el pago mixto.
+  Va marcada «COPIA» (mismo consecutivo, no vuelve a Hacienda). Al imprimir queda en la bitácora.
+- La plantilla carta ahora muestra los medios de pago en las ventas de contado, como ya lo hacía el tiquete.
+- `mod-sys.js` expone `PLANTILLAS.vistaComprobante(doc)`, que reutiliza la misma vista previa de Plantillas y mensajes.
+
+Archivos: `mod-venta-gestion.js`, `mod-sys.js`.
+
 ## 2026-10-05 · Compras · A2 · A3 · A8 · Recorrido de compra sin tropiezos, quién creó y aprobó, plazo legible
 
 Requerimiento de la sesión con TI del 1 de octubre.
