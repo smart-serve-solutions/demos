@@ -50,8 +50,8 @@
 
   /* ── bodega ─────────────────────────────────────────────────── */
   function inicioBodega() {
-    const qb = D.quiebres();
-    const enQuiebre = qb.filter(q => q.tipo === "Quiebre").length;
+    const SM = w.INVX.semaforo();
+    const enQuiebre = SM.n.critico;
     const transito = D.traslados.filter(t => t.estado === "En tránsito");
     const pendientes = D.compras.filter(o => o.estado !== "Aplicada");
     const conteo = D.conteos.find(x => x.estado === "En proceso") || D.conteos[0];
@@ -61,7 +61,7 @@
       ${stat("Traslados en tránsito", transito.length, { txt: transito.length ? "el más viejo salió hace 2 días" : "nada en camino", dir: "" }, "var(--accent)")}
       ${stat("Recepciones pendientes", pendientes.length, { txt: oc.cons + " tiene líneas con diferencia", dir: "down" }, "var(--warn)")}
       ${stat("Conteo cíclico de la semana", conteo ? conteo.familia : "—", conteo ? { txt: conteo.contados + " artículos contados · " + conteo.diferencias + " diferencias", dir: "" } : null)}
-      ${stat("Artículos en quiebre", enQuiebre, { txt: "con existencia en el CEDI", dir: "" }, "var(--crit)")}
+      <button type="button" data-sem="critico" title="Ver la lista" style="all:unset;cursor:pointer;display:block">${stat("Artículos en quiebre", enQuiebre, { txt: "menos de 7 días de venta disponibles · toque para ver la lista", dir: "" }, "var(--crit)")}</button>
     </div>
     <div class="grid g2" style="margin-top:14px;align-items:start">
       ${card("Qué hacer primero", "en este orden", `<div class="reclist">
@@ -95,16 +95,14 @@
     const cola = S.offline ? S.queue : 0;
     const bajo = D.bajoMinimo();
     const perdida = bajo.reduce((s, x) => s + Math.max(0, x.perdida), 0);
-    const qb = D.quiebres();
     const sinAceptar = D.recibidos.filter(r => r.estado === "Sin aceptar");
     const porLocal = D.ventaPorLocal();
     const maxLocal = Math.max.apply(null, porLocal.map(x => x.total).concat([1]));
     const famM = D.margenPorFamilia();
     /* la salud se mide por artículo y local: un cemento sano en Turrialba y
-       quebrado en Pejibaye no es medio artículo, son dos situaciones */
-    let pares = 0;
-    D.articulos.forEach(a => (pares += Object.keys(D.existencias[a.id] || {}).length));
-    const salud = pares ? Math.round(((pares - qb.length) / pares) * 100) : 100;
+       quebrado en Pejibaye no es medio artículo, son dos situaciones.
+       A7 · el anillo, las cifras y la lista salen de la misma regla (días de cobertura) */
+    const SM = w.INVX.semaforo(), salud = SM.sano;
 
     const alerta = (kind, ic, t, s, dest) => {
       const col = kind === "cr" ? "var(--crit)" : kind === "wa" ? "var(--warn)" : kind === "ok" ? "var(--ok)" : "var(--accent)";
@@ -129,8 +127,9 @@
       `<div class="mut" style="font-size:12.5px;margin-top:6px;display:flex;align-items:center;gap:6px">${icon("info", 'style="width:14px;height:14px"')}El punto ámbar es la caída de enlace del 11 de setiembre: el local siguió facturando contra su nodo.</div>`)}
       ${card("Semáforo de inventario", "todos los locales",
       `<div style="display:flex;align-items:center;gap:18px">${donut(salud, 86, salud > 70 ? "var(--ok)" : "var(--warn)")}
-        <div style="font-size:13.5px;color:var(--ink-2);line-height:1.6">${salud} % de las existencias por local dentro de su rango sano.<br>
-        <span style="color:var(--crit);font-weight:650">${qb.filter(q => q.tipo === "Quiebre").length} artículos en quiebre</span> y ${qb.filter(q => q.tipo === "Bajo mínimo").length} bajo el mínimo.</div></div>`)}
+        <div style="font-size:13.5px;color:var(--ink-2);line-height:1.6">${salud} % de los artículos por local con cobertura normal (15 a 60 días).<br>
+        <button type="button" data-sem="critico" style="all:unset;cursor:pointer;color:var(--crit);font-weight:650;text-decoration:underline;text-underline-offset:3px">${SM.n.critico} en quiebre</button> · <button type="button" data-sem="atencion" style="all:unset;cursor:pointer;color:var(--warn);font-weight:650;text-decoration:underline;text-underline-offset:3px">${SM.n.atencion} en atención</button> · <button type="button" data-sem="sobre" style="all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:3px">${SM.n.sobre} con sobrestock</button></div></div>
+        <div class="mut" style="font-size:12px;margin-top:10px;line-height:1.5">${esc(w.INVX.SEM_DEF)}</div>`)}
     </div>
     <div class="grid g2" style="margin-top:14px;align-items:start">
       ${card("Venta por local", "hoy", porLocal.map(x => barRow(x.loc.nom, x.total, maxLocal, grp(x.total))).join(""))}
@@ -145,7 +144,7 @@
       body: `<div style="display:flex;flex-direction:column;gap:8px">
         ${alerta("cr", "alert", bajo.length + " líneas vendidas bajo el margen mínimo", c(perdida) + " de utilidad no percibida. Todas con autorización registrada y motivo escrito.", "documentos")}
         ${alerta("wa", "alert", sinAceptar.length + " comprobantes de proveedor sin aceptar", "El más antiguo vence en " + (sinAceptar.length ? Math.min.apply(null, sinAceptar.map(r => r.venceEn)) : 0) + " días; después la aceptación ya no se puede enviar.", "fiscal")}
-        ${alerta("wa", "alert", qb.filter(q => q.tipo === "Quiebre").length + " artículos en quiebre y " + qb.filter(q => q.tipo === "Bajo mínimo").length + " bajo el mínimo", "Hay existencia en el CEDI para la mayoría; la reposición sugerida ya los contempla.", "existencias")}
+        ${alerta("wa", "alert", SM.n.critico + " artículos por local en quiebre y " + SM.n.atencion + " en atención", "En quiebre: menos de 7 días de venta disponibles. La reposición sugerida ya los contempla.", "reposicion")}
         ${alerta("ac", "sparkle", "La reposición sugerida del CEDI está lista", "Con el ajuste de temporada de lluvias aplicado.", "reposicion")}
         ${alerta("ok", "check", "Cierre de caja completo en 7 de 7 locales", "Diferencia acumulada del día: ₡1 850 en Cervantes, justificada por el cajero.", null)}
       </div>`
@@ -211,6 +210,7 @@
       </div>`;
     },
     wire(v) {
+      $$("[data-sem]", v).forEach(b => b.addEventListener("click", e => { e.stopPropagation(); if (w.SEMAFORO) w.SEMAFORO.abrir(b.dataset.sem); }));
       $$("[data-role]", v).forEach(b => b.addEventListener("click", () => { S.role = b.dataset.role; A.refresh(); }));
       $$("[data-go2]", v).forEach(b => b.addEventListener("click", () => A.go(b.dataset.go2)));
       const bv = $("#btnIrVender", v); if (bv) bv.addEventListener("click", () => A.go("pos"));
