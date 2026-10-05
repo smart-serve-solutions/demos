@@ -831,6 +831,30 @@
         <span>${x.vuelto ? "Vuelto en efectivo (colones)" : esc(x.medio)}${x.usd ? ` <span class="dim">· US$ ${dec(x.usd, 2)} × ₡${dec(x.tc, 2)}</span>` : ""}${x.ref ? ` <span class="dim">· ref. ${esc(x.ref)}</span>` : ""}</span>
         <span class="num b">${x.monto < 0 ? "−" : ""}${grp(Math.abs(x.monto))}</span></div>`).join("") });
   }
+  /* A4 · reimprimir con vista previa: la plantilla de Sistema › Plantillas y mensajes,
+     con los datos de este comprobante (consecutivo, clave, líneas, pago mixto) */
+  function reimprimir(d) {
+    if (!w.PLANTILLAS) return toast("Sin plantillas", "Falta el módulo de Sistema.", "cr");
+    const { p, html } = w.PLANTILLAS.vistaComprobante(d);
+    openSheet({
+      title: "Reimprimir " + d.cons, sub: "Plantilla «" + p.t + "» · " + p.tam + " · " + p.imp, wide: true,
+      body: `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          ${tag("Reimpresión · sale marcada como copia", "wa", "print")}<span class="mut" style="font-size:12.5px">Mismo consecutivo y clave: no es un comprobante nuevo ni va otra vez a Hacienda.</span></div>
+        <div style="background:var(--surface-2);border-radius:10px;padding:16px;position:relative">
+          ${html}
+          <div aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden"><span style="transform:rotate(-18deg);font-size:72px;font-weight:800;letter-spacing:.1em;color:#1d2433;opacity:.07">COPIA</span></div></div>`,
+      footer: `<button class="btn" id="riVolver">${icon("chev", 'style="transform:rotate(180deg)"')}Volver al comprobante</button><div class="gap"></div>
+        <span class="mut" style="font-size:12px">${p.copias > 1 ? p.copias + " copias" : "1 copia"}</span><button class="btn pri" id="riOk">${icon("print")}Imprimir</button>`,
+      after(el) {
+        $("#riVolver", el).addEventListener("click", () => detalleDoc(d));
+        $("#riOk", el).addEventListener("click", () => {
+          V.anotar("Reimprimió comprobante", d.cons + " · " + p.t, D.sesion.nom, S.locId, "Baja");
+          closeSheet();
+          toast("Enviado a " + p.imp, d.cons + " marcado como reimpresión. Quedó en la bitácora.", "ok");
+        });
+      }
+    });
+  }
   function detalleDoc(d) {
     if (!d) return;
     const f = V.FICHA[d.clienteId];
@@ -865,11 +889,12 @@
             <div class="totline"><span class="tl b">Total</span><span class="tv" style="font-size:17px">${c(d.total)}</span></div>
           </div></div>`,
       footer: `<button class="btn" data-cerrar>Cerrar</button><div class="gap"></div>
-        <button class="btn">${icon("download")}XML</button><button class="btn" id="dReenv">${icon("mail")}Reenviar</button><button class="btn">${icon("print")}Reimprimir</button>
+        <button class="btn">${icon("download")}XML</button><button class="btn" id="dReenv">${icon("mail")}Reenviar</button><button class="btn" id="dReimp">${icon("print")}Reimprimir</button>
         ${d.tipo !== "NC" ? `<button class="btn pri" id="dDev">${icon("swap")}Devolver mercadería</button>` : ""}`,
       after(el) {
         cerrar(el);
         $("#dReenv", el).addEventListener("click", () => toast("Comprobante reenviado", f ? "A " + f.correoFE + " y por WhatsApp." : "Por WhatsApp.", "ok"));
+        $("#dReimp", el).addEventListener("click", () => reimprimir(d));
         const dv = $("#dDev", el); if (dv) dv.addEventListener("click", () => { closeSheet(); dev.doc = d; dev.cant = {}; dev.firma = false; A.go("documentos", "devolver"); });
       }
     });
