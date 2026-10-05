@@ -440,6 +440,13 @@
             ],
           },
           {
+            t: "Retención y archivado",
+            d: "Cuatro períodos más el actual en línea; lo anterior en archivo recuperable en minutos",
+            reqs: [],
+            kw: "retencion archivado historico periodos en linea proformas vencidas rendimiento años respaldo",
+            screen: "sis-retencion",
+          },
+          {
             t: "Este equipo",
             d: "Modo oscuro, terminal y simulación de caída del enlace",
             reqs: [],
@@ -2117,6 +2124,12 @@
       ic: "wrench",
       g: "Taller",
       d: "Boleta, diagnóstico, presupuesto, garantía y entrega",
+    },
+    "sis-retencion": {
+      t: "Retención y archivado",
+      ic: "history",
+      g: "Sistema",
+      d: "Qué queda en línea y qué pasa a archivo",
     },
     integraciones: {
       t: "Panel de integraciones",

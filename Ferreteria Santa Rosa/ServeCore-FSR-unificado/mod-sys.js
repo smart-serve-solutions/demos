@@ -2731,6 +2731,15 @@
           on: false,
           v: "6:30 a 19:30",
         },
+        /* B4 · propuesta de TI: cerrar las sesiones abiertas a una hora fija; apagada
+           hasta que la administración decida si le interesa */
+        {
+          t: "Cierre automático de sesión por horario",
+          d: "A la hora indicada se cierran las sesiones que sigan abiertas, por local (a la hora de cierre de cada tienda) o por rol. Avisa 10 minutos antes y guarda el borrador de la venta. Apagado hasta que la administración lo decida.",
+          on: false,
+          v: "Por local · 30 min después del cierre de la tienda",
+          opts: ["Por local · 30 min después del cierre de la tienda", "Por local · a las 20:00 en todos", "Por rol · caja y piso 20:00, bodega 17:30, oficina 19:00", "Por rol · solo caja y piso, al cerrar el turno"],
+        },
       ],
     },
     {
@@ -2881,6 +2890,7 @@
           cambiarValor({
             title: x.t,
             v: x.v,
+            opts: x.opts,
             sev: "Alta",
             set: (nv) => {
               x.v = nv;
@@ -4614,14 +4624,15 @@
       {
         id: "areas",
         t: "Áreas",
-        sub: "Taller, sala de acabados, tienda virtual y planta, cada una con su resultado",
+        /* B6 · la diferencia en una línea: área es lo que funciona dentro de un local; departamento, el equipo de la persona */
+        sub: "Área = lo que funciona dentro de un local con su propio resultado (tienda virtual, taller, sala de acabados, planta). No es el equipo de la persona: eso es el departamento.",
         render: areas,
         wire: areasWire,
       },
       {
         id: "departamentos",
         t: "Departamentos",
-        sub: "Contabilidad, proveeduría, ventas, bodega… ligados a la planilla",
+        sub: "Departamento = el equipo al que pertenece cada persona (contabilidad, proveeduría, ventas, bodega…), ligado a la planilla. Lo que funciona dentro de un local es un área.",
         render: departamentos,
         wire: departamentosWire,
       },
@@ -7275,6 +7286,73 @@
               x.ult = [new Date(D.HOY), yo()];
             },
           });
+        }),
+      );
+    },
+  });
+
+  /* ── RETENCIÓN Y ARCHIVADO (B5) ──
+     Respuesta de la sesión con TI: cuántos años quedan en línea y qué pasa con lo
+     viejo. Informativa y con parámetros; no simula el proceso de archivado. */
+  const RET = {
+    linea: "4 períodos fiscales cerrados + el actual",
+    archivo: "Almacenamiento de bajo costo · solo lectura · recuperable en minutos",
+    proformas: "Vencidas hace más de 12 meses",
+    bitacora: "En línea 2 años; después, en archivo",
+    corre: "Domingo a la 1:00 a.m., fuera del horario de venta",
+  };
+  const RET_TABLAS = [
+    ["Facturas, tiquetes y notas de crédito", "5 períodos", "≈ 600 000 por año", "Por clave y consecutivo"],
+    ["Proformas", "Vigentes y vencidas del último año", "≈ 150 000 por año", "Por número"],
+    ["Kardex y movimientos de inventario", "5 períodos", "≈ 2 millones por año", "Por artículo y fecha"],
+    ["Asientos contables", "5 períodos", "≈ 650 000 por año", "Por asiento y período"],
+    ["Bitácora de auditoría", "2 años", "≈ 4 millones por año", "Por usuario y fecha"],
+  ];
+  A.screen("sis-retencion", {
+    title: "Retención y archivado",
+    sub: () => "Qué queda en línea, qué pasa a archivo y cuánto tarda en volver · " + RET.linea,
+    render(v) {
+      const filas = [
+        ["Períodos en línea", "linea", "Lo que se consulta y se reporta todos los días. El sistema mantiene siempre el mismo tamaño de trabajo: a los ocho años responde igual que al segundo.", ["3 períodos fiscales cerrados + el actual", "4 períodos fiscales cerrados + el actual", "5 períodos fiscales cerrados + el actual"]],
+        ["Dónde va lo anterior", "archivo", "No se borra: pasa a un almacenamiento más barato, de solo lectura. Una consulta de un año archivado se pide y llega en minutos.", ["Almacenamiento de bajo costo · solo lectura · recuperable en minutos", "Copia en el servidor de la empresa · recuperable en horas"]],
+        ["Proformas vencidas", "proformas", "Regla aparte, porque se acumulan por cientos de miles al año y casi nunca se vuelven a abrir. Las convertidas en factura siguen la regla de la factura.", ["Vencidas hace más de 6 meses", "Vencidas hace más de 12 meses", "Vencidas hace más de 24 meses"]],
+        ["Bitácora de auditoría", "bitacora", "Cada acción con usuario, fecha e IP. La reciente se consulta en línea; la anterior, desde el archivo.", ["En línea 1 año; después, en archivo", "En línea 2 años; después, en archivo", "Todo en línea"]],
+        ["Cuándo corre", "corre", "El paso a archivo es una tarea programada: no compite con la caja.", ["Domingo a la 1:00 a.m., fuera del horario de venta", "Primer día del mes a la 1:00 a.m."]],
+      ];
+      v.innerHTML = `<div class="wrap">
+        ${card({
+          title: "Reglas de retención", hint: "se cambian con motivo; quedan en la bitácora",
+          body: filas.map((f, i) => prefRow(esc(f[0]), esc(f[2]), `<span style="display:flex;gap:10px;align-items:center"><span class="sx-val">${esc(RET[f[1]])}</span><button class="btn sm" data-ret="${i}">Cambiar</button></span>`)).join(""),
+        })}
+        ${card({
+          title: "Qué hay en cada tabla", hint: "volúmenes aproximados para 7 locales; se afinan con los datos de la migración",
+          body: table({
+            cols: [
+              { t: "Información", fmt: (r) => `<b>${esc(r[0])}</b>` },
+              { t: "En línea", fmt: (r) => esc(r[1]) },
+              { t: "Crece", fmt: (r) => `<span class="mut">${esc(r[2])}</span>` },
+              { t: "Se recupera", fmt: (r) => `<span class="mut">${esc(r[3])}</span>` },
+            ],
+            rows: RET_TABLAS,
+          }),
+        })}
+        ${nota("Los comprobantes electrónicos, sus XML y las respuestas de Hacienda se conservan todo el plazo legal: archivar no es borrar. Lo archivado mantiene su clave y se puede volver a consultar o reimprimir. Esta pantalla define la regla; el traslado lo hace una tarea programada del servidor.", "history")}
+      </div>`;
+    },
+    wire(v) {
+      const filas = ["linea", "archivo", "proformas", "bitacora", "corre"];
+      const OPC = {
+        linea: ["3 períodos fiscales cerrados + el actual", "4 períodos fiscales cerrados + el actual", "5 períodos fiscales cerrados + el actual"],
+        archivo: ["Almacenamiento de bajo costo · solo lectura · recuperable en minutos", "Copia en el servidor de la empresa · recuperable en horas"],
+        proformas: ["Vencidas hace más de 6 meses", "Vencidas hace más de 12 meses", "Vencidas hace más de 24 meses"],
+        bitacora: ["En línea 1 año; después, en archivo", "En línea 2 años; después, en archivo", "Todo en línea"],
+        corre: ["Domingo a la 1:00 a.m., fuera del horario de venta", "Primer día del mes a la 1:00 a.m."],
+      };
+      $$("[data-ret]", v).forEach((b) =>
+        b.addEventListener("click", () => {
+          const k = filas[+b.dataset.ret];
+          const TIT = { linea: "Períodos en línea", archivo: "Dónde va lo anterior", proformas: "Proformas vencidas", bitacora: "Bitácora de auditoría", corre: "Cuándo corre el archivado" };
+          cambiarValor({ title: TIT[k], v: RET[k], opts: OPC[k], sev: "Alta", set: (nv) => { RET[k] = nv; } });
         }),
       );
     },

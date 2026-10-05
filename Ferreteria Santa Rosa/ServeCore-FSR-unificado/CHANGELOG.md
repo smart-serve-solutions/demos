@@ -1,5 +1,27 @@
 # Cambios
 
+## 2026-10-05 · Sistema · B4 · B5 · B6 · Cierre por horario, retención y archivado, áreas y departamentos
+
+Requerimiento de la sesión con TI del 1 de octubre.
+
+- **B4 · Cierre automático de sesión por horario** en Políticas de acceso y sesión.
+  - Puede ser por local (por ejemplo, 30 minutos después del cierre de la tienda) o por rol.
+  - Avisa 10 minutos antes y guarda el borrador de la venta.
+  - **Apagado por defecto**, hasta que la administración lo decida.
+- **B5 · Sistema › Mantenimiento › Retención y archivado** (pantalla nueva, informativa y con parámetros editables con
+  motivo):
+  - Cuatro períodos fiscales cerrados más el actual en línea. Lo anterior pasa a un archivo de bajo costo, de solo
+    lectura, recuperable en minutos.
+  - Regla aparte para las proformas vencidas, y otra para la bitácora.
+  - Una tabla con lo que hay en cada tabla y cuánto crece.
+  - Responde la pregunta del rendimiento a los ocho años: el tamaño de trabajo se mantiene igual.
+  - No simula el proceso de archivado. El buscador la encuentra con «retención», «archivado» o «histórico».
+- **B6 · Áreas y Departamentos:** cada pestaña explica la diferencia en una línea.
+  - Área: lo que funciona dentro de un local con su propio resultado.
+  - Departamento: el equipo al que pertenece cada persona.
+
+Archivos: `mod-sys.js`, `nav.js`.
+
 ## 2026-10-05 · Contabilidad / Cobros y pagos · B3 · Asientos automáticos y asientos por revisar
 
 Requerimiento de la sesión con TI del 1 de octubre, punto B3.
