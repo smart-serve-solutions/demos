@@ -481,14 +481,9 @@
     const P = T.per;
     const curva = curvaHoy(s);
     const famM = D.margenPorFamilia();
-    const qb = D.quiebres();
-    const nQ = qb.filter((q) => q.tipo === "Quiebre").length,
-      nB = qb.filter((q) => q.tipo === "Bajo mínimo").length;
-    let pares = 0;
-    D.articulos.forEach(
-      (a) => (pares += Object.keys(D.existencias[a.id] || {}).length),
-    );
-    const salud = pares ? Math.round(((pares - qb.length) / pares) * 100) : 100;
+    /* A7 · semáforo por días de cobertura: anillo, cifras y lista con la misma regla */
+    const SM = w.INVX.semaforo();
+    const nQ = SM.n.critico, nB = SM.n.atencion, salud = SM.sano;
     const maxL = Math.max.apply(null, s.locs.map((x) => x.total).concat([1]));
     const pend = BI.ALERTAS.filter((a) => a.est !== "Resuelta");
     const criticas = pend.filter((a) => a.sev === "crit").length;
@@ -646,12 +641,10 @@
         title: "Semáforo de inventario",
         hint: "cobertura = existencia ÷ venta diaria",
         body: `
-        <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">${donut(salud, 78, salud > 70 ? "var(--ok)" : "var(--warn)")}<div style="font-size:13px;color:var(--ink-2);line-height:1.55">${salud} % de artículos por local dentro de su rango sano</div></div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:8px">${donut(salud, 78, salud > 70 ? "var(--ok)" : "var(--warn)")}<div style="font-size:13px;color:var(--ink-2);line-height:1.55">${salud} % de los artículos por local con cobertura normal (15 a 60 días)</div></div>
+        <div class="mut" style="font-size:12px;margin-bottom:10px;line-height:1.5">${esc(w.INVX.SEM_DEF)}</div>
         <div class="reclist">
-          <div class="rec"><div style="flex:1"><b style="font-size:13.5px">Crítico</b> <span class="mut" style="font-size:12px">menos de 7 días</span></div>${tag(nQ + " artículos", "crit", "alert")}</div>
-          <div class="rec"><div style="flex:1"><b style="font-size:13.5px">Atención</b> <span class="mut" style="font-size:12px">de 7 a 15 días</span></div>${tag(nB + " artículos", "warn", "alert")}</div>
-          <div class="rec"><div style="flex:1"><b style="font-size:13.5px">Normal</b> <span class="mut" style="font-size:12px">de 15 a 60 días</span></div>${tag("Sano", "ok", "check")}</div>
-          <div class="rec"><div style="flex:1"><b style="font-size:13.5px">Sobrestock</b> <span class="mut" style="font-size:12px">más de 60 días</span></div>${tag("38 artículos", "acc", "layers")}</div>
+          ${w.INVX.SEM_CLASES.map((k) => `<button type="button" class="rec" data-sem="${k.id}" style="width:100%;text-align:left;cursor:pointer" title="Ver la lista"><div style="flex:1"><b style="font-size:13.5px">${esc(k.id === "critico" ? "Crítico · en quiebre" : k.corto)}</b> <span class="mut" style="font-size:12px">${esc(k.d)}</span></div>${tag(SM.n[k.id] + " artículos", k.k, k.id === "normal" ? "check" : k.id === "sobre" ? "layers" : "alert")}</button>`).join("")}
         </div>`,
       })}
       ${card({
@@ -680,9 +673,8 @@
     const pend = BI.ALERTAS.filter(
       (a) => a.est !== "Resuelta" && a.sev === "crit",
     );
-    const qb = D.quiebres();
-    const nQ = qb.filter((q) => q.tipo === "Quiebre").length,
-      nB = qb.filter((q) => q.tipo === "Bajo mínimo").length;
+    const SM = w.INVX.semaforo();
+    const nQ = SM.n.critico, nB = SM.n.atencion;
     const maxL = Math.max.apply(null, s.locs.map((x) => x.total).concat([1]));
     const avance = (s.mtd / s.meta) * 100;
     const tile = (l, v, d, extra) =>
@@ -695,8 +687,8 @@
       <div class="tv-t" style="grid-column:span 2"><div class="tv-l">Los 7 locales · venta de hoy</div>${s.locs.map((x) => `<div class="tv-row"><span>${esc(x.loc.nom)}</span><div class="tv-bar"><i style="width:${((x.total / maxL) * 100).toFixed(0)}%;${x.m < 24 ? "background:#f5b94a" : ""}"></i></div><span style="text-align:right;font-family:'IBM Plex Mono',monospace">${grp(x.total)}</span></div>`).join("")}</div>`;
     const v1 = `
       ${tile("Artículos en quiebre", String(nQ), "Crítico · menos de 7 días de cobertura")}
-      ${tile("Bajo el mínimo", String(nB), "Atención · de 7 a 15 días")}
-      ${tile("Sobrestock", "38", "Más de 60 días de cobertura")}
+      ${tile("En atención", String(nB), "De 7 a 15 días de cobertura")}
+      ${tile("Sobrestock", String(SM.n.sobre), "Más de 60 días de cobertura")}
       ${tile("Comprobantes a Hacienda", "2 rechazados", "7 en cola de contingencia · 94 aceptados hoy")}
       ${tile("Cartera vencida", "14,2 %", "₡41,3 M de ₡291 M")}
       ${tile("Ventas perdidas de hoy", c(nQ * 41800 + 236000), "Quiebres y proformas vencidas")}`;
@@ -800,6 +792,7 @@
       v.innerHTML = `<div class="wrap"><div id="biStrip">${stripHTML()}</div><div id="biBody" class="wrap">${cuerpoHoy()}</div></div>`;
     },
     wire(v) {
+      $$("[data-sem]", v).forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); if (w.SEMAFORO) w.SEMAFORO.abrir(b.dataset.sem); }));
       cablea(v);
       wireStrip(v);
       arranca();
