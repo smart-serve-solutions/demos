@@ -482,7 +482,7 @@
      Se parte del balance, se toca una cuenta y aparece su movimiento,
      se toca un movimiento y aparece el asiento con la regla que lo hizo.
      ═════════════════════════════════════════════════════════════ */
-  let diQ = "", diF = "todos", saldoCta = null;
+  let diQ = "", diF = "todos", saldoCta = null, abrirAs = null;
   const verMayor = cod => { if (D.ctaByCod[cod]) A.go("con-libros", "saldos:" + cod); };
   const reglaDe = a => a.regla || (/^APERTURA/.test(a.origen) ? "Asiento manual" : /^DEP/.test(a.origen) ? "Depreciación mensual"
     : /^PRO/.test(a.origen) ? "Provisiones laborales" : /^IPJ/.test(a.origen) ? "Impuesto a las personas jurídicas"
@@ -556,6 +556,7 @@
     })}</div>`;
   }
   function asientosWire(v) {
+    if (abrirAs) { const a = D.asientos.find(x => x.id === abrirAs); abrirAs = null; if (a) setTimeout(() => verAsiento(a), 0); }
     onSeg(v, "dif", x => { diF = x; A.refresh(); });
     const q = $("#diq", v);
     if (q) q.addEventListener("input", () => { diQ = q.value; A.refresh(); setTimeout(() => { const n = $("#diq"); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 0); });
@@ -812,7 +813,9 @@
     title: "Libros",
     onArg: (tab, dato) => {
       if (tab === "saldos") saldoCta = dato && D.ctaByCod[dato] ? dato : null;
-      if (tab === "asientos" && dato) { diF = dato; diQ = ""; }
+      /* «asientos:AS-123» abre ese asiento (enlace directo desde el documento que lo generó) */
+      if (tab === "asientos" && dato && /^AS-/.test(dato)) { diF = "todos"; diQ = dato; abrirAs = dato; }
+      else if (tab === "asientos" && dato) { diF = dato; diQ = ""; }
     },
     tabs: [
       {
