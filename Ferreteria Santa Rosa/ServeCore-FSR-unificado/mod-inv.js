@@ -176,7 +176,8 @@
           </div>
           <div class="ficha" style="margin:15px -17px -16px;border-top:1px solid var(--hair-2)">
             ${esServicio ? fichaCell("Precio", c(a.precio || 0)) : fichaCell("Precio de venta", c(a.precio))}
-            ${esServicio ? "" : fichaCell("Costo promedio", c(a.costo))}
+            ${esServicio ? "" : fichaCell("Costo promedio", c(a.costo) + `<span class="sub ui">valúa el inventario y el costo de venta</span>`)}
+            ${esServicio ? "" : fichaCell("Último costo", c(a.ultCosto != null ? a.ultCosto : a.costo) + `<span class="sub ui">de la última compra · referencia</span>`)}
             ${esServicio ? "" : fichaCell("Margen", dec(a.margen) + ` %<span class="sub ui">mínimo de la familia ${fam.min} %</span>`, a.margen < fam.min ? "var(--crit)" : "var(--ok)")}
             ${esServicio ? fichaCell("Unidad", esc(a.unidad)) : fichaCell("Existencia total", cant(D.stockTotal(a.id), a) + " " + esc(a.unidad) + `<span class="sub ui">habilitado en ${Object.keys(ex).length} locales</span>`)}
           </div>`
