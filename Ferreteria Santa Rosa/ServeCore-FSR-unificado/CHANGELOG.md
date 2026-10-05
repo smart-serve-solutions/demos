@@ -1,5 +1,16 @@
 # Cambios
 
+## 2026-10-05 · POS · B2 · La caja avisa desde el inicio si el local no factura
+
+Requerimiento de la sesión con TI del 1 de octubre, punto B2.
+
+- **Ya existía:** el bloqueo al cobrar, con un aviso. Solo aparecía al final, después de armar toda la venta.
+- **Ahora**, si el local activo no emite comprobantes (CEDI, bodegas) o la terminal no existe en esa tienda, la caja
+  lo dice en una franja arriba **desde que se abre**, y ofrece **«Pasar a Santa Rosa · caja 1»** o «Elegir otro
+  local». La venta que se estaba armando no se pierde al cambiar.
+
+Archivos: `mod-venta.js`.
+
 ## 2026-10-05 · Sistema · B1 · Dos roles con permisos distintos en Proveeduría
 
 Requerimiento de la sesión con TI del 1 de octubre, punto B1.

@@ -257,7 +257,16 @@
         : `<div style="padding:30px 6px;text-align:center;color:var(--ink-4);font-size:13px;line-height:1.5">
             ${icon("box", 'style="width:26px;height:26px;margin-bottom:8px;color:var(--ink-4)"')}<br>Seleccione una línea de la factura para ver y editar su detalle.</div>`;
 
-      v.innerHTML = `<div class="poswrap">
+      /* B2 · si el local activo no emite (CEDI, bodegas) o la terminal no existe, se avisa
+         desde que se abre la caja y se ofrece pasar a una tienda, no hasta el cobro */
+      const locA = D.locales.find(l => l.id === S.locId) || {};
+      const noEmite = !D.puedeEmitir(S.locId, S.term);
+      const avisoLocal = noEmite ? `<div role="alert" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:11px 20px;background:var(--warn-soft);border-bottom:1px solid var(--hair);font-size:13px">
+          ${icon("alert", 'style="color:var(--warn);flex:none"')}<div style="flex:1;min-width:240px"><b>${locA.tipo === "tienda" ? "La terminal " + S.term + " no existe en " + esc(locA.nom) : esc(locA.nom || "Este local") + " no factura"}</b>
+          <span class="mut"> · ${locA.tipo === "tienda" ? esc(locA.nom) + " tiene " + locA.terminales + " cajas." : "Solo las cajas de las tiendas emiten comprobantes. Puede armar la venta, pero para cobrarla hay que pasar a una tienda."}</span></div>
+          <button class="btn sm pri" id="posATienda">${icon("pin")}Pasar a ${esc((locA.tipo === "tienda" ? locA : D.tiendas[0]).nom)} · caja 1</button>
+          <button class="btn sm" id="posOtroLocal">Elegir otro local</button></div>` : "";
+      v.innerHTML = `<div class="poswrap">${avisoLocal}
         <div class="posgrid">
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:14px 20px 18px;gap:14px;overflow:auto">
             <div style="position:relative;flex:none">
@@ -306,6 +315,14 @@
         </div></div>`;
     },
     wire(v) {
+      const at = $("#posATienda", v);
+      if (at) at.addEventListener("click", () => {
+        const l = D.locales.find(x => x.id === S.locId);
+        S.locId = l && l.tipo === "tienda" ? l.id : D.tiendas[0].id; S.term = 1;
+        toast("Caja 1 de " + D.locales.find(x => x.id === S.locId).nom, "La venta que estaba armando sigue en pantalla.", "ok");
+        A.refresh();
+      });
+      const ol = $("#posOtroLocal", v); if (ol) ol.addEventListener("click", () => { const b = $("#btnLocal"); if (b) b.click(); });
       const scan = $("#posScan", v), box = $("#posMatches", v);
       let sel = 0; /* fila resaltada de los resultados; se mueve con ↑ y ↓ */
       function pinta(reiniciar) {
