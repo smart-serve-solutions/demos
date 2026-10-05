@@ -146,6 +146,7 @@
       const hechos = AU.hechoSolo();
       v.innerHTML = `<div class="wrap">
         ${flujo3()}
+        <div class="mut" style="font-size:13px;line-height:1.55;display:flex;gap:8px;align-items:flex-start">${icon("info", 'style="width:16px;height:16px;flex:none;margin-top:2px;color:var(--accent)"')}<span><b style="color:var(--ink-2)">El contador no acepta asiento por asiento.</b> Aquí solo llegan los que tienen alguna inconsistencia (no cuadró, falta un dato o una regla pide revisión). Los demás —${grp(D.asientos.filter(a => !a.manual && !a.propuesto && a.origen !== "APERTURA").length)} este mes— se registran solos y quedan en <button class="btn sm" data-ir="con-libros|asientos">Libros › Asientos</button> con su origen.</span></div>
         <div class="grid" style="grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);align-items:start">
           <div class="wrap">
             ${total ? `<div class="scrollx">${seg("bqf", [{ v: "todo", t: "Todo · " + total }].concat(gs.map(g => ({ v: g.id, t: CORTO[g.id] + " · " + g.items.length }))), bqFiltro)}</div>` : ""}
@@ -488,8 +489,17 @@
     : /^PRO/.test(a.origen) ? "Provisiones laborales" : /^IPJ/.test(a.origen) ? "Impuesto a las personas jurídicas"
       : /^PLA/.test(a.origen) ? "Planilla" : /^OC-/.test(a.origen) ? "Compra aplicada" : /-03-/.test(a.origen) ? "Nota de crédito"
         : /-04-/.test(a.origen) ? "Tiquete electrónico" : /-01-/.test(a.origen) ? "Factura de venta" : "Documento");
-  const estadoAs = a => a.origen === "APERTURA" ? tag("Migración", "mu") : a.manual ? tag("Manual", "wa") : a.propuesto ? tag("Por aprobar", "wa", "clock")
-    : a.aprobado ? tag("Aprobado · " + nombre(a.aprobado), "ok", "check") : tag("Automático", "ok", "check");
+  /* B3 · de dónde viene un asiento automático, en una palabra */
+  const origenAs = a => {
+    const r = reglaDe(a), o = String(a.origen || "");
+    return /caja chica|WhatsApp/i.test(r + " " + a.glosa) ? "caja menor" : /^REC-/.test(o) || /Gasto por proveedor/.test(r) ? "compra"
+      : /Ajustes? de costo/i.test(r) ? "ajuste de costo" : /taller/i.test(r) ? "taller" : /Pago(s)? a proveedores|Pago de planilla|^LP-/.test(r + " " + o) ? "pago"
+      : /Factura de venta|Tiquete|Venta/.test(r) ? "venta" : /Nota de crédito/.test(r) ? "nota de crédito" : /Compra|recibido|Gasto/i.test(r) ? "compra"
+        : /Planilla|Provisiones/.test(r) ? "planilla" : /Cobro|REP/i.test(r + " " + a.glosa) ? "cobro" : /Depreciación/.test(r) ? "depreciación"
+          : /datáfono|Depósito|Cierre de caja|^CJ-|(Faltante|Sobrante) de caja/i.test(r + " " + a.glosa + " " + o) ? "caja y bancos" : r.toLowerCase();
+  };
+  const estadoAs = a => a.origen === "APERTURA" ? tag("Migración", "mu") : a.manual ? tag("Manual", "wa") : a.propuesto ? tag("Por aprobar · " + origenAs(a), "wa", "clock")
+    : a.aprobado ? tag("Aprobado · " + nombre(a.aprobado), "ok", "check") : tag("Automático · " + origenAs(a), "ok", "check");
 
   function verAsiento(a) {
     openSheet({
