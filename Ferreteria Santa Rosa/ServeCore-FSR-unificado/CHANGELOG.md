@@ -1,5 +1,22 @@
 # Cambios
 
+## 2026-10-05 · Contabilidad / Cobros y pagos · B3 · Asientos automáticos y asientos por revisar
+
+Requerimiento de la sesión con TI del 1 de octubre, punto B3.
+
+- **Bandeja del contador:** una línea dice que el contador no acepta asiento por asiento: solo llegan los que tienen
+  alguna inconsistencia. Los demás (cuántos en el mes) se registran solos y están en Libros › Asientos, con enlace.
+- **Libros › Asientos:** cada asiento dice de dónde viene: «Automático · venta / compra / pago / caja menor / cobro /
+  caja y bancos / nota de crédito / planilla / ajuste de costo / taller», frente a «Manual», «Por aprobar · …» y
+  «Migración».
+- **Enlaces directos al asiento:**
+  - Desde el lote de pago (historial y detalle, ver A6).
+  - Desde la liquidación de caja menor: columna «Asiento del gasto» en cada vale ya confirmado.
+- **Queda pendiente:** la reposición de caja chica todavía no entra sola a un lote de pago. Su asiento (banco a caja)
+  se muestra como vista previa al liquidar.
+
+Archivos: `mod-conta.js`, `mod-cobros.js`.
+
 ## 2026-10-05 · POS · B2 · La caja avisa desde el inicio si el local no factura
 
 Requerimiento de la sesión con TI del 1 de octubre, punto B2.

@@ -2360,13 +2360,13 @@
     const pend = vs.filter(x => /Por confirmar/.test(x.estado));
     openSheet({
       wide: true, title: "Liquidar y reponer · " + fondoNom(f), sub: vs.length + " vales · " + c(tot) + " · custodio " + f.custodio,
-      body: `${table({ cols: [{ t: "Vale", cls: "mono", fmt: x => esc(x.id) }, { t: "Descripción", fmt: x => esc(x.desc) }, { t: "Comprobante", fmt: x => tag(x.fe ? "FE" : "Sin FE", x.fe ? "ok" : "wa") }, { t: "Estado", fmt: x => tag(x.estado, /Por confirmar/.test(x.estado) ? "wa" : "mu") }, { t: "Monto", r: true, cls: "mono", fmt: x => grp(x.monto) }], rows: vs, foot: [{ v: "<b>A reponer</b>", span: 4 }, { v: `<b>${grp(tot)}</b>`, r: true, cls: "mono" }] })}
+      body: `${table({ cols: [{ t: "Vale", cls: "mono", fmt: x => esc(x.id) }, { t: "Descripción", fmt: x => esc(x.desc) }, { t: "Comprobante", fmt: x => tag(x.fe ? "FE" : "Sin FE", x.fe ? "ok" : "wa") }, { t: "Asiento del gasto", fmt: x => x.gasto && x.gasto.asiento ? `<button class="btn sm" data-ir="con-libros|asientos:${esc(x.gasto.asiento)}">${icon("book")}${esc(x.gasto.asiento)}</button>` : x.gasto ? '<span class="dim">al confirmarlo</span>' : '<span class="dim">—</span>' }, { t: "Estado", fmt: x => tag(x.estado, /Por confirmar/.test(x.estado) ? "wa" : "mu") }, { t: "Monto", r: true, cls: "mono", fmt: x => grp(x.monto) }], rows: vs, foot: [{ v: "<b>A reponer</b>", span: 4 }, { v: `<b>${grp(tot)}</b>`, r: true, cls: "mono" }] })}
         ${pend.length ? nota(pend.length + " vale(s) todavía están por confirmar en Contabilidad: la liquidación espera a que se confirmen.", "clock", "wa") : ""}
         ${asientoBox([{ cta: "1-01-01-001", debe: tot, haber: 0, nota: "vuelve el efectivo al fondo" }, { cta: "1-01-02-001", debe: 0, haber: tot }], "Asiento de la reposición", "el gasto de cada vale ya se registró al confirmarlo")}
         ${firmaCampos(["Sonia Calderón · Contabilidad", "Adrián Vindas · Gerencia"], "lfQ")}`,
       footer: `<button class="btn" data-cerrar>Cancelar</button><div class="gap"></div><button class="btn pri" id="lfOk">${icon("check")}Aprobar reposición</button>`,
       after(el) {
-        cerrar(el);
+        cerrar(el); A.wireIr(el);
         $("#lfOk", el).addEventListener("click", () => {
           if (pend.length) return toast("Hay vales por confirmar", "Contabilidad los confirma en su bandeja antes de reponer.", "wa");
           if (!$("#lfQK", el).value) return toast("Falta la clave", "", "cr");
