@@ -1530,10 +1530,11 @@
           A._lotes = L;
           v.innerHTML = `<div class="wrap">${tablaLotes(L, false)}</div>`;
         },
-        wire(v) { A.wireIr(v); $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => verLote(A._lotes[+tr.dataset.i]))); }
+        wire(v) { A.wireIr(v); $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", e => { if (!e.target.closest("[data-ir]")) verLote(A._lotes[+tr.dataset.i]); })); }
       }
     ]
   });
+  let histSel = null;   /* el lote recién confirmado queda resaltado en el historial */
   function tablaLotes(L, conOrigen) {
     return card({
       title: "Lotes de pago", hint: "toque uno para ver el detalle",
@@ -1547,8 +1548,10 @@
             { t: "Transferencias", r: true, cls: "mono", fmt: l => l.items.length || l.n },
             { t: "Total", r: true, cls: "mono", fmt: l => `<b>${grp(l.items.length ? netoLote(l) : l.total)}</b>` },
             { t: "Firmas", fmt: l => l.firmas.length ? esc(l.firmas.map(f => f.nom.split(" ")[0]).join(" + ")) : '<span class="mut">ninguna</span>' },
-            { t: "Estado", fmt: l => tag(estadoLote(l), kLote(l), l.estado === "Pagado" ? "check" : l.estado === "Por aprobar" ? "shield" : "bank") }
-          ]), rows: L
+            { t: "Estado", fmt: l => tag(estadoLote(l), kLote(l), l.estado === "Pagado" ? "check" : l.estado === "Por aprobar" ? "shield" : "bank") + (l.archivo && l.archivo.aceptado ? `<span class="sub">confirmado ${fh(l.archivo.aceptado)}</span>` : "") },
+            /* A6 · el asiento que generó la confirmación, con enlace directo */
+            { t: "Asiento", fmt: l => l.asiento ? `<button class="btn sm" data-ir="con-libros|asientos:${esc(l.asiento)}">${icon("book")}${esc(l.asiento)}</button>` : l.items.length ? '<span class="dim">al confirmar</span>' : '<span class="dim">migrado</span>' }
+          ]), rows: L, rowCls: l => (l.cons === histSel ? "sel" : "")
       })
     });
   }
@@ -1623,7 +1626,8 @@
         ${l.asiento ? `<div style="margin-top:8px">${asientoTabla(asientoPor(l.asiento).detalle, l.asiento + " · pago confirmado")}</div>` : ""}`,
       footer: `<button class="btn" data-cerrar>Cerrar</button><div class="gap"></div>
         ${l.estado === "Por aprobar" ? `<button class="btn" id="loRech">${icon("x")}Devolver</button><button class="btn pri" id="loFir">${icon("shield")}Firmar</button>` : ""}
-        ${/Aprobado|Archivo|Validado|Enviado/.test(l.estado) ? `<button class="btn pri" data-ir="cob-archivo|bandeja">${icon("bank")}Ir a Pagos al banco</button>` : ""}`,
+        ${/Aprobado|Archivo|Validado|Enviado/.test(l.estado) ? `<button class="btn pri" data-ir="cob-archivo|bandeja">${icon("bank")}Ir a Pagos al banco</button>` : ""}
+        ${l.asiento ? `<button class="btn pri" data-ir="con-libros|asientos:${esc(l.asiento)}">${icon("book")}Ver el asiento ${esc(l.asiento)}</button>` : ""}`,
       after(el) {
         cerrar(el); A.wireIr(el);
         const fi = $("#loFir", el); if (fi) fi.addEventListener("click", () => firmarLote(l));
@@ -1804,7 +1808,11 @@
           A._hist = L;
           v.innerHTML = `<div class="wrap">${tablaLotes(L, true)}</div>`;
         },
-        wire(v) { $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => verLote(A._hist[+tr.dataset.i]))); }
+        wire(v) {
+          A.wireIr(v);
+          $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", e => { if (!e.target.closest("[data-ir]")) verLote(A._hist[+tr.dataset.i]); }));
+          const s = v.querySelector("tr.sel"); if (s) s.scrollIntoView({ block: "center" });
+        }
       },
       {
         id: "reglas", t: "Firmas y responsables", sub: "Parámetros por origen: cuántas firmas, quiénes firman, quién genera el archivo y quién lo sube",
@@ -1908,7 +1916,7 @@
           if (/rechazos/.test($("#rbR", el).value)) l.archivo.rechazos = 1;
           if (l.alConfirmar) { try { l.alConfirmar(a); } catch (e) { /* el origen se actualiza solo al refrescar */ } }
           V.anotar(prov ? "Confirmó pago a proveedores" : "Confirmó pago de planilla", l.cons + " · " + c(tot) + " · asiento " + a.id, persona(reglaDe(l).sube), S.locId, "Alta");
-          closeSheet(); toast("Pago confirmado · " + a.id, prov ? l.items.length + " proveedores avisados. Los saldos ya bajaron en el auxiliar y en el mayor." : l.concepto + " pagada: Nómina ya la ve como pagada.", "ok"); A.refresh();
+          closeSheet(); histSel = l.cons; A.go("cob-archivo", "historial"); toast("Pago confirmado · " + a.id + " · queda en el Historial", prov ? l.items.length + (l.items.length === 1 ? " proveedor avisado." : " proveedores avisados.") + " Los saldos ya bajaron en el auxiliar y en el mayor." : l.concepto + " pagada: Nómina ya la ve como pagada.", "ok"); A.refresh();
         });
       }
     });

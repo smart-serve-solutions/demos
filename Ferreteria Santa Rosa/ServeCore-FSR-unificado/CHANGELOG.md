@@ -1,5 +1,24 @@
 # Cambios
 
+## 2026-10-05 · Cobros y pagos / Contabilidad · A6 · El lote de pago confirmado queda a la vista en el historial
+
+Requerimiento de la sesión con TI del 1 de octubre, punto A6.
+
+- **Ya existía:** el Historial de Pagos al banco lista todos los lotes, incluidos los pagados.
+- **Lo que confundía:** al confirmar, el lote salía de la Bandeja y la pantalla se quedaba ahí, sin decir adónde se
+  fue. Tampoco se veía el asiento generado.
+- **Ahora:**
+  - Al confirmar el pago, la pantalla pasa al **Historial** con el lote resaltado. El aviso dice «queda en el
+    Historial».
+  - El historial (también la pestaña Lotes de proveedores de Cuentas por pagar) muestra el estado, la fecha y hora
+    de confirmación, las firmas y una columna **Asiento** con enlace directo al asiento del pago. Los lotes del
+    sistema anterior dicen «migrado».
+  - El detalle del lote tiene el botón «Ver el asiento AS-…».
+- **Contabilidad › Libros:** el enlace `con-libros|asientos:AS-…` filtra la lista y abre ese asiento. Lo usan los
+  documentos que generan asientos.
+
+Archivos: `mod-cobros.js`, `mod-conta.js`.
+
 ## 2026-10-05 · Reportería · A5 · «Sin acceso» con el perfil de administrador
 
 Requerimiento de la sesión con TI del 1 de octubre, punto A5.
