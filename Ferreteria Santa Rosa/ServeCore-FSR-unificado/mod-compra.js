@@ -46,6 +46,26 @@
     const pid = QUIEN[ROL[acc][0]], p = D.PERSONAS.find(x => x.id === pid);
     return `<span class="sbh">Lo hace ${esc(ROL[acc].join(" o "))}</span>${p ? `<button class="btn sm" data-como="${p.id}">${icon("users")}Entrar como ${esc(p.corto)}</button>` : ""}`;
   }
+  /* A2 · quien aprueba (Gerencia) puede crear órdenes, pero entonces no las puede aprobar:
+     se avisa antes, con la opción de hacerlo como Proveeduría */
+  function antesDeCrear(que, cuales, seguir, una) {
+    const ger = D.PERSONAS.find(x => x.id === QUIEN["Gerencia"]), com = D.PERSONAS.find(x => x.id === QUIEN["Proveeduría"]);
+    if (!D.puede("Gerencia") || !com) return seguir();
+    openSheet({
+      title: "Usted es quien aprueba", sub: "Separación de funciones",
+      body: `<div class="mut" style="font-size:13px;line-height:1.55">Si usted va a ${esc(que)}, ${esc(cuales)} ${una ? "queda" : "quedan"} a su nombre y, por separación de funciones, <b>no ${una ? "la" : "las"} podrá aprobar</b>: tendría que aprobar${una ? "la" : "las"} otra persona de Gerencia.<br><br>Lo normal es que lo haga Proveeduría y usted apruebe después.</div>`,
+      footer: `<button class="btn" id="adX">Cancelar</button><div style="flex:1"></div><button class="btn" id="adYo">Seguir como ${esc(D.sesion.corto)}</button><button class="btn pri" id="adCom">${icon("users")}Hacerlo como ${esc(com.corto)}</button>`,
+      after: r => {
+        $("#adX", r).addEventListener("click", closeSheet);
+        $("#adYo", r).addEventListener("click", () => { closeSheet(); seguir(); });
+        $("#adCom", r).addEventListener("click", () => {
+          const p = D.cambiarSesion(com.id); closeSheet();
+          toast("Sesión de " + p.nom, p.cargo + " · después entre como " + (ger ? ger.corto : "Gerencia") + " para aprobar.", "in");
+          seguir();
+        });
+      }
+    });
+  }
   function wireComo(v) {
     $$("[data-como]", v).forEach(b => b.addEventListener("click", () => {
       const p = D.cambiarSesion(b.dataset.como);
@@ -109,6 +129,8 @@
     const p = D.provById[oc.provId] || {};
     oc.tipo = oc.tipo || "Reventa";
     oc.creadoPor = oc.creadoPor || GENTE.compra;
+    /* A3: quién la hizo y quién la aprobó, con fecha y hora */
+    if (!oc.creadoEn) { oc.creadoEn = new Date(oc.fecha); if (!oc.creadoEn.getHours()) oc.creadoEn.setHours(9, 10 + (oc.lineas.length * 7) % 40); }
     oc.plazoPactado = oc.plazoPactado != null ? oc.plazoPactado : p.plazo;
     oc.neg = oc.neg || "N";
     oc.hist = oc.hist || [{ f: oc.fecha, quien: oc.creadoPor, acc: "Registró la orden" }];
@@ -116,7 +138,8 @@
     oc.lineas.forEach(l => { if (l.var == null) l.var = varDe(l); });
     if (oc.estado !== "Registrada" && oc.estado !== "Anulada" && !oc.aprobadoPor) {
       oc.aprobadoPor = GENTE.gerente;
-      oc.hist.push({ f: oc.fecha, quien: GENTE.gerente, acc: "Aprobó la orden y se envió al proveedor" });
+      oc.aprobadoEn = new Date(oc.creadoEn.getTime() + (2 + oc.lineas.length % 4) * 3600000);
+      oc.hist.push({ f: oc.aprobadoEn, quien: GENTE.gerente, acc: "Aprobó la orden y se envió al proveedor" });
     }
     if ((oc.estado === "Aplicada" || recibida(oc)) && !oc.rec) {
       const parcial = oc.estado === "Recibida parcial", cant = {}, trato = {};
@@ -140,6 +163,7 @@
   function nuevaOC(provId, locId, items, estado) {
     const oc = prepara(D.crearOC(provId, locId, items, estado || "Registrada", D.ahora()));
     oc.creadoPor = D.sesion.nom;
+    oc.creadoEn = D.ahora();
     oc.hist = [{ f: D.ahora(), quien: D.sesion.nom, acc: "Registró la orden" }];
     oc.lineas.forEach(l => { l.var = varDe(l); });
     return oc;
@@ -181,7 +205,7 @@
     if (oc.estado === "Registrada") {
       const bl = oc.lineas.filter(bloqueada).length;
       return bar("Borrador · sigue aprobarla", bl ? bl + " línea" + (bl > 1 ? "s" : "") + " con el costo fuera de ±" + POL.topeVar + " %: corrija el costo o pida la autorización antes de aprobar." : oc.lineas.length ? "Mientras sea borrador se edita o se elimina y no compromete nada. Al aprobarla toma su consecutivo oficial, queda firme (ya no se edita, solo se anula) y se envía al proveedor con su QR." : "Agregue artículos: uno por uno, desde una plantilla o desde el sugerido de compra. Si no la va a usar, elimine el borrador.",
-        aqui === "ordenes" ? `<button class="btn pri" id="ocAprobar" ${bl || !oc.lineas.length ? "disabled" : ""}>${icon("check")}Aprobar y enviar</button>` : ir("ordenes", "Ir a la orden"), "aprobar");
+        aqui === "ordenes" ? `<button class="btn pri" id="ocAprobar" ${!oc.lineas.length ? "disabled" : ""}>${icon("check")}Aprobar y enviar</button>` : ir("ordenes", "Ir a la orden"), "aprobar");
     }
     if (oc.estado === "Aprobada") return bar("Aprobada · sigue recibir en bodega", "Ya es firme ante el proveedor, pero todavía no es compra: el inventario y la cuenta por pagar entran cuando se aplica su factura. La bodega escanea la mercadería contra la orden (o el QR).", aqui === "recepcion" ? "" : ir("recepcion", "Recibir", "scan"), aqui === "recepcion" ? "recibir" : null);
     if (recibida(oc)) return bar("Sigue: registrar la compra", "Proveeduría coteja orden, recepción y factura electrónica del proveedor; lo que no cuadra se acepta parcial y se pide la nota de crédito.", aqui === "registrar-compra" ? "" : ir("registrar-compra", "Registrar compra", "file"), aqui === "registrar-compra" ? "registrar" : null);
@@ -197,6 +221,7 @@
   }
 
   /* lista de órdenes a la izquierda (bandeja) */
+  const corto2 = n => { const t = String(n || "").split(" "); return t[0] + (t[1] ? " " + t[1][0] + "." : ""); };
   function listaOC(rows, sel, o) {
     o = o || {};
     if (!rows.length) return empty("truck", o.vacioT || "Nada pendiente", o.vacioP || "Cuando haya órdenes en este paso aparecen aquí.");
@@ -206,7 +231,9 @@
         <button class="mitem" style="flex:1;display:block;text-align:left" data-oc="${esc(x.cons)}" aria-selected="${x.cons === sel}">
           <span style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span class="itd num" style="white-space:nowrap">${esc(nomOC(x.cons))}</span><b class="num" style="font-size:12.5px;white-space:nowrap">${grp(x.total)}</b></span>
           <span class="itc" style="display:block">${esc(provCorto(x.provId))} · ${esc(locNom(x.locId))}</span>
-          <span class="itc" style="display:block">${x.lineas.length} líneas · ${fecha(x.fecha)}${x.origen ? " · de " + esc(nomOC((ocDe(x.origen) || {}).cons || x.origen)) : ""}</span>
+          <span class="itc" style="display:block">${x.lineas.length} líneas${x.origen ? " · de " + esc(nomOC((ocDe(x.origen) || {}).cons || x.origen)) : ""}</span>
+          <span class="itc" style="display:block">Creó ${esc(corto2(x.creadoPor))} · ${U.fh(x.creadoEn || x.fecha)}</span>
+          <span class="itc" style="display:block">${x.aprobadoPor ? "Aprobó " + esc(corto2(x.aprobadoPor)) + " · " + U.fh(x.aprobadoEn || x.fecha) : x.estado === "Anulada" ? "Anulada" : "Sin aprobar"}</span>
           ${o.estado === false ? "" : `<span style="display:block;margin-top:5px">${estTag(x)}</span>`}
         </button></div>`).join("")}</div>`;
   }
@@ -459,6 +486,8 @@
           ${fichaCell("Proveedor", `<button id="ocProv" title="Abrir la ficha sin salir de la orden" style="all:unset;cursor:pointer;font-family:var(--ui);font-size:14px;color:var(--accent);text-decoration:underline;text-underline-offset:3px">${esc(p.nom)}</button><span class="sub">${esc(p.ced)} · ver o editar sin salir</span>`)}
           ${fichaCell("Destino", `<span style="font-family:var(--ui);font-size:14px">${esc(locNom(oc.locId))}</span>`)}
           ${fichaCell("Condición de pago", `<span style="font-family:var(--ui);font-size:14px">${oc.plazo} días</span><span class="sub">${esc(neg.t)}${neg.desc ? " · " + dec(neg.desc, neg.desc % 1 ? 1 : 0) + " %" : ""}${oc.plazo !== neg.plazo ? " · plazo especial" : ""}</span>${abierta(oc) ? ` <button class="btn sm" id="ocPlazo" style="margin-top:4px">Cambiar</button>` : ""}`)}
+          ${fichaCell("Creada por", `<span style="font-family:var(--ui);font-size:14px">${esc(oc.creadoPor || "—")}</span><span class="sub">${U.fh(oc.creadoEn || oc.fecha)}</span>`)}
+          ${fichaCell("Aprobada por", oc.aprobadoPor ? `<span style="font-family:var(--ui);font-size:14px">${esc(oc.aprobadoPor)}</span><span class="sub">${U.fh(oc.aprobadoEn || oc.fecha)}</span>` : `<span style="font-family:var(--ui);font-size:14px;color:var(--ink-3)">${oc.estado === "Anulada" ? "No se aprobó" : "Pendiente"}</span><span class="sub">la aprueba Gerencia, no quien la hizo</span>`)}
           ${fichaCell("Estado", estTag(oc).replace('class="tag', 'style="white-space:normal;height:auto;line-height:1.35;padding-top:3px;padding-bottom:3px" class="tag'))}
         </div>`
     })}
@@ -571,12 +600,63 @@
     if (bl) return bl + " línea" + (bl > 1 ? "s" : "") + " con el costo fuera de rango";
     return null;
   }
+  /* A2 · cuando no se puede aprobar, decir por qué y ofrecer ahí mismo lo que lo resuelve.
+     La separación de funciones no se afloja: es un control y un argumento de venta. */
+  function porQueNoAprueba(oc) {
+    const R = [], ger = D.PERSONAS.find(x => x.id === QUIEN["Gerencia"]), com = D.PERSONAS.find(x => x.id === QUIEN["Proveeduría"]);
+    const lista = OCS().find(o => o !== oc && o.estado === "Registrada" && o.lineas.length && o.creadoPor !== (ger && ger.nom) && !o.lineas.some(bloqueada));
+    if (!puede("aprobar"))
+      R.push({ t: "La aprueba Gerencia", d: "Usted entró como " + D.sesion.cargo + ". Aprobar compromete la compra ante el proveedor.",
+        btn: ger && ger.nom !== oc.creadoPor ? `<button class="btn sm pri" data-como="${ger.id}">${icon("users")}Entrar como ${esc(ger.corto)}</button>` : "" });
+    if (oc.creadoPor === D.sesion.nom || (!puede("aprobar") && ger && ger.nom === oc.creadoPor))
+      R.push({ t: "La hizo " + (oc.creadoPor === D.sesion.nom ? "usted" : oc.creadoPor), d: "Por separación de funciones, quien hace la orden no la aprueba. " + (ger && ger.nom === oc.creadoPor ? "En la demo solo " + ger.corto + " aprueba: para el recorrido use una orden hecha por Proveeduría." : ""),
+        btn: (ger && ger.nom !== oc.creadoPor && D.sesion.id !== ger.id ? `<button class="btn sm pri" data-como="${ger.id}">${icon("users")}Entrar como ${esc(ger.corto)}</button>` : "")
+          + (lista ? `<button class="btn sm" data-veroc="${esc(lista.cons)}">${icon("chev")}Abrir ${esc(nomOC(lista.cons))}, lista para aprobar</button>` : "") });
+    oc.lineas.forEach((l, i) => {
+      if (!bloqueada(l)) return;
+      const a = artOf(l.artId), puedeAut = puede("autorizar") && oc.creadoPor !== D.sesion.nom;
+      R.push({ t: "Costo fuera de ±" + POL.topeVar + " % · " + a.desc, d: "En la orden " + c(l.costo) + ", vigente " + c(a.costo) + " (" + (l.var > 0 ? "+" : "") + dec(l.var, 1) + " %). Si es un error de digitación, corrija el costo en la línea; si es real, Gerencia lo autoriza con un motivo.",
+        btn: `<button class="btn sm" data-corr="${i}">${icon("clip")}Corregir el costo</button>` + (puedeAut ? `<button class="btn sm pri" data-aut="${i}">${icon("check")}Autorizar con motivo</button>` : `<span class="mut" style="font-size:12px">lo autoriza Gerencia${oc.creadoPor === D.sesion.nom ? " (no quien hizo la orden)" : ""}</span>`) });
+    });
+    if (!oc.lineas.length) R.push({ t: "No tiene líneas", d: "Agregue al menos un artículo.", btn: "" });
+    return R;
+  }
+  function explicarNoAprueba(oc) {
+    const R = porQueNoAprueba(oc);
+    openSheet({
+      title: "Todavía no se puede aprobar " + nomOC(oc.cons), sub: R.length === 1 ? "Falta resolver una cosa" : "Faltan resolver " + R.length + " cosas",
+      body: `<div style="display:flex;flex-direction:column;gap:10px">${R.map(x => `<div style="padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--surface-2)">
+          <div style="display:flex;gap:8px;align-items:flex-start">${icon("alert", 'style="flex:none;color:var(--warn);margin-top:2px"')}<div style="flex:1"><b>${esc(x.t)}</b><div class="mut" style="font-size:12.5px;margin-top:3px;line-height:1.5">${esc(x.d)}</div>
+          ${x.btn ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">${x.btn}</div>` : ""}</div></div></div>`).join("")}</div>`,
+      footer: `<div style="flex:1"></div><button class="btn" id="nqX">Cerrar</button>`,
+      after: r => {
+        $("#nqX", r).addEventListener("click", closeSheet);
+        $$("[data-como]", r).forEach(b => b.addEventListener("click", () => {
+          const p = D.cambiarSesion(b.dataset.como);
+          toast("Sesión de " + p.nom, p.cargo + " · lo que haga queda en la bitácora con su usuario.", "in");
+          A.refresh();
+          if (porQueNoAprueba(oc).length) explicarNoAprueba(oc); else { closeSheet(); aprobar(oc, true); }
+        }));
+        $$("[data-veroc]", r).forEach(b => b.addEventListener("click", () => { ocSel = b.getAttribute("data-veroc"); ocFiltro = "Por aprobar"; closeSheet(); A.refresh(); }));
+        $$("[data-aut]", r).forEach(b => b.addEventListener("click", () => autorizarLinea(oc, oc.lineas[+b.dataset.aut])));
+        $$("[data-corr]", r).forEach(b => b.addEventListener("click", () => {
+          closeSheet();
+          const l = oc.lineas[+b.dataset.corr];
+          toast("Corrija el costo en la línea", artOf(l.artId).desc + ": el costo vigente es " + c(artOf(l.artId).costo) + ".", "in");
+          const inp = document.querySelector(`[data-lk="${b.dataset.corr}"]`);
+          if (inp) { inp.scrollIntoView({ block: "center" }); inp.focus(); inp.select(); }
+        }));
+      }
+    });
+  }
   function aprobar(oc, avisa) {
+    if (avisa && (!puede("aprobar") || motivoNoAprueba(oc))) { explicarNoAprueba(oc); return false; }
     if (!exige("aprobar", "Aprobar órdenes de compra")) return false;
     const m = motivoNoAprueba(oc);
     if (m) { if (avisa) toast("No se aprobó " + oc.cons, m + ".", "cr"); return false; }
     oc.estado = "Aprobada";
     oc.aprobadoPor = D.sesion.nom;
+    oc.aprobadoEn = D.ahora();
     /* aquí, y no antes, toma el consecutivo oficial: un borrador eliminado no deja hueco */
     const antes = oc.cons;
     D.consecutivoOC(oc);
@@ -640,8 +720,9 @@
     });
   }
 
-  function nuevaOrden() {
+  function nuevaOrden(directo) {
     if (!exige("comprar", "Crear órdenes de compra")) return;
+    if (directo !== true && D.puede("Gerencia")) return antesDeCrear("crear esta orden", "la orden", () => nuevaOrden(true), true);
     let prov = null;
     openSheet({
       title: "Nueva orden de compra", sub: "Queda registrada; se edita hasta que Gerencia la apruebe",
@@ -1187,7 +1268,8 @@
   }
   function xmlSel(oc) {
     const L = xmlsDe(oc);
-    const r = L.find(x => x.id === regXml[oc.cons]) || L[0] || null;
+    /* solo se preselecciona la factura que trae la orden; otra del mismo proveedor se elige a mano */
+    const r = L.find(x => x.id === regXml[oc.cons]) || L.find(x => x.ocLigada === oc.cons) || null;
     if (r) regXml[oc.cons] = r.id;
     return r;
   }
@@ -1271,6 +1353,7 @@
             <div style="flex:1;min-width:0"><div class="b num" style="font-size:12.5px;word-break:break-all">${esc(x.clave)}</div>
               <div class="mut" style="font-size:12px">${fecha(x.fecha)} · ${x.ocLigada === oc.cons ? "trae la orden " + esc(oc.cons) : "sin orden en el XML"} · mensaje de receptor: ${esc(x.estado)}</div></div>
             <div style="text-align:right"><b class="num">${c(x.monto)}</b><div>${x.venceEn != null ? plazoTag(x.venceEn) : ""}</div></div></label>`).join("")}</div>
+           ${!lig.length ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px"><span class="mut" style="font-size:12.5px">Ninguna trae la orden ${esc(nomOC(oc.cons))}: elija una solo si es la de esta compra.</span><button class="btn sm" id="rgBuzon">${icon("arrowdown")}Revisar el buzón de facturas</button></div>` : ""}
            ${Lt.length > L.length ? `<button class="btn sm" id="rgOtras" style="margin-top:8px">Ver ${Lt.length - L.length} factura${Lt.length - L.length > 1 ? "s" : ""} más de este proveedor sin orden</button>` : ""}`
         : `${empty("file", "Todavía no llegó la factura", "La compra no se registra sin su comprobante (COM-005). Cuando entre al buzón, se liga sola a esta orden.")}
            <div style="display:flex;justify-content:center;margin-top:-6px"><button class="btn" id="rgBuzon">${icon("arrowdown")}Revisar el buzón de facturas</button></div>`
@@ -1315,7 +1398,7 @@
         ], rows: asiento,
         foot: [{ v: "Suma" }, { v: grp(X.t.sub + X.t.iva), r: true, cls: "mono" }, { v: grp(X.t.total), r: true, cls: "mono" }]
       }) + `<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
-          <div style="flex:1" class="mut" style="font-size:12.5px">${mismo ? '<span style="color:var(--crit)">Usted cerró la recepción: la factura la registra otra persona.</span>' : bl ? '<span style="color:var(--crit)">' + bl + " línea" + (bl > 1 ? "s" : "") + " con el costo fuera de rango: falta la autorización.</span>" : quienHace("registrar") || "Todo listo."}</div>
+          <div style="flex:1" class="mut" style="font-size:12.5px">${mismo ? '<span style="color:var(--crit)">Usted cerró la recepción: por separación de funciones, la factura la registra otra persona.</span>' + (() => { const pr = D.PERSONAS.find(x => x.id === QUIEN["Proveeduría"]); return pr && pr.id !== D.sesion.id ? ` <button class="btn sm" data-como="${pr.id}" style="margin-left:6px">${icon("users")}Entrar como ${esc(pr.corto)}</button>` : ""; })() : bl ? '<span style="color:var(--crit)">' + bl + " línea" + (bl > 1 ? "s" : "") + " con el costo fuera de rango: falta la autorización.</span>" : quienHace("registrar") || "Todo listo."}</div>
           <button class="btn pri" id="rgAplicar" ${bl || mismo || !X.lin.length ? "disabled" : ""}>${icon("check")}Aplicar compra</button></div>`
     }) + `</div>`;
   }
@@ -1475,6 +1558,30 @@
       s.adj[it.artId] = best;
     });
   }
+  /* A2 · recorrido preparado de la demo: una cotización que Óscar (Proveeduría) ya
+     adjudicó, con los mismos artículos de fontanería y riego; sus órdenes quedan
+     «listas para aprobar», sin alertas, para que Gerencia las apruebe en vivo.
+     Sigue: recepción en bodega → registrar la compra (cambia existencia y costo
+     promedio) → venta en caja → asiento. */
+  (function recorrido() {
+    const cant = { "FER-00915": 300, "FER-00917": 200, "FER-01120": 1200, "FER-01455": 600, "FER-03004": 90, "FER-08010": 45 };
+    const items = Object.keys(cant).map(cd => { const a = D.articulos.find(x => x.cod === cd); return a ? { artId: a.id, cant: cant[cd] } : null; }).filter(Boolean);
+    const sel = subSel;
+    const s = nuevaSub(items, "CD", "Recorrido de la demo · fontanería para el CEDI", ["P1", "P5", "P9"]);
+    subSel = sel;
+    cargarOfertas(s); adjudicar(s, "ia");
+    const cuando = new Date(D.HOY.getFullYear(), D.HOY.getMonth(), D.HOY.getDate(), 9, 25);
+    const por = {};
+    s.items.forEach(it => { const pid = s.adj[it.artId]; if (pid) (por[pid] = por[pid] || []).push(it); });
+    s.ocs = Object.keys(por).map(pid => {
+      const oc = prepara(D.crearOC(pid, s.destino, por[pid].map(it => ({ a: it.artId, c: it.cant, k: s.ofertas[pid][it.artId], v: 0 })), "Registrada", cuando));
+      oc.lineas.forEach(l => { l.var = varDe(l); });
+      oc.creadoPor = GENTE.compra; oc.creadoEn = cuando; oc.origen = s.id; oc.recorrido = true;
+      oc.hist = [{ f: cuando, quien: GENTE.compra, acc: "Registró la orden desde la cotización " + s.id }];
+      return oc.cons;
+    });
+    s.paso = 3; s.adjPor = GENTE.compra; s.adjEn = cuando;
+  })();
   function explicacion(s) {
     const barato = {};
     s.items.forEach(it => {
@@ -1615,7 +1722,7 @@
         (s.provs.length ? table({
           cols: [
             { t: "Proveedor", fmt: pid => { const p = D.provById[pid]; return `${esc(p.nom)}<span class="sub mono">${esc(p.ced)} · ${esc(p.linea)}</span>`; } },
-            { t: "Plazo", r: true, cls: "mono", fmt: pid => D.provById[pid].plazo + " d" },
+            { t: "Plazo de pago", r: true, cls: "mono", fmt: pid => D.provById[pid].plazo + " días" },
             { t: "A tiempo", r: true, cls: "mono", fmt: pid => desempeno(pid).otif + " %" },
             { t: "Se envía por", fmt: pid => { const p = D.provById[pid]; return `<span class="mut" style="font-size:12.5px">${esc(p.correo || "correo de pedidos")} · WhatsApp</span>`; } }
           ].concat(edit ? [{ t: "", w: "36px", fmt: pid => `<button class="iconbtn" data-spx="${pid}" aria-label="Quitar ${esc(D.provById[pid].nom)}" style="width:26px;height:26px">${icon("x")}</button>` }] : []),
@@ -1629,13 +1736,13 @@
       const totAdj = arts.reduce((t, x) => t + (s.adj[x.a.id] ? s.ofertas[s.adj[x.a.id]][x.a.id] * x.it.cant : 0), 0);
       cuadro = card({
         title: "Cuadro comparativo", hint: s.paso === 3 ? "adjudicada" : "toque un precio para adjudicar esa línea · ✓ = el más bajo",
-        body: table({
+        body: `<div class="mut" style="font-size:12.5px;margin:-4px 0 10px;line-height:1.6">${s.provs.map(pid => { const p = D.provById[pid], d = desempeno(pid); return `<b>${esc(p.nom.split(" ")[0])}</b>: plazo de pago ${p.plazo} días · entrega a tiempo ${d.otif} %`; }).join(" &nbsp;·&nbsp; ")}</div>` + table({
           cols: [{ t: "Artículo", fmt: x => `${esc(x.a.desc)}<span class="sub">${esc(x.a.cod)} · ${grp(x.it.cant)} ${esc(unid(x.a))}</span>` },
           { t: "Último costo", r: true, cls: "mono", fmt: x => `<span class="mut">${grp(x.a.ultCosto != null ? x.a.ultCosto : x.a.costo)}</span><span class="sub">exist. ${grp(D.stockTotal(x.a.id))}</span>` }]
             .concat(s.provs.map(pid => {
               const p = D.provById[pid], d = desempeno(pid);
               return {
-                t: p.nom.split(" ")[0] + " · " + p.plazo + "d · " + d.otif + "%", r: true, cls: "mono", fmt: x => {
+                t: p.nom.split(" ")[0] + " · plazo " + p.plazo + " días", r: true, cls: "mono", fmt: x => {
                   const val = s.ofertas[pid][x.a.id];
                   if (val == null) return '<span class="dim" title="No cotizó">—</span>';
                   const b = val === best(x), on = s.adj[x.a.id] === pid;
@@ -1742,6 +1849,11 @@
     }));
     const ok = $("#adjOk", v); if (ok) ok.addEventListener("click", () => {
       if (!exige("comprar", "Adjudicar")) return;
+      antesDeCrear("adjudicar esta cotización", "las órdenes que salen de ella", () => hacerAdjudicacion(s));
+    });
+  }
+  function hacerAdjudicacion(s) {
+    {
       const por = {};
       s.items.forEach(it => { const pid = s.adj[it.artId]; if (pid) (por[pid] = por[pid] || []).push(it); });
       if (!Object.keys(por).length) return toast("Nada adjudicado", "Toque un precio en cada línea o use la sugerencia.", "cr");
@@ -1754,9 +1866,9 @@
       });
       s.paso = 3;
       anotar("Adjudicó cotización", s.id + " · " + (s.modo === "precio" ? "solo por precio" : s.modo === "manual" ? "manual" : "según la sugerencia") + " · " + s.ocs.join(", "));
-      toast("Adjudicada", s.ocs.length + " órdenes registradas, una por proveedor: " + s.ocs.join(", ") + ". Van a aprobación.", "ok");
+      toast("Adjudicada", s.ocs.length + " órdenes registradas, una por proveedor: " + s.ocs.map(nomOC).join(", ") + ". Van a aprobación con Gerencia.", "ok");
       A.refresh();
-    });
+    }
   }
 
   /* ── pegar filas desde Excel (orden de compra y cotización) ── */
@@ -1818,7 +1930,7 @@
     openSheet({
       title: nuevo ? "Nuevo proveedor" : p.nom, sub: nuevo ? "Queda activo para órdenes y cotizaciones" : p.ced + " · " + p.linea + (desdeOrden ? " · sin salir de la orden" : ""),
       body: `${p && desdeOrden ? `<dl class="kv" style="margin-bottom:14px">
-            <dt>Negociaciones</dt><dd>${(p.negociaciones || []).map(n => esc(n.t) + " " + n.plazo + " d" + (n.desc ? " · " + dec(n.desc, n.desc % 1 ? 1 : 0) + " %" : "")).join(" · ")}</dd>
+            <dt>Negociaciones</dt><dd>${(p.negociaciones || []).map(n => esc(n.t) + " " + n.plazo + " días" + (n.desc ? " · " + dec(n.desc, n.desc % 1 ? 1 : 0) + " %" : "")).join(" · ")}</dd>
             <dt>A tiempo y completas</dt><dd class="num">${dsp.otif} % <span class="mut">(${dsp.ents} entregas en 90 días)</span></dd>
             <dt>Entrega real</dt><dd class="num">${dsp.leadReal} días <span class="mut">(promete ${dsp.lead})</span></dd></dl>` : ""}
         <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">

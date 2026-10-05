@@ -1,5 +1,39 @@
 # Cambios
 
+## 2026-10-05 · Compras · A2 · A3 · A8 · Recorrido de compra sin tropiezos, quién creó y aprobó, plazo legible
+
+Requerimiento de la sesión con TI del 1 de octubre.
+
+- **A2 · Recorrido preparado.**
+  - La cotización **SUB-2026-000119 «Recorrido de la demo · fontanería para el CEDI»** ya está adjudicada por Óscar
+    (Proveeduría), con los mismos artículos de fontanería y riego. Está en Cotizar a proveedores › Mostrar ›
+    Adjudicadas.
+  - Sus órdenes (Borrador 0413 y 0414) quedan **listas para aprobar**: sin alertas (variación ≤ 5 %) y creadas por
+    alguien distinto al aprobador.
+  - Recorrido probado de punta a punta: aprobación (Adrián) → recepción con evidencia → registro de la compra
+    (cambia existencia y costo promedio, aceptación total) → venta en caja con el costo nuevo → asientos. El mayor
+    cuadra.
+- **A2 · Cuando no se puede aprobar, se dice por qué y se ofrece la salida.** La separación de funciones no se afloja.
+  «Aprobar y enviar» ya no queda deshabilitado sin explicación: abre una hoja con cada motivo y su acción.
+  - Rol sin permiso: «Entrar como Adrián Vindas».
+  - La hizo la misma persona: se ofrece otra orden lista para aprobar.
+  - Costo fuera de ±15 %: «Corregir el costo» (lleva a la casilla) o «Autorizar con motivo».
+  - Al cambiar de usuario desde la hoja, si ya no falta nada, la orden se aprueba.
+- **A2 · Aviso previo a Gerencia.** Si quien aprueba va a crear una orden o adjudicar una cotización, se le avisa
+  que después no la podrá aprobar y se le ofrece hacerlo como Óscar (Proveeduría).
+- **A2 · Registrar compra.**
+  - Si quien cerró la recepción intenta registrar la factura, el aviso ofrece «Entrar como Óscar Jiménez».
+  - Solo se preselecciona la factura que trae la orden. Antes tomaba otra factura del mismo proveedor y el cotejo
+    salía «aceptación parcial». Las demás se eligen a mano, con «Revisar el buzón de facturas» a la vista.
+- **A3 · Creada por y aprobada por**, con fecha y hora, en la lista de órdenes y en el detalle. La orden guarda
+  `creadoEn` y `aprobadoEn`.
+- **A8 · Plazo legible en el cuadro comparativo.**
+  - Encabezados «Amanco · plazo 30 días».
+  - Línea de leyenda con el plazo de pago y la entrega a tiempo de cada proveedor.
+  - «Plazo de pago … días» en la lista de proveedores invitados y en las negociaciones.
+
+Archivos: `mod-compra.js`.
+
 ## 2026-10-05 · Sistema / Inventarios / Compras · A1 · Valoración del inventario fácil de encontrar
 
 Requerimiento de la sesión con TI del 1 de octubre, punto A1.
