@@ -1430,6 +1430,29 @@
     ]
   });
 
+  /* A7 · la lista detrás de cada cifra del semáforo (Inicio y Cómo vamos hoy) */
+  function verSemaforo(clase) {
+    const SM = I.semaforo(), C = I.SEM_CLASES.find(x => x.id === clase) || I.SEM_CLASES[0];
+    const filas = SM.filas.filter(f => f.clase === C.id).sort((x, y) => x.cob - y.cob || y.diaria - x.diaria);
+    const dias = f => f.cob === Infinity ? "sin venta" : f.cob < 1 ? "menos de 1 día" : dec(f.cob, 0) + " días";
+    openSheet({
+      title: C.t + " · " + grp(filas.length) + " artículos por local", sub: "Cobertura de " + C.d + " · cobertura = disponible ÷ venta diaria del local · tiendas y CEDI", wide: true,
+      body: table({
+        h: "calc(100dvh - 260px)",
+        cols: [
+          { t: "Artículo", fmt: f => `${esc(f.a.desc)}<span class="sub mono">${esc(f.a.cod)}</span>` },
+          { t: "Local", fmt: f => esc(locNom(f.locId)) },
+          { t: "Disponible", r: true, cls: "mono", fmt: f => grp(Math.max(0, f.disp)) + (f.disp < 0 ? `<span class="sub" style="color:var(--crit)">${grp(f.disp)} vendido contra pedido</span>` : "") },
+          { t: "Venta diaria", r: true, cls: "mono", fmt: f => f.diaria ? dec(f.diaria, f.diaria < 10 ? 1 : 0) : '<span class="dim">—</span>' },
+          { t: "Cobertura", r: true, cls: "mono", fmt: f => `<b style="color:var(--${C.k === "acc" ? "accent" : C.k === "ok" ? "ok" : C.k})">${dias(f)}</b>` }
+        ], rows: filas
+      }),
+      footer: `<button class="btn" data-cerrar>Cerrar</button><div class="gap"></div>${C.id === "critico" || C.id === "atencion" ? `<button class="btn pri" data-ir="reposicion|sugerido">${icon("sparkle")}Ver el sugerido de compra</button>` : ""}`,
+      after(el) { $$("[data-cerrar]", el).forEach(b => b.addEventListener("click", closeSheet)); A.wireIr(el); }
+    });
+  }
+  w.SEMAFORO = { abrir: verSemaforo };
+
   /* lo que otros módulos pueden abrir: la recepción de compras crea artículos */
   A.inv = { nuevo: nuevoArticulo, marcarSegunda, nuevoTraslado };
 })(window);

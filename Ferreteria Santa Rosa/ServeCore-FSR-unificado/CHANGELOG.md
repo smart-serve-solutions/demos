@@ -1,5 +1,29 @@
 # Cambios
 
+## 2026-10-05 · Inventarios / Inicio / Reportería · A7 · «Artículos en quiebre» con una sola regla y su lista
+
+Requerimiento de la sesión con TI del 1 de octubre, punto A7.
+
+- **Lo que había:** dos definiciones a la vez.
+  - El tablero decía «cobertura = existencia ÷ venta diaria · crítico: menos de 7 días».
+  - Las cifras salían de otra regla: existencia disponible en cero o bajo el mínimo.
+  - El anillo se calculaba aparte y «Sobrestock 38» era un número fijo.
+- **Ahora, una sola regla** (`INVX.semaforo()` en `inv-auto.js`), por artículo y local, en tiendas y CEDI:
+  - **Cobertura** = disponible (existencia − apartado) ÷ venta diaria del local (con el ajuste de temporada).
+  - **En quiebre (crítico)**, menos de 7 días · **Atención**, de 7 a 15 · **Normal**, de 15 a 60 · **Sobrestock**,
+    más de 60.
+  - El anillo es el % en Normal. Anillo, cifras y lista salen del mismo cálculo.
+- **La definición se lee en la tarjeta**, en una línea: «En quiebre: lo disponible en ese local alcanza para menos de
+  7 días de venta».
+- **Cada cifra abre la lista** con artículo, local, disponible, venta diaria y cobertura, ordenada de la más corta a la
+  más larga. Desde crítico y atención lleva al sugerido de compra. Funciona en Inicio (vista de gerencia y de bodega)
+  y en Reportería › Cómo vamos hoy, incluido el modo pantalla de oficina.
+- **Datos de ejemplo:** la venta mensual de cada tienda se calibra contra su existencia, así la cobertura tiene la
+  forma de una ferretería real (la mayoría entre 15 y 60 días). Antes salía 38 % en quiebre por la combinación al
+  azar.
+
+Archivos: `inv-auto.js`, `mod-inv.js`, `mod-inicio.js`, `mod-bi.js`.
+
 ## 2026-10-05 · Cobros y pagos / Contabilidad · A6 · El lote de pago confirmado queda a la vista en el historial
 
 Requerimiento de la sesión con TI del 1 de octubre, punto A6.

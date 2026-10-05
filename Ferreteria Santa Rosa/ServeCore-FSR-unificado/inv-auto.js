@@ -461,6 +461,16 @@
     const base = a.precio < 500 ? ri(180, 900) : a.precio < 3000 ? ri(50, 260) : a.precio < 12000 ? ri(18, 110) : ri(5, 40);
     const k = a.unidad === "m" ? 6 : a.unidad === "m³" ? 0.08 : a.unidad === "kg" ? 2 : 1;
     D.tiendas.forEach(l => { if (D.existencias[a.id][l.id]) VTA[a.id][l.id] = Math.max(1, Math.round(base * k * FACT_LOC[l.id])); });
+    /* A7 · la venta de ejemplo se calibra contra la existencia de cada local, para que
+       la cobertura (existencia ÷ venta diaria) tenga la forma de una ferretería real:
+       la mayoría entre 15 y 60 días, algunos por quebrarse y algo de sobrestock */
+    D.tiendas.forEach(l => {
+      const e = D.existencias[a.id][l.id];
+      if (!e) return;
+      const disp = Math.max(0, e.cant - e.comp), r = rnd();
+      const dias = r < 0.07 ? ri(2, 6) : r < 0.17 ? ri(8, 14) : r < 0.88 ? ri(16, 55) : ri(65, 120);
+      if (disp > 0) VTA[a.id][l.id] = Math.max(1, Math.round(disp * 30 / dias));
+    });
   });
   const ventaMes = (artId, locId) => locId === "CD"
     ? Object.values(VTA[artId] || {}).reduce((s, x) => s + x, 0)
@@ -704,6 +714,36 @@
       return { a, normal, atipExcl, atipIncl, fT, diaria, lead, exist, camino, sug, pc, cob, costo: sug * a.costo, kg: sug * (a.peso || 0) };
     }).filter(x => x.sug > 0).sort((x, y) => x.cob - y.cob);
   }
+  /* A7 · semáforo de inventario por días de cobertura: cuántos días alcanza lo
+     disponible (existencia − apartado) con la venta diaria de ese local.
+     Una sola regla para el anillo, las cifras y la lista. */
+  const SEM_CLASES = [
+    { id: "critico", t: "En quiebre", corto: "Crítico", d: "menos de 7 días", k: "crit" },
+    { id: "atencion", t: "Atención", corto: "Atención", d: "de 7 a 15 días", k: "warn" },
+    { id: "normal", t: "Normal", corto: "Normal", d: "de 15 a 60 días", k: "ok" },
+    { id: "sobre", t: "Sobrestock", corto: "Sobrestock", d: "más de 60 días", k: "acc" }
+  ];
+  const SEM_DEF = "En quiebre: lo disponible en ese local alcanza para menos de 7 días de venta (existencia ÷ venta diaria).";
+  function semaforo() {
+    const filas = [];
+    prods().forEach(a => {
+      if (a.taller) return;   /* la bodega del taller no vende: tiene su propio control de mínimos */
+      Object.keys(D.existencias[a.id] || {}).forEach(locId => {
+        /* se mide donde se vende (tiendas) y el CEDI, que las abastece; las bodegas no venden */
+        const loc = D.locales.find(x => x.id === locId);
+        if (!loc || loc.tipo === "bodega") return;
+        const e = D.existencias[a.id][locId], disp = e.cant - e.comp;
+        const diaria = ventaMes(a.id, locId) * factorTemporada(a.fam) / 30;
+        if (!diaria && disp <= 0) return;   /* ni se vende ni hay: no cuenta */
+        const cob = diaria ? Math.max(0, disp) / diaria : Infinity;
+        const clase = cob < 7 ? "critico" : cob < 15 ? "atencion" : cob <= 60 ? "normal" : "sobre";
+        filas.push({ a, locId, disp, diaria, cob, clase });
+      });
+    });
+    const n = {}; SEM_CLASES.forEach(c => { n[c.id] = filas.filter(f => f.clase === c.id).length; });
+    const total = filas.length;
+    return { filas, n, total, sano: total ? Math.round(n.normal / total * 100) : 100 };
+  }
   function crearOrdenes(filas, locId, por) {
     const grupos = {};
     filas.forEach(f => { const pid = f.a.provId || "P1"; (grupos[pid] = grupos[pid] || []).push(f); });
@@ -765,7 +805,7 @@
     SEGUNDA, aprobarSegunda, marcarSegunda, precioSegunda, DEVOL, devolver,
     VEHICULOS, vehiculoPara, peso, ventaMes, sugeridoCedi, crearTraslado, recibirTraslado, DIFS, aclararDiferencia,
     PLAN, SEMANA, famSemana, PRIORITARIAS, exactitud, conteoDe, contar, llenarConteoDemo, cerrarConteo, ajustar, AJ_PEND, aprobarAjuste, rechazarAjuste,
-    ATIPICAS, TEMPORADAS, factorTemporada, enCamino, sugerido, crearOrdenes,
+    ATIPICAS, TEMPORADAS, factorTemporada, enCamino, sugerido, crearOrdenes, SEM_CLASES, SEM_DEF, semaforo,
     pendientes, anotar
   };
 })(window);
