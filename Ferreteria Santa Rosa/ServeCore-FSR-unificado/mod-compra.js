@@ -1282,7 +1282,9 @@
       { t: "Recibido", r: true, cls: "mono", fmt: f => `<span style="${f.recib !== f.l.cant ? "color:" + (f.recib < f.l.cant ? "var(--crit)" : "var(--warn)") + ";font-weight:700" : ""}">${grp(f.recib)}</span>` },
       { t: "Facturado", r: true, cls: "mono", fmt: f => `<span style="${f.fact !== f.acept ? "color:var(--warn);font-weight:700" : ""}">${grp(f.fact)}</span><span class="sub" style="${Math.abs(f.difP) > POL.tolPrecio ? "color:var(--warn);font-weight:700" : ""}">a ${grp(f.precio)}</span>` },
       { t: "Entra", r: true, cls: "mono", fmt: f => `<b>${grp(f.reg)}</b>` },
-      { t: "Costo promedio", r: true, cls: "mono", fmt: f => f.reg && f.nuevo !== f.a.costo ? `${grp(f.a.costo)} → <b>${grp(f.nuevo)}</b>` : `<span class="dim">${grp(f.a.costo)}</span>` },
+      /* la venta toma el costo vigente; lo que cambia el costo es la compra: antes → nuevo en cada línea */
+      { t: "Costo promedio · antes → nuevo", r: true, cls: "mono", fmt: f => !f.reg || oc.tipo === "Autoconsumo" ? `<span class="dim">${grp(f.a.costo)} · no cambia</span>`
+        : `${grp(f.a.costo)} → <b>${grp(f.nuevo)}</b><span class="sub" style="${f.nuevo !== f.a.costo ? "color:" + (f.nuevo > f.a.costo ? "var(--warn)" : "var(--ok)") : ""}">${f.nuevo === f.a.costo ? "sin cambio" : (f.nuevo > f.a.costo ? "+" : "−") + grp(Math.abs(f.nuevo - f.a.costo)) + " (" + dec(Math.abs(f.nuevo - f.a.costo) / (f.a.costo || 1) * 100, 1) + " %)"}</span>` },
       { t: "Resultado", fmt: (f, i) => tag(f.res, f.k, f.k === "ok" ? "check" : "alert") + (f.fuera && f.reg ? ` <button class="btn sm" data-autr="${i}" style="padding:2px 8px">Autorizar</button>` : f.l.autReg ? `<span class="sub" style="color:var(--ok)">autorizó ${esc(f.l.autReg.por.split(" ")[0])}</span>` : "") }
     ];
     const asiento = [
@@ -1598,7 +1600,7 @@
           cols: [
             { t: "Artículo", fmt: x => `${esc(x.a.desc)}<span class="sub mono">${esc(x.a.cod)}</span>` },
             { t: "Cantidad", r: true, cls: "mono", w: "140px", fmt: (x, i) => edit ? `<input class="inp num" data-sq="${i}" value="${x.it.cant}" inputmode="decimal" aria-label="Cantidad de ${esc(x.a.desc)}" style="width:80px;text-align:right;padding:4px 7px"> <span class="dim">${esc(unid(x.a))}</span>` : cantTxt(x.it.cant, x.a) },
-            { t: "Último costo", r: true, cls: "mono", fmt: x => grp(x.a.costo) },
+            { t: "Último costo", r: true, cls: "mono", fmt: x => grp(x.a.ultCosto != null ? x.a.ultCosto : x.a.costo) },
             { t: "Existencia", r: true, cls: "mono", fmt: x => grp(D.stockTotal(x.a.id)) }
           ].concat(edit ? [{ t: "", w: "36px", fmt: (x, i) => `<button class="iconbtn" data-sqx="${i}" aria-label="Quitar ${esc(x.a.desc)}" style="width:26px;height:26px">${icon("x")}</button>` }] : []),
           rows: arts
@@ -1629,7 +1631,7 @@
         title: "Cuadro comparativo", hint: s.paso === 3 ? "adjudicada" : "toque un precio para adjudicar esa línea · ✓ = el más bajo",
         body: table({
           cols: [{ t: "Artículo", fmt: x => `${esc(x.a.desc)}<span class="sub">${esc(x.a.cod)} · ${grp(x.it.cant)} ${esc(unid(x.a))}</span>` },
-          { t: "Último costo", r: true, cls: "mono", fmt: x => `<span class="mut">${grp(x.a.costo)}</span><span class="sub">exist. ${grp(D.stockTotal(x.a.id))}</span>` }]
+          { t: "Último costo", r: true, cls: "mono", fmt: x => `<span class="mut">${grp(x.a.ultCosto != null ? x.a.ultCosto : x.a.costo)}</span><span class="sub">exist. ${grp(D.stockTotal(x.a.id))}</span>` }]
             .concat(s.provs.map(pid => {
               const p = D.provById[pid], d = desempeno(pid);
               return {
