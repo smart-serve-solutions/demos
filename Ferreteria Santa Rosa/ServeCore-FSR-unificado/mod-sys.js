@@ -404,6 +404,16 @@
       base: true,
       alc: "Todos los locales",
     },
+    /* B1 · dos roles en el mismo departamento: el encargado ve y hace un poco más */
+    {
+      id: "R14",
+      nom: "Encargado de Proveeduría",
+      desc: "Lo mismo que Proveeduría, más adjudicar cotizaciones y pactar un plazo de pago distinto en la compra",
+      alc: "Todos los locales",
+      de: "Proveeduría",
+      por: "Andrey Ramírez",
+      f: dia(40),
+    },
     {
       id: "R6",
       nom: "Bodega",
@@ -516,12 +526,18 @@
       ultimo: minAntes(1),
       tel: "8720-5561",
     }),
-    us("Óscar Jiménez Ureña", "oscar.jimenez", ["R5"], [TODOS], {
+    us("Óscar Jiménez Ureña", "oscar.jimenez", ["R14"], [TODOS], {
       doble: true,
       ultimo: minAntes(20),
     }),
     us("Álvaro Cordero Vindas", "alvaro.cordero", ["R5"], ["CD", "B1", "B2"], {
       ultimo: minAntes(8),
+    }),
+    us("Daniela Araya Solís", "daniela.araya", ["R5"], [TODOS], {
+      ultimo: minAntes(26),
+    }),
+    us("Mauricio Brenes Quirós", "mauricio.brenes", ["R5"], [TODOS], {
+      ultimo: minAntes(140),
     }),
     us("Hazel Monge Rivera", "hazel.monge", ["R9"], [TODOS], {
       doble: true,
@@ -1598,6 +1614,7 @@
       inventarios: { existencias: "v", catalogo: "v" },
     },
     R5: { compras: "vrmx", inventarios: "vrm", bi: "vx", cobros: { cxp: "v" } },
+    R14: { compras: "vrmx", inventarios: "vrm", bi: "vx", cobros: { cxp: "v" } },
     R6: { inventarios: "vrm", logistica: "vr", compras: { "*": "v" } },
     R7: {
       contab: "vrmx",
@@ -1629,7 +1646,7 @@
       k: "costo",
       t: "Ver costo y utilidad",
       d: "En la caja, la ficha del artículo y los reportes. El vendedor no ve cuánto costó.",
-      roles: ["R1", "R2", "R5", "R7", "R11", "R13"],
+      roles: ["R1", "R2", "R5", "R14", "R7", "R11", "R13"],
     },
     {
       k: "precio",
@@ -1668,7 +1685,14 @@
       k: "plazo",
       t: "Cambiar el término de pago en la compra",
       d: "Para un plazo atípico sin editar la ficha del proveedor.",
-      roles: ["R5"],
+      roles: ["R14"],
+    },
+    {
+      k: "adjudica",
+      t: "Adjudicar cotizaciones",
+      d: "Decide a qué proveedor se le compra cada línea; queda el motivo en la bitácora.",
+      roles: ["R1", "R14"],
+      crit: true,
     },
     {
       k: "caja",
@@ -1686,7 +1710,7 @@
       k: "export",
       t: "Exportar a Excel",
       d: "Queda en la bitácora con cuántos registros salieron.",
-      roles: ["R1", "R5", "R7", "R9", "R11"],
+      roles: ["R1", "R5", "R14", "R7", "R9", "R11"],
       crit: true,
     },
     {
@@ -1742,6 +1766,7 @@
     R3: "OOVOOOV",
     R4: "OOOVOOE",
     R5: "EVOOOEO",
+    R14: "EVOOOEO",
     R6: "OOOOOOO",
     R7: "VVVOEEV",
     R8: "OOOOOOO",
@@ -1941,6 +1966,15 @@
       `<div style="margin-top:12px"><button type="button" class="btn sm" id="rolAsig">${icon("plus")}Asignar a un usuario</button></div>`
     );
   }
+  /* B1 · qué tiene de más (o de menos) un rol frente al rol del que salió */
+  function difRol(r) {
+    const base = r.de && ROLES.find((x) => x.nom === r.de);
+    if (!base) return "";
+    const mas = ESPECIALES.filter((e) => espDe(r.id).indexOf(e.k) >= 0 && espDe(base.id).indexOf(e.k) < 0).map((e) => e.t);
+    const menos = ESPECIALES.filter((e) => espDe(base.id).indexOf(e.k) >= 0 && espDe(r.id).indexOf(e.k) < 0).map((e) => e.t);
+    if (!mas.length && !menos.length) return "";
+    return `<div style="margin-top:8px;font-size:12.5px;line-height:1.55">Frente a «${esc(base.nom)}»: ${mas.length ? `<span style="color:var(--ok);font-weight:650">+ ${mas.map(esc).join(", + ")}</span>` : ""}${mas.length && menos.length ? " · " : ""}${menos.length ? `<span style="color:var(--crit);font-weight:650">− ${menos.map(esc).join(", − ")}</span>` : ""} <button class="btn sm" data-rol="${base.id}" style="margin-left:4px">Ver «${esc(base.nom)}»</button></div>`;
+  }
   function rolesTab(el) {
     const q = norm(rolQ.trim());
     const lista = ROLES.filter(
@@ -1966,7 +2000,7 @@
             (
               x,
             ) => `<button class="mitem" data-rol="${x.id}" aria-selected="${x.id === r.id}" ${ED && x.id !== r.id ? "disabled" : ""}>
-          <span style="flex:1;min-width:0"><span class="itd">${esc(x.nom)}</span><span class="itc">${usuariosDe(x.id).length} usuarios · ${x.base ? "de ServeCore" : "de Santa Rosa"}</span></span>
+          <span style="flex:1;min-width:0"><span class="itd">${esc(x.nom)}</span><span class="itc">${usuariosDe(x.id).length} usuario${usuariosDe(x.id).length === 1 ? "" : "s"} · ${x.base ? "de ServeCore" : "de Santa Rosa"}</span></span>
           ${x.total ? tag("total", "cr") : x.pruebas ? tag("pruebas", "mu") : x.inactivo ? tag("inactivo", "mu") : ""}</button>`,
           )
           .join("")}</div>
@@ -1979,7 +2013,8 @@
           <div style="flex:1;min-width:220px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="font-size:17px">${esc(r.nom)}</h3>
             ${r.base ? tag("Base de ServeCore", "mu") : tag("Creado por Santa Rosa", "acc")}${r.tfa ? tag("Doble factor obligatorio", "ok", "shield") : ""}${r.total ? tag("Acceso total", "cr", "alert") : ""}</div>
             <div class="mut" style="font-size:13px;margin-top:4px">${esc(r.desc)}</div>
-            <div class="sx-hint" style="margin-top:4px">Alcance: ${esc(r.alc)}${r.de ? " · duplicado de «" + esc(r.de) + "»" : ""}${r.por ? " · creado por " + esc(r.por) + " el " + fecha(r.f) : ""}</div></div>
+            <div class="sx-hint" style="margin-top:4px">Alcance: ${esc(r.alc)}${r.de ? " · duplicado de «" + esc(r.de) + "»" : ""}${r.por ? " · creado por " + esc(r.por) + " el " + fecha(r.f) : ""}</div>
+            ${difRol(r)}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">${ED ? "" : `<button class="btn sm" id="rolDup">${icon("copy")}Duplicar</button><button class="btn sm" id="rolDat">Editar datos</button><button class="btn sm pri" id="rolMod">${icon("lock")}Modificar permisos</button>`}</div></div>`,
         })}
         ${card({
@@ -2006,6 +2041,7 @@
       b.addEventListener("click", () => {
         if (ED) return;
         rolSel = b.dataset.rol;
+        rolVista = "pantallas";
         A.refresh();
       }),
     );

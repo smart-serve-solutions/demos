@@ -1,5 +1,21 @@
 # Cambios
 
+## 2026-10-05 · Sistema · B1 · Dos roles con permisos distintos en Proveeduría
+
+Requerimiento de la sesión con TI del 1 de octubre, punto B1.
+
+- **Ya existía:** la matriz de pantallas y acciones de cada rol, como vista por defecto en Roles y permisos.
+- **Rol nuevo «Encargado de Proveeduría»**, duplicado de «Proveeduría», con dos acciones más:
+  - **Adjudicar cotizaciones** (acción especial nueva, también de Gerencia).
+  - **Cambiar el término de pago en la compra**, que pasa a ser solo del encargado.
+- **Usuarios:** Óscar Jiménez es el encargado. Proveeduría queda con tres compañeros: Álvaro Cordero, Daniela Araya y
+  Mauricio Brenes.
+- **Al abrir un rol se ve siempre la matriz de pantallas y acciones**, aunque antes se hubiera elegido otra vista.
+- **Diferencias a la vista:** un rol duplicado de otro dice en su encabezado qué tiene de más y de menos («Frente a
+  Proveeduría: + Cambiar el término de pago en la compra, + Adjudicar cotizaciones»), con un botón al rol de origen.
+
+Archivos: `mod-sys.js`.
+
 ## 2026-10-05 · Inventarios / Inicio / Reportería · A7 · «Artículos en quiebre» con una sola regla y su lista
 
 Requerimiento de la sesión con TI del 1 de octubre, punto A7.
