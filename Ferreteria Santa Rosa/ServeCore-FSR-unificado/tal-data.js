@@ -55,7 +55,7 @@
     const tarifa = D.tarifaDeCabys(r[9]);
     const a = {
       id: "R" + (repuestos.length + 1), cod: r[0], desc: r[1], nom: r[1], fam: "REP", sub: D.subcats.REP[r[2]], marca: r[3], unidad: r[4],
-      costo: r[5], precio: D.pisoConIva(r[5], 32, tarifa), cabys: r[9], tarifa, ean: "", ubic: r[8], tipo: "Producto", peso: 0, medida: "", taller: true
+      costo: r[5], ultCosto: r[5], precio: D.pisoConIva(r[5], 32, tarifa), cabys: r[9], tarifa, ean: "", ubic: r[8], tipo: "Producto", peso: 0, medida: "", taller: true
     };
     a.margen = +D.margenDe(a.precio, a.costo, a.tarifa).toFixed(1);
     D.articulos.push(a); D.artById[a.id] = a; repuestos.push(a);

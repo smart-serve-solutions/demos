@@ -1008,6 +1008,7 @@
     const q = Object.values(existencias[artId] || {}).reduce((s, e) => s + Math.max(0, e.cant), 0);
     const antes = a.costo;
     a.costo = Math.round((q * antes + cant * costo) / (q + cant));
+    a.ultCosto = Math.round(costo);   /* el último costo es solo referencia: no valúa el inventario */
     return { antes, despues: a.costo, existencia: q };
   }
   /* ¿el comprobante recibido cuadra con su compra registrada? */
@@ -1327,6 +1328,12 @@
     return out;
   }
 
+  /* último costo de compra: el de la compra más reciente de cada artículo (o el costo, si no hay) */
+  articulos.forEach(a => {
+    if (a.tipo === "Servicio") return;
+    const ult = compras.filter(o => o.lineas.some(l => l.artId === a.id)).sort((x, y) => y.fecha - x.fecha)[0];
+    a.ultCosto = ult ? ult.lineas.find(l => l.artId === a.id).costo : a.costo;
+  });
   w.DB = {
     HOY, dayAgo, rnd, ri, pick, IVA,
     locales, tiendas, familias, famById, subcats,

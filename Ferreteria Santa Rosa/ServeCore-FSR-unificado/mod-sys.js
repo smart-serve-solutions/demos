@@ -6714,6 +6714,48 @@
   const P = V ? V.PARAM : {};
   const fmtC = (n) => c(n);
   const PARAMS = [
+    /* A1 · la valoración del inventario, a la vista: el método y su alcance se
+       editan en «Contabilidad e impuestos» (aquí se leen, con enlace); la regla
+       de FSR para negativos y el último costo como dato de referencia */
+    {
+      g: "Valoración del inventario",
+      ic: "box",
+      valoracion: true,
+      items: [
+        {
+          t: "Método de valoración",
+          d: "Cómo se calcula el costo de lo que se vende y el valor del inventario. Se edita en Contabilidad e impuestos.",
+          get: () => PC.valuacion,
+          btn: "Ver dónde se edita",
+          abre: () => irAContab("Método de valuación del inventario"),
+          ult: [dia(400), "Sonia Calderón"],
+        },
+        {
+          t: "Alcance del costo promedio",
+          d: "Un solo costo para toda la empresa o uno por bodega. Se edita en Contabilidad e impuestos.",
+          get: () => PC.alcance,
+          btn: "Ver dónde se edita",
+          abre: () => irAContab("Alcance del costo promedio"),
+          ult: [dia(400), "Sonia Calderón"],
+        },
+        {
+          t: "Existencia negativa al recalcular",
+          d: "Regla de Santa Rosa: si se vendió sin existencia, el negativo cuenta como cero cuando entra la compra; así la compra no arrastra un costo falso.",
+          v: "El negativo cuenta como cero",
+          ult: [dia(300), "Sonia Calderón"],
+          btn: "Por qué",
+          soloLectura: "Es la regla de Santa Rosa para el costo promedio; la venta sale con el costo vigente y la diferencia se ajusta al entrar la compra (Contabilidad › Conciliaciones › Inventario)",
+        },
+        {
+          t: "Último costo",
+          d: "El precio de la compra más reciente de cada artículo. Es un dato de referencia para comprar y cotizar: no valúa el inventario ni el costo de venta. Se ve junto al costo promedio en la ficha del artículo.",
+          v: "Referencia, no valúa",
+          btn: "Ver en un artículo",
+          abre: () => A.go("catalogo", "articulos"),
+          ult: [dia(400), "Sonia Calderón"],
+        },
+      ],
+    },
     {
       g: "Ventas y caja",
       ic: "cart",
@@ -6826,12 +6868,6 @@
       g: "Inventario",
       ic: "box",
       items: [
-        {
-          t: "Costo promedio con existencia negativa",
-          d: "Cuando se vendió sin existencia, el negativo se toma como cero.",
-          v: "El negativo cuenta como cero",
-          ult: [dia(300), "Sonia Calderón"],
-        },
         {
           t: "Venta sin existencia",
           d: "Solo en artículos marcados «contra pedido» (INV-004).",
@@ -6981,6 +7017,20 @@
     },
   ];
   const valP = (x) => (x.get ? x.get() : x.v);
+  /* lleva al parámetro contable y lo resalta (no se duplica: se edita en un solo lugar) */
+  function irAContab(titulo) {
+    parQ = "";
+    A.refresh();
+    const g = PARAMS.findIndex((x) => x.g === "Contabilidad e impuestos");
+    const i = g < 0 ? -1 : PARAMS[g].items.findIndex((x) => x.t === titulo);
+    const b = i < 0 ? null : document.querySelector(`[data-par="${g}|${i}"]`);
+    if (!b) return;
+    const fila = b.closest(".pref-row") || b.parentElement.parentElement;
+    fila.scrollIntoView({ block: "center", behavior: "smooth" });
+    fila.style.transition = "background .3s";
+    fila.style.background = "var(--accent-soft)";
+    setTimeout(() => { fila.style.background = ""; }, 2200);
+  }
 
   /* ── FONDO DE APERTURA POR CAJA ──
      Cada terminal (caja) de cada local guarda su fondo en VENX.TERMINALES[].fondo;

@@ -1,5 +1,29 @@
 # Cambios
 
+## 2026-10-05 · Sistema / Inventarios / Compras · A1 · Valoración del inventario fácil de encontrar
+
+Requerimiento de la sesión con TI del 1 de octubre, punto A1.
+
+- **Ya existía:**
+  - El método (costo promedio ponderado) y su alcance, en Parámetros › Contabilidad e impuestos.
+  - La regla de la existencia negativa, en el grupo Inventario.
+  - El recálculo al registrar la compra.
+- **Sistema › Parámetros generales:** el primer bloque es **«Valoración del inventario»**.
+  - El método y el alcance se muestran en lectura, con «Ver dónde se edita», que lleva al parámetro en Contabilidad
+    e impuestos y lo resalta. No se duplica.
+  - La regla de Santa Rosa: la existencia negativa cuenta como cero al recalcular.
+  - El último costo, como dato de referencia que no valúa el inventario.
+- **Buscador del menú:** «valoración», «valuación», «costo promedio» y «último costo» llevan a Parámetros generales.
+  El buscador ahora también lee las palabras clave de cada opción del menú, no solo las de las pestañas (`nav.js`,
+  `shell.js`).
+- **Ficha del artículo:** costo promedio y último costo, uno junto al otro.
+- **Registrar compra:** la columna «Costo promedio · antes → nuevo» muestra en cada línea el valor anterior, el nuevo y
+  la diferencia (o «sin cambio»).
+- **Último costo real:** `data.js` guarda en cada artículo el último costo de compra (`ultCosto`), que se actualiza al
+  registrar la compra. Antes, las columnas «Último costo» de Compras mostraban en realidad el costo promedio.
+
+Archivos: `mod-sys.js`, `mod-inv.js`, `mod-compra.js`, `data.js`, `tal-data.js`, `nav.js`, `shell.js`.
+
 ## 2026-10-01 · Ventas · Botón «Editar» visible en las categorías de cliente
 
 - La edición de una categoría se abría tocando su nombre, y no se notaba. Ahora cada categoría tiene un botón

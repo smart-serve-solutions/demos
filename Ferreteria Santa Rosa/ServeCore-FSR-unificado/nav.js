@@ -292,8 +292,9 @@
         items: [
           {
             t: "Parámetros generales",
-            d: "Caja, márgenes, costos, crédito, compras y reportes, con motivo en cada cambio",
+            d: "Valoración del inventario, caja, márgenes, costos, crédito, compras y reportes, con motivo en cada cambio",
             reqs: [],
+            kw: "valoracion valuacion valoración valuación del inventario costo promedio ponderado ultimo costo último costo peps metodo de costeo existencia negativa",
             screen: "sis-parametros",
             tabs: [
               {
@@ -1651,6 +1652,7 @@
             screen: it.screen,
             action: it.action,
             arg: it.arg,
+            kw: it.kw || "",
             tabs: it.tabs || [],
           });
         });
