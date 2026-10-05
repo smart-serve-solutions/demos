@@ -918,9 +918,11 @@
           { t: "Vendedor", fmt: r => `<span class="mut">${esc(r.vendedor)}</span>` },
           { t: "Pago", fmt: r => esc(r.tipo === "NC" ? r.concepto || "—" : pagoTxt(r)) },
           { t: "Total", r: true, cls: "mono", fmt: r => `<b>${r.tipo === "NC" ? "−" : ""}${grp(r.total)}</b>` },
-          { t: "Hacienda", fmt: hacTag }
+          { t: "Hacienda", fmt: hacTag },
+          /* A4 · reimprimir desde la lista, sin abrir el detalle */
+          { t: "", r: true, fmt: (r, i) => `<button class="btn sm" data-reimp="${i}" title="Reimprimir con vista previa" aria-label="Reimprimir ${esc(r.cons)}">${icon("print")}</button>` }
         ],
-        rows, foot: [{ v: rows.length + " documentos", span: 7 }, { v: grp(tot), r: true, cls: "mono" }, { v: "" }]
+        rows, foot: [{ v: rows.length + " documentos", span: 7 }, { v: grp(tot), r: true, cls: "mono" }, { v: "" }, { v: "" }]
       })
     });
   }
@@ -929,7 +931,8 @@
     const q = $("#dq", v);
     q.addEventListener("change", () => { docF.q = q.value; A.refresh(); });
     $("#dloc", v).addEventListener("change", e => { docF.loc = e.target.value; A.refresh(); });
-    $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", () => detalleDoc(filtrarDocs()[+tr.dataset.i])));
+    $$("tr.clickable", v).forEach(tr => tr.addEventListener("click", e => { if (e.target.closest("[data-reimp]")) return; detalleDoc(filtrarDocs()[+tr.dataset.i]); }));
+    $$("[data-reimp]", v).forEach(b => b.addEventListener("click", () => reimprimir(filtrarDocs()[+b.dataset.reimp])));
   }
 
   /* devolución en curso: factura, cantidades, concepto, destino, reintegro y firma */

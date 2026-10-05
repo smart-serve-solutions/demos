@@ -146,6 +146,8 @@ Requerimiento de la sesión con TI del 1 de octubre, punto A4.
 - La plantilla carta ahora muestra los medios de pago en las ventas de contado, como ya lo hacía el tiquete.
 - `mod-sys.js` expone `PLANTILLAS.vistaComprobante(doc)`, que reutiliza la misma vista previa de Plantillas y mensajes.
 
+- Cada fila del historial tiene su botón de reimprimir, así se llega en dos clics desde el menú sin abrir el detalle.
+
 Archivos: `mod-venta-gestion.js`, `mod-sys.js`.
 
 ## 2026-10-05 · Compras · A2 · A3 · A8 · Recorrido de compra sin tropiezos, quién creó y aprobó, plazo legible
